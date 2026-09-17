@@ -149,6 +149,7 @@
                 <input type="hidden" class="t-id" value="{{ team_id }}">
                 <input type="text" class="t-new-name" value="{{ data.display_name }}" placeholder="Teamname">
                 <select class="t-role">
+                    <option value="keine" {% if data.role == 'keine' %}selected{% endif %}>Keine</option>
                     <option value="läufer" {% if data.role == 'läufer' %}selected{% endif %}>Läufer</option>
                     <option value="fänger" {% if data.role == 'fänger' %}selected{% endif %}>Fänger</option>
                 </select>
@@ -191,7 +192,7 @@
             <hr style="margin: 30px 0 20px 0; border: none; border-top: 1px solid #EB6502;">
             
             <h3 style="margin-top: 0;">Rollen zufällig neu zuweisen</h3>
-            <p style="font-size: 0.9em; color: #444; margin-bottom: 15px;">Weist allen aktiven Teams die Rollen (Läufer / Fänger) nach dem Zufallsprinzip neu zu. Bei einer ungeraden Teamanzahl gibt es einen Läufer mehr. (Änderungen sind direkt sichtbar und gespeichert).</p>
+            <p style="font-size: 0.9em; color: #444; margin-bottom: 15px;">Weist allen aktiven Teams die Rollen (Läufer / Fänger) nach dem Zufallsprinzip neu zu. (Änderungen sind direkt sichtbar und gespeichert).</p>
             <button class="btn btn-danger" onclick="randomizeRoles()">Rollen zufällig zuweisen</button>
         </div>
     </div>
@@ -208,6 +209,7 @@
                 <input type="hidden" class="t-id" value="${teamId}">
                 <input type="text" class="t-new-name" value="${teamId}" placeholder="Teamname">
                 <select class="t-role">
+                    <option value="keine">Keine</option>
                     <option value="läufer">Läufer</option>
                     <option value="fänger">Fänger</option>
                 </select>

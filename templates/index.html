@@ -27,6 +27,7 @@
     .role-badge { font-size: 0.7em; padding: 4px 8px; color: white; margin-left: 8px; text-transform: uppercase; font-weight: 900; vertical-align: middle; }
     .role-fänger { background-color: #EB6502; }
     .role-läufer { background-color: #AEC905; color: #333; }
+    .role-keine { background-color: #6c757d; color: white; }
     .score { font-weight: 900; color: #049EAB; font-size: 1.1em; }
 
     .form-group { margin-bottom: 15px; }
@@ -97,7 +98,7 @@
         
         <div class="box">
             <h2>Aktuelles Leaderboard</h2>
-            <table>
+            <table id="leaderboard-table">
                 <tr>
                     <th>Platz</th>
                     <th>Team</th>
@@ -136,7 +137,6 @@
             <button class="btn btn-petrol" onclick="loginTeam()">Zum Team-Dashboard</button>
         </div>
 
-        <!-- NEUER LIVE TICKER -->
         <div class="box" id="live-ticker-box">
             <h2>Live Ticker</h2>
             <div id="ticker-content" class="ticker-container">
@@ -165,13 +165,14 @@
         const enableSwap = {{ 'true' if enable_swap else 'false' }};
         
         let serverOffset = 0;
-        let startTs = 0, endTs = 0, midTs = 0;
+        let startTs = 0, endTs = 0, midTs = 0, postEndTs = 0;
         
         if (serverNowStr && startStr && endStr) {
             const serverNow = new Date(serverNowStr).getTime();
             serverOffset = serverNow - Date.now();
             startTs = new Date(startStr).getTime();
             endTs = new Date(endStr).getTime();
+            postEndTs = endTs + (5 * 60 * 1000);
             if (midStr && midStr !== "None") midTs = new Date(midStr).getTime();
         }
 
@@ -183,7 +184,6 @@
             
             const now = Date.now() + serverOffset;
             const preStartTs = startTs - (5 * 60 * 1000);
-            const postEndTs = endTs + (5 * 60 * 1000);
             
             const formatTime = (diff) => {
                 const s = Math.floor(diff / 1000); const m = Math.floor(s / 60); const h = Math.floor(m / 60);
@@ -213,62 +213,45 @@
             
             timerBar.innerHTML = text;
 
-            if ((now >= startTs + 10000 && now <= startTs + 11500) || 
-                (now >= endTs + 10000 && now <= endTs + 11500) ||
-                (enableSwap && midTs && now >= midTs + 10000 && now <= midTs + 11500)) {
+            // Seite neu laden nach Phasenwechsel
+            if ((now >= startTs + 60000 && now <= startTs + 61500) || 
+                (now >= endTs + 60000 && now <= endTs + 61500) ||
+                (enableSwap && midTs && now >= midTs + 60000 && now <= midTs + 61500) ||
+                (now >= postEndTs + 60000 && now <= postEndTs + 61500) ||
+                (now >= startTs - 30 * 60000 && now <= startTs - 30 * 60000 + 1500)) {
                 if(!reloadedTrigger) { reloadedTrigger = true; window.location.reload(); }
             }
         }
         setInterval(updateTimer, 1000); updateTimer();
 
-        // --- LIVE TICKER LOGIK ---
+        // --- LIVE TICKER & LEADERBOARD LOGIK ---
         let actionLog = {{ action_log | tojson | safe if action_log else '[]' }};
         
         function renderTicker(logs) {
             let tickerEvents = [];
-            
-            // Reelle Server-Logs abarbeiten (Wir filtern normale Haltestellen, Catches und den Rollenwechsel (Halbzeit) System-Log)
             logs.forEach(log => {
-                if (log.type === 'stop' || log.type === 'catch' || (log.type === 'system' && log.desc.includes('HALBZEIT'))) {
-                    tickerEvents.push({
-                        ts: log.timestamp * 1000,
-                        text: log.desc,
-                        type: log.type
-                    });
+                if (log.type === 'stop' || log.type === 'catch' || (log.type === 'system' && (log.desc.includes('HALBZEIT') || log.desc.includes('Rollen wurden zugewiesen')))) {
+                    tickerEvents.push({ ts: log.timestamp * 1000, text: log.desc, type: log.type });
                 }
             });
             
-            // Hardcodierte Zeit-Events ins Array mergen basierend auf der aktuellen Zeit
             if (startTs) {
                 const preStartTs = startTs - (5 * 60 * 1000);
                 const catchersStartTs = startTs + (5 * 60 * 1000);
                 const now = Date.now() + serverOffset;
                 
-                // Loslaufen für Läufer (5 Minuten vorher)
                 if (now >= preStartTs) {
-                    tickerEvents.push({
-                        ts: preStartTs,
-                        text: "🏃 LÄUFER STARTEN! Die Läufer dürfen jetzt loslaufen.",
-                        type: "system"
-                    });
+                    tickerEvents.push({ ts: preStartTs, text: "🏃 LÄUFER STARTEN! Die Läufer dürfen jetzt loslaufen.", type: "system" });
                 }
-                
-                // Loslaufen für Fänger (5 Minuten nach Beginn)
                 if (now >= catchersStartTs) {
-                    tickerEvents.push({
-                        ts: catchersStartTs,
-                        text: "🚨 FÄNGER STARTEN! Die Fänger dürfen jetzt die Verfolgung aufnehmen.",
-                        type: "system"
-                    });
+                    tickerEvents.push({ ts: catchersStartTs, text: "🚨 FÄNGER STARTEN! Die Fänger dürfen jetzt die Verfolgung aufnehmen.", type: "system" });
                 }
             }
             
-            // Absteigend nach Datum/Zeit sortieren
             tickerEvents.sort((a, b) => b.ts - a.ts);
             
             const container = document.getElementById('ticker-content');
             let html = '';
-            
             if (tickerEvents.length === 0) {
                 html = '<div style="text-align:center; color:#777; padding: 20px;">Noch keine Ereignisse im Spiel.</div>';
             } else {
@@ -281,11 +264,26 @@
             }
             container.innerHTML = html;
         }
+
+        function renderLeaderboard(leaderboardData) {
+            const table = document.getElementById('leaderboard-table');
+            let html = `<tr><th>Platz</th><th>Team</th><th>Punkte</th></tr>`;
+            if (leaderboardData.length === 0) {
+                html += `<tr><td colspan="3" style="text-align: center; color: #777;">Noch keine Teams im Spiel.</td></tr>`;
+            } else {
+                leaderboardData.forEach((entry, index) => {
+                    html += `<tr>
+                        <td><b>#${index + 1}</b></td>
+                        <td>${entry.display_name} <span class="role-badge role-${entry.role}">${entry.role}</span></td>
+                        <td class="score">${entry.score}</td>
+                    </tr>`;
+                });
+            }
+            table.innerHTML = html;
+        }
         
-        // Initial rendern beim Pageload
         renderTicker(actionLog);
         
-        // Polling für Backend-Updates (alle 10 Sekunden checken)
         function fetchTicker() {
             fetch('/api/ticker_data')
                 .then(res => res.json())
@@ -293,12 +291,12 @@
                     if (data.success) {
                         actionLog = data.action_log;
                         renderTicker(actionLog);
+                        renderLeaderboard(data.leaderboard);
                     }
                 })
                 .catch(e => console.log("Ticker Update fehlgeschlagen", e));
         }
         setInterval(fetchTicker, 10000);
-
 
         // --- TEAM / ADMIN LOGINS ---
         function loginTeam() {

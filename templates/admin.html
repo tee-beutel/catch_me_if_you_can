@@ -8,6 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@700&family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS für die Karte -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { font-family: 'Roboto', Arial, sans-serif; padding: 20px; max-width: 950px; margin: auto; background-color: #f4f7f6; color: #333; }
         h1, h2, h3, h4 { font-family: 'Roboto Slab', serif; font-weight: 700; color: #049EAB; margin-top: 0; }
@@ -46,6 +48,7 @@
         .role-badge { font-size: 0.7em; padding: 4px 8px; color: white; margin-left: 10px; vertical-align: middle; text-transform: uppercase; font-weight: 900; }
         .badge-catcher { background-color: #EB6502; }
         .badge-runner { background-color: #AEC905; color: #333; }
+        .badge-keine { background-color: #6c757d; color: white; }
         .team-details { font-size: 0.9em; color: #555; margin-top: 8px; line-height: 1.6em; }
         
         .table-wrapper { width: 100%; overflow-x: auto; }
@@ -148,7 +151,6 @@
             <button class="btn btn-orange" onclick="catchTeam()">Eintrag Speichern</button>
         </div>
 
-        <!-- NEU: MANUELLE PUNKTE KORREKTUR -->
         <h4 style="margin-top: 40px; margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Punkte manuell anpassen</h4>
         <div class="manual-catch-wrapper">
             <div class="manual-catch-col">
@@ -175,8 +177,8 @@
                 {{ loop.index }}. {{ entry.display_name }} 
                 {% if entry.deactivated %}<span style="color:red; font-size: 0.7em;">(DEAKTIVIERT)</span>{% endif %}
                 — {{ entry.score }} Punkte
-                <span class="role-badge {{ 'badge-catcher' if entry.role == 'fänger' else 'badge-runner' }}">{{ entry.role }}</span>
-                {% if enable_swap and phase in ['pre_game', 'game'] and not roles_swapped and not entry.deactivated %}
+                <span class="role-badge {{ 'badge-catcher' if entry.role == 'fänger' else 'badge-runner' if entry.role == 'läufer' else 'badge-keine' }}">{{ entry.role }}</span>
+                {% if enable_swap and phase in ['pre_game', 'game'] and not roles_swapped and not entry.deactivated and entry.next_role != 'keine' %}
                     <span style="font-size: 0.6em; color: #888; font-weight: normal; margin-left: 5px; text-transform: uppercase;">(Danach: {{ entry.next_role }})</span>
                 {% endif %}
             </div>
@@ -239,13 +241,23 @@
         {% endfor %}
     </div>
 
+    <!-- LIVE KARTE FÜR ADMIN -->
+    <div class="box">
+        <h2>Live Karte (Alle Haltestellen)</h2>
+        <p style="font-size: 0.9em; color: #555; margin-bottom: 15px;">Aktivierte Läufer-Ziele sind mit einer blauen Stecknadel hervorgehoben.</p>
+        <div id="admin-map" style="height: 450px; width: 100%; border: 1px solid #ddd; z-index: 1;"></div>
+    </div>
+
     <div style="text-align: center; margin-top: 20px; margin-bottom: 40px;">
         <a href="/adminconsole-{{ admin_url }}/settings" class="btn btn-petrol" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">Zu den Spiel-Einstellungen</a>
     </div>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
+        const enableSwap = {{ 'true' if enable_swap else 'false' }};
         let serverOffset = 0;
-        let startTs = 0, endTs = 0, midTs = 0;
+        let startTs = 0, endTs = 0, midTs = 0, postEndTs = 0;
+        let reloadedTrigger = false;
         
         function initTimer() {
             const serverNowStr = "{{ now_time }}";
@@ -258,6 +270,7 @@
                 serverOffset = serverNow - Date.now();
                 startTs = new Date(startStr).getTime();
                 endTs = new Date(endStr).getTime();
+                postEndTs = endTs + (5 * 60 * 1000);
                 if (midStr && midStr !== "None") midTs = new Date(midStr).getTime();
             }
         }
@@ -274,7 +287,6 @@
             if (!startTs || !endTs) { el.innerHTML = "Kein Spielzeiten konfiguriert."; return; }
             const now = Date.now() + serverOffset;
             const preStartTs = startTs - (5 * 60 * 1000);
-            const postEndTs = endTs + (5 * 60 * 1000);
             
             const startDateFormatted = new Date(startTs).toLocaleString('de-DE', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) + ' Uhr';
             
@@ -296,8 +308,52 @@
                 el.innerHTML = "SPIELRUNDE ABGESCHLOSSEN";
                 el.style.borderColor = "#333"; el.style.color = "#333";
             }
+
+            if ((now >= startTs + 60000 && now <= startTs + 61500) || 
+                (now >= endTs + 60000 && now <= endTs + 61500) ||
+                (enableSwap && midTs && now >= midTs + 60000 && now <= midTs + 61500) ||
+                (now >= postEndTs + 60000 && now <= postEndTs + 61500) ||
+                (now >= startTs - 30 * 60000 && now <= startTs - 30 * 60000 + 1500)) {
+                if(!reloadedTrigger) { reloadedTrigger = true; window.location.reload(); }
+            }
         }
         initTimer(); setInterval(updateAdminTimer, 1000); updateAdminTimer();
+
+        // --- MAP LOGIK FÜR ADMIN ---
+        const adminMap = L.map('admin-map').setView([52.248874, 10.526770], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(adminMap);
+        
+        let allStopsData = [];
+        let mapLayerGroup = L.layerGroup().addTo(adminMap);
+
+        fetch('/api/all_stops').then(r => r.json()).then(data => {
+            allStopsData = data;
+            let bounds = [];
+            data.forEach(stop => bounds.push([stop.lat, stop.lon]));
+            if(bounds.length > 0) adminMap.fitBounds(bounds);
+            
+            const initialActive = {{ active_stops | tojson | safe }};
+            updateAdminMap(initialActive);
+        });
+
+        // Layer-Verwaltung erneuert: Löscht und zeichnet Marker dynamisch neu, 
+        // um den Wechsel zwischen Kreis (inaktiv) und Stecknadel (aktiv) zu ermöglichen.
+        function updateAdminMap(activeStops) {
+            mapLayerGroup.clearLayers();
+            allStopsData.forEach(stop => {
+                if (activeStops.includes(stop.name)) {
+                    // Standard Stecknadel für aktive Läufer-Ziele
+                    let marker = L.marker([stop.lat, stop.lon]).bindPopup(`<b>${stop.name}</b>`);
+                    mapLayerGroup.addLayer(marker);
+                } else {
+                    // Grauer Kreis für alle restlichen Haltestellen
+                    let marker = L.circleMarker([stop.lat, stop.lon], {
+                        color: '#6c757d', fillColor: '#6c757d', fillOpacity: 0.5, radius: 4, weight: 1
+                    }).bindPopup(`<b>${stop.name}</b>`);
+                    mapLayerGroup.addLayer(marker);
+                }
+            });
+        }
 
         function copyUrl(elementId) {
             const el = document.getElementById(elementId);
@@ -310,6 +366,7 @@
                     renderNotifications(data.pending_requests);
                     renderHistory(data.action_log);
                     if (data.now_time) serverOffset = new Date(data.now_time).getTime() - Date.now();
+                    if (data.active_stops) updateAdminMap(data.active_stops);
                 }
             }).catch(err => console.error("Update fehlgeschlagen:", err));
         }

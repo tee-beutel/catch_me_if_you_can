@@ -22,6 +22,7 @@
         .role-badge { display: inline-block; padding: 4px 8px; font-size: 0.7em; font-family: 'Roboto', sans-serif; font-weight: 900; text-transform: uppercase; color: white; }
         .role-fänger { background: #EB6502; } 
         .role-läufer { background: #AEC905; color: #333; } 
+        .role-keine { background: #6c757d; color: white; }
         
         .content { display: flex; flex-direction: column; flex: 1; position: relative; overflow: hidden; }
         #map { height: 100%; width: 100%; z-index: 1; }
@@ -31,7 +32,6 @@
         .bottom-sheet.open { transform: translateY(0); }
         .sheet-toggle { height: 50px; flex-shrink: 0; background: #049EAB; color: white; display: flex; justify-content: center; align-items: center; font-family: 'Roboto', sans-serif; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; }
         .sheet-content { padding: 20px; overflow-y: auto; flex: 1; }
-        .catcher-layout { padding: 25px 20px; overflow-y: auto; height: 100%; box-sizing: border-box; background: white;}
         
         h3 { border-bottom: 2px solid #049EAB; padding-bottom: 5px; margin-bottom: 15px;}
         select { width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #ccc; font-size: 16px; font-family: 'Roboto', sans-serif; box-sizing: border-box; }
@@ -70,7 +70,7 @@
         <h2>
             {{ team_name }}
             <span class="role-badge role-{{ role }}">{{ role }}</span>
-            {% if enable_swap and phase in ['pre_game', 'game'] and not roles_swapped %}
+            {% if enable_swap and phase in ['pre_game', 'game'] and not roles_swapped and next_role != 'keine' %}
                 <span style="font-size: 0.5em; color: #888; text-transform: uppercase; margin-left: 5px; font-weight: normal;">(Nach Rollentausch: {{ next_role }})</span>
             {% endif %}
         </h2>
@@ -118,8 +118,7 @@
     {% endif %}
 
     <div class="content">
-        {% if role == 'läufer' %}
-        <!-- LÄUFER ANSICHT -->
+        <!-- KARTE FÜR BEIDE ROLLEN UNIFORMIERT -->
         <div id="map"></div>
         
         {% if phase == 'inactive' or phase == 'finished' %}
@@ -135,9 +134,10 @@
         </div>
         {% endif %}
 
-        <div class="bottom-sheet" id="bottomSheet">
+        <!-- MENÜ: Standardmäßig ausgeklappt mit "open" Klasse -->
+        <div class="bottom-sheet open" id="bottomSheet">
             <div class="sheet-toggle" onclick="toggleSheet()" id="sheetToggleText">
-                Menü & Rangliste ausklappen ▲
+                Menü & Rangliste zuklappen ▼
             </div>
             <div class="sheet-content">
                 
@@ -151,66 +151,53 @@
                 </div>
                 {% endif %}
 
-                <h3>Haltestelle manuell eintragen</h3>
-                <p style="font-size: 0.85em; color:#666; margin-top: 0; margin-bottom: 15px;">Hinweis: Du kannst Haltestellen auch direkt auf der Karte antippen.</p>
-                <select id="stop-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
-                    <option value="">-- Haltestelle auswählen --</option>
-                </select>
-                <button class="btn btn-vcd-green" onclick="requestStop()" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Beim Admin anfragen</button>
+                {% if role == 'läufer' %}
+                    <!-- LÄUFER KONTROLLEN -->
+                    <h3>Haltestelle manuell eintragen</h3>
+                    <p style="font-size: 0.85em; color:#666; margin-top: 0; margin-bottom: 15px;">Hinweis: Du kannst Haltestellen auch direkt auf der Karte antippen.</p>
+                    <select id="stop-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
+                        <option value="">-- Haltestelle auswählen --</option>
+                    </select>
+                    <button class="btn btn-vcd-green" onclick="requestStop()" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Beim Admin anfragen</button>
+                    
+                    <h3 style="margin-top: 40px; border-bottom-color: #EB6502; color: #EB6502;">Gefangen worden?</h3>
+                    <select id="caught-by-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
+                        <option value="">-- Von wem wurdet ihr gefangen? --</option>
+                        {% for t in faenger_teams %}
+                        <option value="{{ t.id }}">{{ t.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-vcd-orange" onclick="reportCatch('läufer')" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Wir wurden gefangen</button>
+                {% elif role == 'fänger' %}
+                    <!-- FÄNGER KONTROLLEN -->
+                    <div style="text-align: center; padding: 10px 0 30px 0;">
+                        <h1 style="font-size: 2.2em; margin: 0; color: #EB6502;">Die Jagd ist eröffnet</h1>
+                        <p style="color: #666; margin-top: 10px; font-size: 1.1em;">Sucht die Läufer-Teams auf den Straßen.</p>
+                    </div>
+                    <h3 style="border-bottom-color: #EB6502; color: #EB6502;">Team gefangen?</h3>
+                    <select id="caught-team-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
+                        <option value="">-- Welches Läufer-Team habt ihr erwischt? --</option>
+                        {% for t in laeufer_teams %}
+                        <option value="{{ t.id }}">{{ t.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-vcd-orange" onclick="reportCatch('fänger')" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Fang melden</button>
+                {% else %}
+                    <!-- KEINE ROLLE KONTROLLEN -->
+                    <div style="text-align: center; padding: 10px 0 30px 0;">
+                        <h1 style="font-size: 2.2em; margin: 0; color: #6c757d;">Noch keine Rolle zugewiesen</h1>
+                        <p style="color: #666; margin-top: 10px; font-size: 1.1em;">Eure Rolle wird exakt 30 Minuten vor Spielbeginn bekannt gegeben.</p>
+                    </div>
+                {% endif %}
                 
-                <h3 style="margin-top: 40px; border-bottom-color: #EB6502; color: #EB6502;">Gefangen worden?</h3>
-                <select id="caught-by-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
-                    <option value="">-- Von wem wurdet ihr gefangen? --</option>
-                    {% for t in faenger_teams %}
-                    <option value="{{ t.id }}">{{ t.name }}</option>
-                    {% endfor %}
-                </select>
-                <button class="btn btn-vcd-orange" onclick="reportCatch('läufer')" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Wir wurden gefangen</button>
-                
-                <!-- LEADERBOARD & LOG -->
+                <!-- GEMEINSAMES LEADERBOARD & LOG -->
                 <div id="shared-data-section" style="margin-top: 40px;">
                     <h3>Rangliste</h3>
                     <table class="leaderboard-table">
-                        <tr>
-                            <th>Team</th>
-                            <th>Punkte</th>
-                        </tr>
-                        {% for entry in leaderboard %}
-                        <tr class="{% if entry.id == team_id %}highlight-runner{% endif %}">
-                            <td>{{ entry.display_name }} <span style="font-size: 0.7em; color: #888; text-transform: uppercase;">({{ entry.role }})</span></td>
-                            <td style="font-weight: bold; color: #049EAB;">{{ entry.score }}</td>
-                        </tr>
-                        {% endfor %}
+                        <!-- Wird über JavaScript dynamisch aktualisiert -->
                     </table>
                     <div class="log">
-                        <h4>Letzte Aktionen eures Teams</h4>
-                        {% for entry in log %}
-                            <div class="log-entry">
-                                {% if entry.type == 'stop' %}
-                                    {% if entry.team == team_id %}
-                                        📍 <b>Ihr</b> habt die Haltestelle '{{ entry.stop }}' erreicht.
-                                    {% else %}
-                                        📍 {{ entry.team_name }} hat die Haltestelle '{{ entry.stop }}' erreicht.
-                                    {% endif %}
-                                    {% if entry.is_late %}<br><span class="late-warn">⚠️ (Nachtrag nach Spielende)</span>{% endif %}
-                                    
-                                {% elif entry.type == 'catch' %}
-                                    {% if entry.hunter == team_id %}
-                                        ⚔️ <b>Ihr</b> (Fänger) habt {{ entry.prey_name }} (Läufer) gefangen.
-                                    {% elif entry.prey == team_id %}
-                                        ⚔️ {{ entry.hunter_name }} (Fänger) hat <b>euch</b> (Läufer) gefangen.
-                                    {% else %}
-                                        ⚔️ {{ entry.hunter_name }} (Fänger) hat {{ entry.prey_name }} (Läufer) gefangen.
-                                    {% endif %}
-                                    {% if entry.is_late %}<br><span class="late-warn">⚠️ (Nachtrag nach Spielende)</span>{% endif %}
-                                    
-                                {% else %}
-                                    {{ entry.desc }}
-                                {% endif %}
-                            </div>
-                        {% else %}
-                            <div class="log-entry">Noch keine Aktionen vorhanden.</div>
-                        {% endfor %}
+                        <!-- Wird über JavaScript dynamisch aktualisiert -->
                     </div>
                 </div>
                 
@@ -219,83 +206,6 @@
                 </div>
             </div>
         </div>
-
-        {% else %}
-        <!-- FÄNGER ANSICHT -->
-        <div class="catcher-layout">
-            
-            {% if phase == 'post_game' %}
-            <div style="background: #fff3cd; color: #856404; padding: 15px; border-left: 4px solid #ffeeba; margin-bottom: 20px; font-weight: bold;">
-                Das Spiel ist bereits beendet. Nachträge der letzten Fänge sind noch für wenige Minuten möglich.
-            </div>
-            {% elif phase != 'game' %}
-            <div style="background: #fff3cd; color: #856404; padding: 15px; border-left: 4px solid #ffeeba; margin-bottom: 20px; font-weight: bold;">
-                Das Spiel läuft aktuell nicht (Read-Only Modus). Es können keine Fänge eingetragen werden.
-            </div>
-            {% endif %}
-
-            <div style="text-align: center; padding: 10px 0 30px 0;">
-                <h1 style="font-size: 2.2em; margin: 0; color: #EB6502;">Die Jagd ist eröffnet</h1>
-                <p style="color: #666; margin-top: 10px; font-size: 1.1em;">Sucht die Läufer-Teams auf den Straßen.</p>
-            </div>
-            <h3 style="border-bottom-color: #EB6502; color: #EB6502;">Team gefangen?</h3>
-            <select id="caught-team-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
-                <option value="">-- Welches Läufer-Team habt ihr erwischt? --</option>
-                {% for t in laeufer_teams %}
-                <option value="{{ t.id }}">{{ t.name }}</option>
-                {% endfor %}
-            </select>
-            <button class="btn btn-vcd-orange" onclick="reportCatch('fänger')" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Fang melden</button>
-            
-            <h3 style="margin-top: 50px;">Rangliste</h3>
-            <table class="leaderboard-table">
-                <tr>
-                    <th>Team</th>
-                    <th>Punkte</th>
-                </tr>
-                {% for entry in leaderboard %}
-                <tr class="{% if entry.id == team_id %}highlight-catcher{% endif %}">
-                    <td>{{ entry.display_name }} <span style="font-size: 0.7em; color: #888; text-transform: uppercase;">({{ entry.role }})</span></td>
-                    <td style="font-weight: bold; color: #049EAB;">{{ entry.score }}</td>
-                </tr>
-                {% endfor %}
-            </table>
-            <div class="log">
-                <h4>Letzte Aktionen eures Teams</h4>
-                {% for entry in log %}
-                    <div class="log-entry">
-                        {% if entry.type == 'stop' %}
-                            {% if entry.team == team_id %}
-                                📍 <b>Ihr</b> habt die Haltestelle '{{ entry.stop }}' erreicht.
-                            {% else %}
-                                📍 {{ entry.team_name }} hat die Haltestelle '{{ entry.stop }}' erreicht.
-                            {% endif %}
-                            {% if entry.is_late %}<br><span class="late-warn">⚠️ (Nachtrag nach Spielende)</span>{% endif %}
-                            
-                        {% elif entry.type == 'catch' %}
-                            {% if entry.hunter == team_id %}
-                                ⚔️ <b>Ihr</b> (Fänger) habt {{ entry.prey_name }} (Läufer) gefangen.
-                            {% elif entry.prey == team_id %}
-                                ⚔️ {{ entry.hunter_name }} (Fänger) hat <b>euch</b> (Läufer) gefangen.
-                            {% else %}
-                                ⚔️ {{ entry.hunter_name }} (Fänger) hat {{ entry.prey_name }} (Läufer) gefangen.
-                            {% endif %}
-                            {% if entry.is_late %}<br><span class="late-warn">⚠️ (Nachtrag nach Spielende)</span>{% endif %}
-                            
-                        {% else %}
-                            {{ entry.desc }}
-                        {% endif %}
-                    </div>
-                {% else %}
-                    <div class="log-entry">Noch keine Aktionen vorhanden.</div>
-                {% endfor %}
-            </div>
-
-            <div style="text-align: center; margin: 40px 0 20px 0;">
-                <a href="/rules.html" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#6c757d; color:white; padding:10px 20px; border-radius:4px;">Hier geht's zur Anleitung</a>
-            </div>
-        </div>
-        {% endif %}
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -304,6 +214,7 @@
         const teamId = "{{ team_id }}";
         const teamName = "{{ team_name }}";
         const currentPhase = "{{ phase }}";
+        const currentRole = "{{ role }}";
         
         const serverNowStr = "{{ now_time }}";
         const startStr = "{{ start_time }}";
@@ -312,13 +223,14 @@
         const enableSwap = {{ 'true' if enable_swap else 'false' }};
         
         let serverOffset = 0;
-        let startTs = 0, endTs = 0, midTs = 0;
+        let startTs = 0, endTs = 0, midTs = 0, postEndTs = 0;
         
         if (serverNowStr && startStr && endStr) {
             const serverNow = new Date(serverNowStr).getTime();
             serverOffset = serverNow - Date.now();
             startTs = new Date(startStr).getTime();
             endTs = new Date(endStr).getTime();
+            postEndTs = endTs + (5 * 60 * 1000);
             if (midStr && midStr !== "None") midTs = new Date(midStr).getTime();
         }
         
@@ -330,7 +242,6 @@
             
             const now = Date.now() + serverOffset;
             const preStartTs = startTs - (5 * 60 * 1000);
-            const postEndTs = endTs + (5 * 60 * 1000);
             
             const formatTime = (diff) => {
                 const s = Math.floor(diff / 1000); const m = Math.floor(s / 60); const h = Math.floor(m / 60);
@@ -360,16 +271,16 @@
             
             timerBar.innerHTML = text;
 
-            if ((now >= startTs + 10000 && now <= startTs + 11500) || 
-                (now >= endTs + 10000 && now <= endTs + 11500) ||
-                (enableSwap && midTs && now >= midTs + 10000 && now <= midTs + 11500) ||
-                (now >= postEndTs + 10000 && now <= postEndTs + 11500)) {
+            if ((now >= startTs + 60000 && now <= startTs + 61500) || 
+                (now >= endTs + 60000 && now <= endTs + 61500) ||
+                (enableSwap && midTs && now >= midTs + 60000 && now <= midTs + 61500) ||
+                (now >= postEndTs + 60000 && now <= postEndTs + 61500) ||
+                (now >= startTs - 30 * 60000 && now <= startTs - 30 * 60000 + 1500)) {
                 if(!reloadedTrigger) { reloadedTrigger = true; window.location.reload(); }
             }
         }
         setInterval(updateTimer, 1000); updateTimer();
 
-        {% if role == 'läufer' %}
         function toggleSheet() {
             const sheet = document.getElementById('bottomSheet');
             const toggleText = document.getElementById('sheetToggleText');
@@ -384,47 +295,81 @@
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         
         let markers = [];
-        let isFirstMapLoad = true; // NEU: Verhindert, dass die Karte jedes mal herumspringt
+        let isFirstMapLoad = true;
         
-        function loadStops() {
-            fetch('/api/stops').then(r => r.json()).then(data => {
-                markers.forEach(m => map.removeLayer(m)); markers = [];
-                const select = document.getElementById('stop-select');
-                const currentVal = select.value;
-                
-                let optsHTML = '<option value="">-- Haltestelle auswählen --</option>';
-                let bounds = []; // NEU: Sammelt die Koordinaten
-                
-                data.forEach(stop => {
-                    optsHTML += `<option value="${stop.name}">${stop.name}</option>`;
-                    let btnHTML = "";
-                    if (currentPhase === 'game' || currentPhase === 'post_game') {
-                        btnHTML = `<button class="btn btn-vcd-green" style="padding: 10px; font-size: 12px; margin-top:0;" onclick="requestStopFromMap('${stop.name.replace(/'/g, "\\'")}')">Hier eintragen</button>`;
-                    } else {
-                        btnHTML = `<div style="font-size:11px; color:#888;">Eintragen noch nicht möglich</div>`;
+        function loadStopsMap() {
+            if (currentRole === 'läufer') {
+                fetch('/api/stops?slug=' + teamSlug).then(r => {
+                    if (r.status === 403) {
+                        window.location.reload(); // Erzwinge sofortigen Neuladevorgang beim Rollenwechsel
+                        return null;
                     }
-                    const popupContent = `
-                        <div style="text-align:center; font-family: 'Roboto', sans-serif;">
-                            <b style="font-size: 1.1em; color: #049EAB;">${stop.name}</b><br><br>
-                            ${btnHTML}
-                        </div>
-                    `;
-                    const marker = L.marker([stop.lat, stop.lon]).bindPopup(popupContent);
-                    marker.addTo(map); markers.push(marker);
+                    return r.json();
+                }).then(data => {
+                    if (!data) return;
+                    markers.forEach(m => map.removeLayer(m)); markers = [];
+                    const select = document.getElementById('stop-select');
+                    const currentVal = select ? select.value : "";
                     
-                    bounds.push([stop.lat, stop.lon]); // NEU: Koordinate hinzufügen
+                    let optsHTML = '<option value="">-- Haltestelle auswählen --</option>';
+                    let bounds = [];
+                    
+                    data.forEach(stop => {
+                        optsHTML += `<option value="${stop.name}">${stop.name}</option>`;
+                        let btnHTML = "";
+                        if (currentPhase === 'game' || currentPhase === 'post_game') {
+                            btnHTML = `<button class="btn btn-vcd-green" style="padding: 10px; font-size: 12px; margin-top:0;" onclick="requestStopFromMap('${stop.name.replace(/'/g, "\\'")}')">Hier eintragen</button>`;
+                        } else {
+                            btnHTML = `<div style="font-size:11px; color:#888;">Eintragen noch nicht möglich</div>`;
+                        }
+                        const popupContent = `
+                            <div style="text-align:center; font-family: 'Roboto', sans-serif;">
+                                <b style="font-size: 1.1em; color: #049EAB;">${stop.name}</b><br><br>
+                                ${btnHTML}
+                            </div>
+                        `;
+                        const marker = L.marker([stop.lat, stop.lon]).bindPopup(popupContent);
+                        marker.addTo(map); markers.push(marker);
+                        bounds.push([stop.lat, stop.lon]);
+                    });
+                    
+                    if(select) { select.innerHTML = optsHTML; select.value = currentVal; }
+                    
+                    if (bounds.length > 0 && isFirstMapLoad) {
+                        map.fitBounds(bounds, { padding: [40, 40] });
+                        isFirstMapLoad = false;
+                    }
                 });
-                
-                if(select) { select.innerHTML = optsHTML; select.value = currentVal; }
-                
-                // NEU: Karte auf alle gesammelten Haltestellen anpassen
-                if (bounds.length > 0 && isFirstMapLoad) {
-                    map.fitBounds(bounds, { padding: [40, 40] });
-                    isFirstMapLoad = false;
-                }
-            });
+            } else {
+                fetch('/api/all_stops').then(r => r.json()).then(data => {
+                    markers.forEach(m => map.removeLayer(m)); markers = [];
+                    let bounds = [];
+                    
+                    data.forEach(stop => {
+                        const popupContent = `
+                            <div style="text-align:center; font-family: 'Roboto', sans-serif;">
+                                <b style="font-size: 1.1em; color: #049EAB;">${stop.name}</b>
+                            </div>
+                        `;
+                        const marker = L.marker([stop.lat, stop.lon]).bindPopup(popupContent);
+                        marker.addTo(map); markers.push(marker);
+                        bounds.push([stop.lat, stop.lon]);
+                    });
+                    
+                    if (bounds.length > 0 && isFirstMapLoad) {
+                        map.fitBounds(bounds, { padding: [40, 40] });
+                        isFirstMapLoad = false;
+                    }
+                });
+            }
         }
-        loadStops(); setInterval(loadStops, 10000);
+        
+        if (currentRole === 'läufer') {
+            loadStopsMap(); 
+            setInterval(loadStopsMap, 10000);
+        } else {
+            loadStopsMap();
+        }
         
         function requestStopFromMap(stopName) {
             map.closePopup();
@@ -450,7 +395,6 @@
                 } else { alert(d.error || 'Fehler!'); }
             }).catch(() => alert('Netzwerkfehler!'));
         }
-        {% endif %}
 
         function reportCatch(role) {
             if(currentPhase !== 'game' && currentPhase !== 'post_game') return alert("Aktionen sind nur während des Spiels und kurz danach möglich.");
@@ -472,10 +416,77 @@
                     alert(d.message);
                     if(role === 'fänger') document.getElementById('caught-team-select').value = "";
                     else document.getElementById('caught-by-select').value = "";
-                    setTimeout(() => window.location.reload(), 1000); 
+                    fetchTicker(); // Direkt Daten updaten statt kompletten Reload
                 } else { alert(d.error || 'Fehler beim Senden.'); }
             }).catch(() => alert('Netzwerkfehler!'));
         }
+
+        // --- LIVE LEADERBOARD & LOG ---
+        function updateLeaderboard(leaderboardData) {
+            const table = document.querySelector('.leaderboard-table');
+            let html = `<tr><th>Team</th><th>Punkte</th></tr>`;
+            leaderboardData.forEach(entry => {
+                let highlight = '';
+                if (entry.id === teamId) {
+                    highlight = currentRole === 'läufer' ? 'highlight-runner' : currentRole === 'fänger' ? 'highlight-catcher' : '';
+                }
+                html += `<tr class="${highlight}">
+                    <td>${entry.display_name} <span style="font-size: 0.7em; color: #888; text-transform: uppercase;">(${entry.role})</span></td>
+                    <td style="font-weight: bold; color: #049EAB;">${entry.score}</td>
+                </tr>`;
+            });
+            table.innerHTML = html;
+        }
+
+        function updateLog(logData) {
+            const teamLog = logData.filter(entry => entry.team === teamId || entry.hunter === teamId || entry.prey === teamId || entry.type === 'system');
+            const logContainer = document.querySelector('.log');
+            let html = `<h4>Letzte Aktionen eures Teams</h4>`;
+            
+            if (teamLog.length === 0) {
+                html += `<div class="log-entry">Noch keine Aktionen vorhanden.</div>`;
+            } else {
+                teamLog.forEach(entry => {
+                    let text = entry.desc;
+                    // Personalisierte Pronomen basierend auf Team-ID
+                    if (entry.type === 'stop') {
+                        if (entry.team === teamId) text = text.replace(teamName + " hat", "<b>Ihr</b> habt");
+                    } else if (entry.type === 'catch') {
+                        if (entry.hunter === teamId) text = text.replace(teamName + " (Fänger) hat", "<b>Ihr</b> (Fänger) habt");
+                        if (entry.prey === teamId) text = text.replace(teamName + " (Läufer)", "<b>euch</b> (Läufer)");
+                    }
+                    
+                    let lateWarn = entry.is_late ? `<br><span class="late-warn">⚠️ (Nachtrag nach Spielende)</span>` : '';
+                    html += `<div class="log-entry">${text} ${lateWarn}</div>`;
+                });
+            }
+            logContainer.innerHTML = html;
+        }
+
+        function fetchTicker() {
+            fetch('/api/ticker_data')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        updateLeaderboard(data.leaderboard);
+                        updateLog(data.action_log);
+                        
+                        // Erzwingt einen Neuladevorgang für die UI, wenn sich die Rolle des eigenen Teams ändert.
+                        const myTeam = data.leaderboard.find(t => t.id === teamId);
+                        if (myTeam && myTeam.role !== currentRole) {
+                            window.location.reload();
+                        }
+                    }
+                })
+                .catch(e => console.log("Ticker Update fehlgeschlagen", e));
+        }
+
+        let initialLeaderboard = {{ leaderboard | tojson | safe }};
+        let initialLog = {{ log | tojson | safe }};
+        updateLeaderboard(initialLeaderboard);
+        updateLog(initialLog);
+        
+        setInterval(fetchTicker, 10000);
     </script>
 </body>
 </html>

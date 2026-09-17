@@ -77,26 +77,18 @@ def generate_slug(display_name, pin):
 
 
 def calculate_next_roles(teams_data):
-    läufer_teams = [t_id for t_id, d in teams_data.items() if d.get("role", "läufer") == "läufer" and not d.get("deactivated", False)]
-    active_teams_count = sum(1 for d in teams_data.values() if not d.get("deactivated", False))
-    
-    # Einen Läufer überspringen, um das Verhältnis bei ungerader Teamanzahl zu wahren
-    team_no_swaped = random.randint(0, len(läufer_teams)-1) if active_teams_count % 2 != 0 and läufer_teams else -1
-    
-    runner_number = 0
     for t_id, d in teams_data.items():
         if d.get("deactivated", False):
-            d["next_role"] = d.get("role", "läufer")
+            d["next_role"] = d.get("role", "keine")
             continue
         
-        if d.get("role", "läufer") == "fänger":
+        current = d.get("role", "keine")
+        if current == "fänger":
             d["next_role"] = "läufer"
+        elif current == "läufer":
+            d["next_role"] = "fänger"
         else:
-            if runner_number != team_no_swaped:
-                d["next_role"] = "fänger"
-            else:
-                d["next_role"] = "läufer"
-            runner_number += 1
+            d["next_role"] = "keine"
 
 
 def get_state():
@@ -104,11 +96,6 @@ def get_state():
         initial_active = random.sample(ALL_STOPS, min(DEFAULT_CONFIG["target_stops"], len(ALL_STOPS)))
         num_teams = DEFAULT_CONFIG["num_teams"]
         team_names = DEFAULT_CONFIG["team_names"]
-
-        # Rollen mischen, IDs bleiben fest (Team 1, Team 2...)
-        num_hunters = num_teams // 2
-        roles = ["fänger"] * num_hunters + ["läufer"] * (num_teams - num_hunters)
-        random.shuffle(roles)
 
         teams_data = {}
         for i in range(num_teams):
@@ -118,9 +105,9 @@ def get_state():
             
             teams_data[team_id] = {
                 "display_name": display_name,
-                "stops": [], "caught": [], "caught_by": [], "pin": pin, "role": roles[i],
-                "slug": generate_slug(display_name, pin), "deactivated": False,
-                "next_role": "fänger" if roles[i] == "läufer" else "läufer",
+                "stops": [], "caught": [], "caught_by": [], "pin": pin, "role": "keine",
+                "slug": generate_slug(team_id, pin), "deactivated": False,
+                "next_role": "keine",
                 "manual_points": 0
             }
             
@@ -133,7 +120,8 @@ def get_state():
             "teams_data": teams_data,
             "pending_requests": [],
             "action_log": [],
-            "roles_swapped": False
+            "roles_swapped": False,
+            "roles_assigned": False
         }
         save_state(state)
         return state
@@ -147,6 +135,10 @@ def get_state():
         for k, v in DEFAULT_CONFIG.items():
             if k not in state["config"]:
                 state["config"][k] = v
+
+    if "roles_assigned" not in state:
+        active_has_keine = any(d.get("role", "keine") == "keine" for d in state.get("teams_data", {}).values() if not d.get("deactivated", False))
+        state["roles_assigned"] = not active_has_keine
 
     return state
 
@@ -190,14 +182,44 @@ def update_game_time_state(state):
     except ValueError:
         return "inactive", None, None, None, now.isoformat()
 
+    # Rollenzuweisung genau 30 Minuten vor Spielbeginn
+    role_assign_dt = start_dt - timedelta(minutes=30)
+    if now >= role_assign_dt and not state.get("roles_assigned", False):
+        active_teams = [t_id for t_id, d in state["teams_data"].items() if not d.get("deactivated", False)]
+        num_active = len(active_teams)
+        if num_active > 0:
+            if random.choice([True, False]):
+                num_laeufer = (num_active + 1) // 2
+                num_faenger = num_active - num_laeufer
+            else:
+                num_faenger = (num_active + 1) // 2
+                num_laeufer = num_active - num_faenger
+
+            roles = ["fänger"] * num_faenger + ["läufer"] * num_laeufer
+            random.shuffle(roles)
+
+            for i, t_id in enumerate(active_teams):
+                state["teams_data"][t_id]["role"] = roles[i]
+
+            calculate_next_roles(state["teams_data"])
+            state["roles_assigned"] = True
+            state["action_log"].insert(0, {
+                "id": str(uuid.uuid4()), "type": "system", "timestamp": time.time(),
+                "desc": "🎲 Die Rollen wurden zugewiesen!"
+            })
+            save_state(state)
+
     mid_dt = None
     if config.get("enable_mid_game_swap"):
         mid_dt = start_dt + (end_dt - start_dt) / 2
         if now >= mid_dt and not state.get("roles_swapped", False):
             for t_id, data in state["teams_data"].items():
                 if not data.get("deactivated", False):
-                    current_role = data.get("role", "läufer")
-                    data["role"] = data.get("next_role", "fänger" if current_role == "läufer" else "läufer")
+                    current_role = data.get("role", "keine")
+                    if current_role == "läufer":
+                        data["role"] = "fänger"
+                    elif current_role == "fänger":
+                        data["role"] = "läufer"
                     
             calculate_next_roles(state["teams_data"])
             state["roles_swapped"] = True
@@ -299,7 +321,7 @@ def index():
                  d.get("manual_points", 0))
         leaderboard.append({
             "id": t_id, "display_name": d["display_name"], "score": score, 
-            "role": d.get("role", "läufer"), "next_role": d.get("next_role", "")
+            "role": d.get("role", "keine"), "next_role": d.get("next_role", "")
         })
         
     leaderboard.sort(key=lambda x: x["score"], reverse=True)
@@ -335,7 +357,7 @@ def team_dashboard(slug):
 
     if not team_id: return "Team nicht gefunden", 404
 
-    role = team_data.get("role", "läufer")
+    role = team_data.get("role", "keine")
     next_role = team_data.get("next_role", "")
     is_deactivated = team_data.get("deactivated", False)
 
@@ -347,7 +369,7 @@ def team_dashboard(slug):
         if d.get("deactivated", False):
             continue
             
-        t_role = d.get("role", "läufer")
+        t_role = d.get("role", "keine")
         if t_role == "läufer" and t_id_iter != team_id:
             laeufer_teams.append({"id": t_id_iter, "name": d["display_name"]})
         elif t_role == "fänger" and t_id_iter != team_id:
@@ -425,7 +447,7 @@ def admin(admin_slug):
                  len(data.get("caught_by", [])) * config["points_was_caught"] +
                  data.get("manual_points", 0))
         leaderboard.append({
-            "id": t_id, "display_name": data["display_name"], "score": score, "role": data["role"],
+            "id": t_id, "display_name": data["display_name"], "score": score, "role": data.get("role", "keine"),
             "next_role": data.get("next_role", ""),
             "stops": data.get("stops", []), "caught": data.get("caught", []), "caught_by": data.get("caught_by", []),
             "deactivated": data.get("deactivated", False),
@@ -457,7 +479,8 @@ def api_admin_data(admin_slug):
         'pending_requests': state.get("pending_requests", []),
         'action_log': state.get("action_log", []),
         'phase': phase,
-        'now_time': now_iso
+        'now_time': now_iso,
+        'active_stops': state.get("active_stops", [])
     })
 
 
@@ -503,20 +526,23 @@ def admin_settings(admin_slug):
                 team_data["display_name"] = display_name
                 team_data["role"] = role
                 team_data["pin"] = pin
-                team_data["slug"] = generate_slug(display_name, pin)
+                team_data["slug"] = generate_slug(team_id, pin)
                 team_data["deactivated"] = not active
                 new_teams_data[team_id] = team_data
             else:
                 new_teams_data[team_id] = {
                     "display_name": display_name,
                     "stops": [], "caught": [], "caught_by": [], "pin": pin,
-                    "role": role, "slug": generate_slug(display_name, pin), 
+                    "role": role, "slug": generate_slug(team_id, pin), 
                     "deactivated": not active,
                     "manual_points": 0
                 }
                 
         calculate_next_roles(new_teams_data)
         state["teams_data"] = new_teams_data
+        
+        active_has_keine = any(d["role"] == "keine" for d in new_teams_data.values() if not d["deactivated"])
+        state["roles_assigned"] = not active_has_keine
         
         config["num_teams"] = len(new_teams_data)
         config["points_stop_reached"] = int(data.get("points_stop_reached", config["points_stop_reached"]))
@@ -558,17 +584,16 @@ def reset_game(admin_slug):
         state["roles_swapped"] = False
 
         teams_ids = list(state["teams_data"].keys())
-        roles = ["fänger"] * (len(teams_ids) // 2) + ["läufer"] * (len(teams_ids) - (len(teams_ids) // 2))
-        random.shuffle(roles)
 
         for i, t_id in enumerate(teams_ids):
             state["teams_data"][t_id]["stops"] = []
             state["teams_data"][t_id]["caught"] = []
             state["teams_data"][t_id]["caught_by"] = []
-            state["teams_data"][t_id]["role"] = roles[i]
+            state["teams_data"][t_id]["role"] = "keine"
             state["teams_data"][t_id]["manual_points"] = 0
             
         calculate_next_roles(state["teams_data"])
+        state["roles_assigned"] = False
         save_state(state)
         
     return jsonify({'success': True})
@@ -584,8 +609,12 @@ def randomize_roles(admin_slug):
         num_active = len(active_teams)
 
         if num_active > 0:
-            num_faenger = num_active // 2
-            num_laeufer = num_active - num_faenger
+            if random.choice([True, False]):
+                num_laeufer = (num_active + 1) // 2
+                num_faenger = num_active - num_laeufer
+            else:
+                num_faenger = (num_active + 1) // 2
+                num_laeufer = num_active - num_faenger
 
             roles = ["fänger"] * num_faenger + ["läufer"] * num_laeufer
             random.shuffle(roles)
@@ -594,6 +623,7 @@ def randomize_roles(admin_slug):
                 state["teams_data"][t_id]["role"] = roles[i]
 
             calculate_next_roles(state["teams_data"])
+            state["roles_assigned"] = True
             save_state(state)
 
     return jsonify({'success': True})
@@ -831,25 +861,68 @@ def add_manual_points():
 
 @app.route('/api/stops')
 def api_stops():
+    team_slug = request.args.get('slug')
+    
     with STATE_LOCK:
         state = get_state()
+        # Stelle sicher, dass der Spielzeit-Status und Rollentausch aktuell sind 
+        update_game_time_state(state)
         
+        if not team_slug:
+            return jsonify({'error': 'Slug fehlt'}), 400
+            
+        team_data = next((d for d in state["teams_data"].values() if d.get("slug") == team_slug), None)
+        
+        if not team_data:
+            return jsonify({'error': 'Team nicht gefunden'}), 404
+            
+        # Nur aktive Läufer dürfen die aktiven Haltestellen abfragen
+        if team_data.get("role") != "läufer":
+            return jsonify({'error': 'Nicht berechtigt'}), 403
+            
+        result = []
+        for name in state['active_stops']:
+            if name in stops_data:
+                result.append(
+                    {'name': name, 'lat': stops_data[name]['lat'], 'lon': stops_data[name]['lon'], 'reached': False})
+                    
+        return jsonify(result)
+
+
+@app.route('/api/all_stops')
+def api_all_stops():
     result = []
-    for name in state['active_stops']:
-        if name in stops_data:
-            result.append(
-                {'name': name, 'lat': stops_data[name]['lat'], 'lon': stops_data[name]['lon'], 'reached': False})
-                
+    for name, data in stops_data.items():
+        result.append({'name': name, 'lat': data['lat'], 'lon': data['lon']})
     return jsonify(result)
 
-# NEUER TICKER API ENDPUNKT
+
+# TICKER API ENDPUNKT (MIT LEADERBOARD)
 @app.route('/api/ticker_data')
 def api_ticker_data():
     with STATE_LOCK:
         state = get_state()
+        config = state["config"]
+        
+        leaderboard = []
+        for t_id, d in state["teams_data"].items():
+            if d.get("deactivated", False):
+                continue
+            score = (len(d.get("stops", [])) * config["points_stop_reached"] +
+                     len(d.get("caught", [])) * config["points_caught_team"] +
+                     len(d.get("caught_by", [])) * config["points_was_caught"] +
+                     d.get("manual_points", 0))
+            leaderboard.append({
+                "id": t_id, "display_name": d["display_name"], "score": score, 
+                "role": d.get("role", "keine"), "next_role": d.get("next_role", "")
+            })
+            
+        leaderboard.sort(key=lambda x: x["score"], reverse=True)
+
         return jsonify({
             'success': True,
-            'action_log': state.get("action_log", [])
+            'action_log': state.get("action_log", []),
+            'leaderboard': leaderboard
         })
 
 if __name__ == '__main__':
