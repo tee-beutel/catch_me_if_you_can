@@ -1,0 +1,4 @@
+.env
+state.json
+state.json.lock
+__pycache__/

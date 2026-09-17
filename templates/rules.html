@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spielregeln - Catch Me</title>
+    <!-- VCD Hausschriften laden -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@700&family=Roboto+Slab:wght@400;700&family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Roboto', Arial, sans-serif; 
+            background-color: #f4f7f6; 
+            color: #333; 
+            margin: 0; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+        }
+        .container { max-width: 800px; width: 100%; }
+        
+        .header-section { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: flex-start; 
+            margin-bottom: 30px; 
+            padding-bottom: 15px; 
+            border-bottom: 2px solid #049EAB; 
+        }
+        .header-section img { height: 60px; max-width: 100%; }
+        
+        /* VCD Keyvisual CSS */
+        .keyvisual { 
+            display: inline-flex; 
+            flex-direction: column; 
+            align-items: flex-start; 
+            margin-bottom: 10px; 
+            margin-top: 10px;
+        }
+        .kv-top { 
+            background-color: #AEC905; 
+            color: #333; 
+            font-family: 'Roboto Condensed', sans-serif; 
+            font-weight: 700; 
+            font-size: 2.2em; 
+            padding: 8px 18px; 
+            text-transform: uppercase; 
+        }
+        .kv-bottom { 
+            background-color: #fff; 
+            color: #333; 
+            font-family: 'Roboto Slab', serif; 
+            font-size: 1.5em; 
+            padding: 8px 18px; 
+            position: relative; 
+            display: inline-block; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05); 
+            margin-left: 10px; 
+            margin-top: -5px; 
+        }
+        .kv-triangle { 
+            content: ''; 
+            position: absolute; 
+            bottom: -15px; 
+            right: 30px; 
+            border-width: 15px 15px 0 0; 
+            border-style: solid; 
+            border-color: #fff transparent transparent transparent; 
+        }
+
+        .box { 
+            background: white; 
+            padding: 30px; 
+            border: 1px solid #ddd; 
+            margin-bottom: 30px; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05); 
+            line-height: 1.6; 
+        }
+        h1, h2, h3, h4 { font-family: 'Roboto Slab', serif; font-weight: 700; color: #049EAB; margin-top: 0; }
+        h2 { border-bottom: 2px solid #049EAB; padding-bottom: 8px; margin-bottom: 20px; margin-top: 25px;}
+        h3 { color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 25px; }
+        
+        p { margin-bottom: 15px; }
+        ul { margin-bottom: 15px; padding-left: 20px; }
+        li { margin-bottom: 10px; }
+        
+        .step-list { counter-reset: steps; list-style-type: none; padding-left: 0; }
+        .step-list li { position: relative; padding-left: 40px; margin-bottom: 15px; }
+        .step-list li::before { 
+            counter-increment: steps; 
+            content: counter(steps); 
+            position: absolute; 
+            left: 0; 
+            top: -2px; 
+            background: #049EAB; 
+            color: white; 
+            width: 28px; 
+            height: 28px; 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-weight: bold; 
+            font-family: 'Roboto', sans-serif;
+        }
+
+        .highlight { 
+            background-color: #e6f7f8; 
+            padding: 15px 20px; 
+            border-left: 4px solid #049EAB; 
+            margin-bottom: 20px; 
+        }
+        .warning { 
+            background-color: #fdf0e6; 
+            padding: 15px 20px; 
+            border-left: 4px solid #EB6502; 
+            margin-bottom: 20px; 
+        }
+
+        .btn { 
+            display: inline-block; 
+            padding: 12px 24px; 
+            border: none; 
+            cursor: pointer; 
+            font-family: 'Roboto', sans-serif; 
+            font-weight: 900; 
+            color: white; 
+            text-transform: uppercase; 
+            text-decoration: none; 
+            font-size: 1em; 
+            letter-spacing: 0.5px; 
+            transition: background-color 0.2s ease; 
+            box-sizing: border-box; 
+            text-align: center; 
+        }
+        .btn-petrol { background-color: #049EAB; }
+        .btn-petrol:hover { background-color: #038c98; }
+
+        @media (max-width: 768px) {
+            .header-section { flex-direction: column; align-items: center; gap: 20px; }
+            .kv-top { font-size: 1.8em; }
+            .kv-bottom { font-size: 1.2em; }
+            .box { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-section">
+            <div>
+                <!-- VCD Keyvisual -->
+                <div class="keyvisual">
+                    <div class="kv-top">Catch me</div>
+                    <div class="kv-bottom">if you can<div class="kv-triangle"></div></div>
+                </div>
+            </div>
+            <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo">
+        </div>
+
+        <div class="box">
+            <h2>Zusammenfassung</h2>
+            <p>Das Spielprinzip ist simpel: Ein Team läuft weg, die anderen fangen. Das Ganze findet im gesamten Stadtgebiet statt, wobei alle öffentlichen Verkehrsmittel genutzt werden dürfen. Für Absprachen und Fotos nutzen wir eine gemeinsame Signal-Gruppe. Den aktuellen Spielstatus, Haltestellen und den Punktestand findet ihr in der Catch Me Web-App, das Live-Tracking läuft über Google Maps.</p>
+
+            <h2>1. Die Catch Me Web-App</h2>
+            <p>Über die Web-App läuft die gesamte Organisation während des Spiels. Loggt euch dafür auf der Startseite mit eurem Teamnamen und eurer Team-PIN ein. Im Dashboard findet ihr folgende Infos:</p>
+            <ul>
+                <li><b>Rolle:</b> Ganz oben steht, ob ihr aktuell LÄUFER oder FÄNGER seid. Wichtig: Je nach Einstellung wechseln die Rollen zur Halbzeit.</li>
+                <li><b>Timer:</b> Zeigt an, wann es losgeht, wie viel Zeit noch bleibt und wann das Spiel vorbei ist.</li>
+                <li><b>Live-Rangliste & Log:</b> Hier seht ihr den aktuellen Punktestand, wer gerade wen gefangen hat und welche Stationen erfolgreich abgehakt wurden.</li>
+                <li><b>Karte (nur für Läufer sichtbar):</b> Zeigt alle aktiven Haltestellen im Spielgebiet an. Die Karte wird kurz vor Spielbeginn freigeschaltet.</li>
+            </ul>
+
+            <h2>2. Standortfreigabe über Google Maps</h2>
+            <div class="highlight">
+                <b>Wichtig:</b> Nur das aktuelle Läufer-Team teilt seinen Standort live. Sobald ihr zum Fänger werdet, beendet ihr die Freigabe sofort, damit euch die Läufer nicht kommen sehen.
+            </div>
+            <p>So richtet ihr die Freigabe als Läufer-Team ein:</p>
+            <ol class="step-list">
+                <li>Öffnet Google Maps auf einem eurer Smartphones (denkt an einen vollen Akku!).</li>
+                <li>Tippt oben rechts auf euer Profilbild und wählt „Standortfreigabe“.</li>
+                <li>Geht auf „Neuen Standort freigeben“.</li>
+                <li>Wählt als Dauer einen Zeitraum, der definitiv länger ist als eure Zeit als Läufer.</li>
+                <li>Kopiert den Link in die Zwischenablage und postet ihn direkt in die Signal-Gruppe.</li>
+            </ol>
+
+            <h2>3. Haltestellen ansteuern & Fotobeweis</h2>
+            <p>Als Läufer sammelt ihr Punkte, indem ihr zufällige Haltestellen ansteuert. Die jeweils aktiven Ziele werden euch auf der Karte im Dashboard angezeigt. Sobald eine Station erledigt ist, wirft das System direkt die nächste aus (eine Haltestelle wird nie doppelt hintereinander gezogen).</p>
+            
+            <h3>So läuft der Nachweis ab:</h3>
+            <ol class="step-list">
+                <li>Fahrt oder geht zu einer der aktiven Haltestellen auf eurer Karte.</li>
+                <li><b>Das Foto:</b> Macht ein Teambild vor dem Haltestellenschild. Falls ihr im Bus oder in der Bahn sitzt und ohne Auszusteigen durchfahrt, fotografiert einfach den Monitor im Fahrzeug, auf dem der Name der Station zu sehen ist.</li>
+                <li>Schickt das Foto direkt in die Signal-Gruppe.</li>
+                <li><b>Punkte eintragen:</b> Wählt die Station im Dropdown-Menü der Web-App aus oder klickt sie direkt auf der Karte an. Der Admin gleicht das mit dem Foto in Signal ab und gibt die Punkte frei. Sollte die App mal klemmen, kann der Admin die Punkte auch manuell nachtragen.</li>
+                <li><b>Frist:</b> Das Beweisfoto muss spätestens 30 Sekunden nach einem Rollenwechsel oder nach Spielende in der Signal-Gruppe sein, sonst verfällt der Punkt. Wenn ihr es nicht mehr in die Website eingetragen habt, kann der Spielleiter die Punkte nachtragen</li>
+            </ol>
+
+            <h2>4. Spielablauf & Fangen</h2>
+            <p>Los geht es am Platz der deutschen Einheit. Die Läufer starten mit 10 Minuten Vorsprung. Um ein Team zu fangen, reicht es, wenn ein Mitglied des Läuferteams von einem Fänger berührt wird.</p>
+            
+            <div class="warning">
+                <b>Catch eintragen:</b> Jeder Fang muss im Dashboard gemeldet werden. Nutzt dazu das Dropdown „Team gefangen?“ (als Fänger) oder „Gefangen worden?“ (als Läufer). Die Punkte werden gutgeschrieben, sobald die Gegenseite den Fang in ihrer App bestätigt hat.
+            </div>
+            
+            <ul>
+                <li>Nach dem Fang dürfen die Läufer sofort weiterfahren.</li>
+                <li>Das Fängerteam darf den Läufern nicht direkt in dasselbe Fahrzeug folgen, sondern muss mindestens 5 Minuten warten, bevor es weitergeht.</li>
+                <li>Ein Team kann am selben Ort erst dann wieder gefangen werden, wenn es zwischendurch ein anderes Verkehrsmittel genutzt hat.</li>
+                <li>Ausnahme bei dünnem Takt: Findet ein Fang in einem Verkehrsmittel statt, das nur alle 30 Minuten fährt, werden beide Teams zusammen bis zum nächsten Knotenpunkt fahren. Die 5-Minuten-Sperre für die Fänger beginnt dann erst dort, damit niemand am Streckenrand strandet.</li>
+            </ul>
+
+            <h2>5. Spielfeld & erlaubte Verkehrsmittel</h2>
+            <p>Das Spielgebiet umfasst das gesamte Stadtgebiet Braunschweig (außer Harxbüttel), Wolfenbüttel und Weddel. Die Buslinie 740 zwischen Weddel und Wolfenbüttel darf genutzt werden, allerdings ist auf freier Strecke kein Ein- oder Ausstieg erlaubt.</p>
+            <ul>
+                <li>Erlaubt sind Busse, Straßenbahnen, der Regionalverkehr sowie veloleo-Fahrräder (letztere für maximal 30 Minuten pro Spielrunde).</li>
+                <li>Ihr müsst euch so bewegen, dass innerhalb eines 15-minütigen Gehradius immer mindestens eine Haltestelle liegt, die mindestens alle 30 Minuten angefahren wird.</li>
+                <li>Verlasst ihr diesen Bereich für länger als 10 Minuten, müsst ihr direkt zu einem vom Spielleiter festgelegten Knotenpunkt. Von dort dürft ihr erst weiter, wenn ihr von zwei unterschiedlichen Fängerteams gefangen wurdet.</li>
+                <li>Taktisches Aufteilen ist nicht erlaubt – die Teams müssen immer komplett zusammenbleiben.</li>
+            </ul>
+
+            <h2>6. Spielende und Abrechnung</h2>
+            <p>Sobald der Timer abgelaufen ist, schaltet die Web-App auf „POST-GAME“ und das Spiel ist vorbei. Ab diesem Moment ist kein Fangen mehr erlaubt. Alle Teams machen sich auf den Weg zum Rathaus. Für eventuelle manuelle Nachträge bleibt die App noch einige Minuten offen.</p>
+            
+            <div class="highlight" style="border-left-color: #AEC905;">
+                <b>Punkteverteilung:</b><br><br>
+                <b>Läufer:</b> +2 Punkte pro erreichte Haltestelle und -3 Punkte, wenn ihr gefangen wurdet.<br><br>
+                <b>Fänger:</b> +4 Punkte für jeden erfolgreichen Fang.
+            </div>
+            
+            <p>Wer am Ende die meisten Punkte hat, gewinnt das Spiel.</p>
+        </div>
+
+        <div class="box">
+            <h2>Datenschutzerklärung</h2>
+            <p>Für die Teilnahme am Spiel gelten die folgenden Datenschutzhinweise. Wir legen großen Wert auf den Schutz deiner Daten:</p>
+            <ul>
+                <li><b>Zweck und Speicherung:</b> Alle erhobenen persönlichen Daten werden ausschließlich zur Durchführung und Organisation des Spiels benötigt. Die Speicherung der Daten der Web-App erfolgt auf den Servern der Academic Cloud und der TU Braunschweig. Rechtsgrundlage hierfür ist die Einwilligung der Teilnehmenden (Art. 6 Abs. 1 lit. a DSGVO).</li>
+                <li><b>Löschung der Daten:</b> Deine persönlichen Daten werden nach Ende des Spiels auf Anfrage vollständig gelöscht.</li>
+                <li><b>Deine Rechte:</b> Du hast das Recht auf Auskunft, Berichtigung, Löschung oder Einschränkung der Verarbeitung deiner Daten sowie ein Beschwerderecht bei einer zuständigen Aufsichtsbehörde.</li>
+                <li><b>Drittanbieter (Signal & Google Maps):</b> Die Kommunikation während des Spiels läuft über eine gemeinsame Signal-Gruppe, das Live-Tracking über Google Maps. Bitte beachte, dass dabei deine entsprechenden Profilinformationen (z. B. Name, Profilbild, ggf. Telefonnummer) und Standortdaten mit der Spielgruppe geteilt werden. Es gelten zusätzlich die Datenschutzbestimmungen der jeweiligen Anbieter (Signal Messenger LLC und Google Ireland Limited).</li>
+                <li><b>Signal-Gruppe:</b> Die Signal-Gruppe bleibt nach Beendigung des Spiels bestehen, falls du in einer künftigen Runde erneut mitspielen möchtest. Du kannst die Gruppe selbstverständlich jederzeit selbstständig verlassen.</li>
+            </ul>
+            <p><i>Verantwortlicher für die Datenverarbeitung im Rahmen des Spiels:<br>Tim Beutling, VCD Kreisverband Braunschweig<br>E-Mail: <a href="mailto:tim.beutling@vcd-bs.de" style="color: #049EAB; text-decoration: none;">tim.beutling@vcd-bs.de</a></i></p>
+        </div>
+
+        <div style="text-align: center; margin-bottom: 40px;">
+            <a href="/" class="btn btn-petrol">Zurück zur Startseite</a>
+        </div>
+    </div>
+</body>
+</html>

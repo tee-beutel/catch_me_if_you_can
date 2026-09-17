@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>{{ team_name }} - Catch Me</title>
+    <!-- Leaflet CSS für die Karte -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@700&family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Roboto', Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: #f4f7f6; overflow: hidden; color: #333; }
+        h1, h2, h3, h4 { font-family: 'Roboto Slab', serif; font-weight: 700; color: #049EAB; margin-top: 0; }
+        .header { background: white; border-bottom: 2px solid #049EAB; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 2000; position: relative; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .header h2 { margin: 0; font-size: 1.3em; display: flex; align-items: center; flex-wrap: wrap; gap: 10px;}
+        .header-logo { height: 35px; }
+        
+        .timer-bar { background: #333; color: white; padding: 8px 15px; text-align: center; font-weight: 900; font-family: 'Roboto', sans-serif; font-size: 0.9em; z-index: 1999; }
+        .timer-alert { background: #EB6502; }
+
+        .role-badge { display: inline-block; padding: 4px 8px; font-size: 0.7em; font-family: 'Roboto', sans-serif; font-weight: 900; text-transform: uppercase; color: white; }
+        .role-fänger { background: #EB6502; } 
+        .role-läufer { background: #AEC905; color: #333; } 
+        
+        .content { display: flex; flex-direction: column; flex: 1; position: relative; overflow: hidden; }
+        #map { height: 100%; width: 100%; z-index: 1; }
+        .map-overlay-msg { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(244, 247, 246, 0.95); z-index: 10; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; }
+        
+        .bottom-sheet { position: absolute; bottom: 0; left: 0; right: 0; background: white; z-index: 1000; display: flex; flex-direction: column; transition: transform 0.3s ease-in-out; transform: translateY(calc(100% - 50px)); box-shadow: 0 -3px 15px rgba(0,0,0,0.2); max-height: 80dvh; }
+        .bottom-sheet.open { transform: translateY(0); }
+        .sheet-toggle { height: 50px; flex-shrink: 0; background: #049EAB; color: white; display: flex; justify-content: center; align-items: center; font-family: 'Roboto', sans-serif; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; }
+        .sheet-content { padding: 20px; overflow-y: auto; flex: 1; }
+        .catcher-layout { padding: 25px 20px; overflow-y: auto; height: 100%; box-sizing: border-box; background: white;}
+        
+        h3 { border-bottom: 2px solid #049EAB; padding-bottom: 5px; margin-bottom: 15px;}
+        select { width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #ccc; font-size: 16px; font-family: 'Roboto', sans-serif; box-sizing: border-box; }
+        select:disabled { background: #eee; cursor: not-allowed; }
+        .btn { padding: 14px; border: none; cursor: pointer; font-family: 'Roboto', sans-serif; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; color: white; width: 100%; margin-top: 10px; font-size: 16px; transition: background 0.2s ease; }
+        .btn:disabled { background: #ccc !important; color: #888 !important; cursor: not-allowed; }
+        .btn-vcd-green { background-color: #AEC905; color: #333; }
+        .btn-vcd-green:hover:not(:disabled) { background-color: #9cb404; }
+        .btn-vcd-orange { background-color: #EB6502; color: white; }
+        .btn-vcd-orange:hover:not(:disabled) { background-color: #d15902; }
+        
+        .leaderboard-table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 30px; }
+        .leaderboard-table th, .leaderboard-table td { padding: 12px 10px; text-align: left; border-bottom: 1px solid #eee; }
+        .leaderboard-table th { background: #f8f9fa; color: #049EAB; border-bottom: 2px solid #049EAB;}
+        .highlight-runner { font-weight: bold; background: #f7f9e6; } 
+        .highlight-catcher { font-weight: bold; background: #fdf0e6; } 
+        
+        .log { margin-top: 25px; font-size: 0.9em; color: #555; }
+        .log h4 { color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 10px;}
+        .log-entry { padding: 10px 0; border-bottom: 1px solid #f0f0f0; line-height: 1.4; }
+        .log-entry:last-child { border-bottom: none; }
+        .late-warn { color: #EB6502; font-size: 0.8em; font-weight: bold; }
+    </style>
+</head>
+<body>
+    {% if is_deactivated %}
+    <div style="position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; box-sizing: border-box;">
+        <div style="background: white; padding: 30px; border-radius: 10px; max-width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+            <h2 style="color: #EB6502; border: none; margin-bottom: 15px; font-size: 1.8em;">Team deaktiviert</h2>
+            <p style="font-size: 1.1em; color: #333; margin: 0; line-height: 1.4;">Das Team wurde deaktiviert. Wenn du doch mitspielen willst, melde dich bitte beim Spielleiter.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="header">
+        <h2>
+            {{ team_name }}
+            <span class="role-badge role-{{ role }}">{{ role }}</span>
+            {% if enable_swap and phase in ['pre_game', 'game'] and not roles_swapped %}
+                <span style="font-size: 0.5em; color: #888; text-transform: uppercase; margin-left: 5px; font-weight: normal;">(Nach Rollentausch: {{ next_role }})</span>
+            {% endif %}
+        </h2>
+        <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo" class="header-logo">
+    </div>
+    
+    <div class="timer-bar" id="top-timer">Zeit wird synchronisiert...</div>
+
+    <!-- GEWINNER ANZEIGE (Global für beide Rollen sichtbar) -->
+    {% if phase == 'finished' %}
+        {% set top_score = leaderboard[0].score if leaderboard|length > 0 else 0 %}
+        {% set winners = [] %}
+        {% for entry in leaderboard %}
+            {% if entry.score == top_score %}
+                {% set _ = winners.append(entry.display_name) %}
+            {% endif %}
+        {% endfor %}
+        <div style="background: white; border-bottom: 2px solid #049EAB; padding: 20px; text-align: center; z-index: 1000; position: relative;">
+            <h2 style="margin:0; color:#049EAB;">🎉 Spiel beendet! 🎉</h2>
+            <p style="font-size: 1.1em; margin: 10px 0;">Sieger mit <b>{{ top_score }} Punkten</b>:</p>
+            <h1 style="color: #EB6502; margin: 0; font-size: 2em;">{{ winners | join(' & ') }}</h1>
+            
+            {% if team_name in winners %}
+                <p style="font-weight: bold; color: #AEC905; font-size: 1.3em; margin-top: 15px;">GLÜCKWUNSCH, IHR HABT GEWONNEN! 🏆</p>
+                <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+                <script>
+                    window.addEventListener('load', function() {
+                        var duration = 5 * 1000;
+                        var animationEnd = Date.now() + duration;
+                        var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 3000 };
+
+                        function randomInRange(min, max) { return Math.random() * (max - min) + min; }
+
+                        var interval = setInterval(function() {
+                            var timeLeft = animationEnd - Date.now();
+                            if (timeLeft <= 0) { return clearInterval(interval); }
+                            var particleCount = 50 * (timeLeft / duration);
+                            confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+                            confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+                        }, 250);
+                    });
+                </script>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <div class="content">
+        {% if role == 'läufer' %}
+        <!-- LÄUFER ANSICHT -->
+        <div id="map"></div>
+        
+        {% if phase == 'inactive' or phase == 'finished' %}
+        <div class="map-overlay-msg">
+            <div>
+                <h3 style="border:none; margin:0; font-size:1.5em; color:#333;">Karte nicht verfügbar</h3>
+                {% if phase == 'inactive' %}
+                    <p style="color:#666; margin-top:10px;">Die Karte wird erst 5 Minuten vor Spielbeginn freigeschaltet.</p>
+                {% else %}
+                    <p style="color:#666; margin-top:10px;">Das Spiel ist endgültig beendet.</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="bottom-sheet" id="bottomSheet">
+            <div class="sheet-toggle" onclick="toggleSheet()" id="sheetToggleText">
+                Menü & Rangliste ausklappen ▲
+            </div>
+            <div class="sheet-content">
+                
+                {% if phase == 'post_game' %}
+                <div style="background: #fff3cd; color: #856404; padding: 10px; border-left: 4px solid #ffeeba; margin-bottom: 15px; font-weight: bold; font-size: 0.9em;">
+                    Das Spiel ist bereits beendet. Nachträge der letzten Aktionen sind noch für wenige Minuten möglich.
+                </div>
+                {% elif phase != 'game' %}
+                <div style="background: #fff3cd; color: #856404; padding: 10px; border-left: 4px solid #ffeeba; margin-bottom: 15px; font-weight: bold; font-size: 0.9em;">
+                    Das Spiel läuft aktuell nicht (Read-Only Modus).
+                </div>
+                {% endif %}
+
+                <h3>Haltestelle manuell eintragen</h3>
+                <p style="font-size: 0.85em; color:#666; margin-top: 0; margin-bottom: 15px;">Hinweis: Du kannst Haltestellen auch direkt auf der Karte antippen.</p>
+                <select id="stop-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
+                    <option value="">-- Haltestelle auswählen --</option>
+                </select>
+                <button class="btn btn-vcd-green" onclick="requestStop()" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Beim Admin anfragen</button>
+                
+                <h3 style="margin-top: 40px; border-bottom-color: #EB6502; color: #EB6502;">Gefangen worden?</h3>
+                <select id="caught-by-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
+                    <option value="">-- Von wem wurdet ihr gefangen? --</option>
+                    {% for t in faenger_teams %}
+                    <option value="{{ t.id }}">{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+                <button class="btn btn-vcd-orange" onclick="reportCatch('läufer')" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Wir wurden gefangen</button>
+                
+                <!-- LEADERBOARD & LOG -->
+                <div id="shared-data-section" style="margin-top: 40px;">
+                    <h3>Rangliste</h3>
+                    <table class="leaderboard-table">
+                        <tr>
+                            <th>Team</th>
+                            <th>Punkte</th>
+                        </tr>
+                        {% for entry in leaderboard %}
+                        <tr class="{% if entry.id == team_id %}highlight-runner{% endif %}">
+                            <td>{{ entry.display_name }} <span style="font-size: 0.7em; color: #888; text-transform: uppercase;">({{ entry.role }})</span></td>
+                            <td style="font-weight: bold; color: #049EAB;">{{ entry.score }}</td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                    <div class="log">
+                        <h4>Letzte Aktionen eures Teams</h4>
+                        {% for entry in log %}
+                            <div class="log-entry">
+                                {% if entry.type == 'stop' %}
+                                    {% if entry.team == team_id %}
+                                        📍 <b>Ihr</b> habt die Haltestelle '{{ entry.stop }}' erreicht.
+                                    {% else %}
+                                        📍 {{ entry.team_name }} hat die Haltestelle '{{ entry.stop }}' erreicht.
+                                    {% endif %}
+                                    {% if entry.is_late %}<br><span class="late-warn">⚠️ (Nachtrag nach Spielende)</span>{% endif %}
+                                    
+                                {% elif entry.type == 'catch' %}
+                                    {% if entry.hunter == team_id %}
+                                        ⚔️ <b>Ihr</b> (Fänger) habt {{ entry.prey_name }} (Läufer) gefangen.
+                                    {% elif entry.prey == team_id %}
+                                        ⚔️ {{ entry.hunter_name }} (Fänger) hat <b>euch</b> (Läufer) gefangen.
+                                    {% else %}
+                                        ⚔️ {{ entry.hunter_name }} (Fänger) hat {{ entry.prey_name }} (Läufer) gefangen.
+                                    {% endif %}
+                                    {% if entry.is_late %}<br><span class="late-warn">⚠️ (Nachtrag nach Spielende)</span>{% endif %}
+                                    
+                                {% else %}
+                                    {{ entry.desc }}
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <div class="log-entry">Noch keine Aktionen vorhanden.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin: 40px 0 20px 0;">
+                    <a href="/rules.html" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#6c757d; color:white; padding:10px 20px; border-radius:4px;">Hier geht's zur Anleitung</a>
+                </div>
+            </div>
+        </div>
+
+        {% else %}
+        <!-- FÄNGER ANSICHT -->
+        <div class="catcher-layout">
+            
+            {% if phase == 'post_game' %}
+            <div style="background: #fff3cd; color: #856404; padding: 15px; border-left: 4px solid #ffeeba; margin-bottom: 20px; font-weight: bold;">
+                Das Spiel ist bereits beendet. Nachträge der letzten Fänge sind noch für wenige Minuten möglich.
+            </div>
+            {% elif phase != 'game' %}
+            <div style="background: #fff3cd; color: #856404; padding: 15px; border-left: 4px solid #ffeeba; margin-bottom: 20px; font-weight: bold;">
+                Das Spiel läuft aktuell nicht (Read-Only Modus). Es können keine Fänge eingetragen werden.
+            </div>
+            {% endif %}
+
+            <div style="text-align: center; padding: 10px 0 30px 0;">
+                <h1 style="font-size: 2.2em; margin: 0; color: #EB6502;">Die Jagd ist eröffnet</h1>
+                <p style="color: #666; margin-top: 10px; font-size: 1.1em;">Sucht die Läufer-Teams auf den Straßen.</p>
+            </div>
+            <h3 style="border-bottom-color: #EB6502; color: #EB6502;">Team gefangen?</h3>
+            <select id="caught-team-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
+                <option value="">-- Welches Läufer-Team habt ihr erwischt? --</option>
+                {% for t in laeufer_teams %}
+                <option value="{{ t.id }}">{{ t.name }}</option>
+                {% endfor %}
+            </select>
+            <button class="btn btn-vcd-orange" onclick="reportCatch('fänger')" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Fang melden</button>
+            
+            <h3 style="margin-top: 50px;">Rangliste</h3>
+            <table class="leaderboard-table">
+                <tr>
+                    <th>Team</th>
+                    <th>Punkte</th>
+                </tr>
+                {% for entry in leaderboard %}
+                <tr class="{% if entry.id == team_id %}highlight-catcher{% endif %}">
+                    <td>{{ entry.display_name }} <span style="font-size: 0.7em; color: #888; text-transform: uppercase;">({{ entry.role }})</span></td>
+                    <td style="font-weight: bold; color: #049EAB;">{{ entry.score }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            <div class="log">
+                <h4>Letzte Aktionen eures Teams</h4>
+                {% for entry in log %}
+                    <div class="log-entry">
+                        {% if entry.type == 'stop' %}
+                            {% if entry.team == team_id %}
+                                📍 <b>Ihr</b> habt die Haltestelle '{{ entry.stop }}' erreicht.
+                            {% else %}
+                                📍 {{ entry.team_name }} hat die Haltestelle '{{ entry.stop }}' erreicht.
+                            {% endif %}
+                            {% if entry.is_late %}<br><span class="late-warn">⚠️ (Nachtrag nach Spielende)</span>{% endif %}
+                            
+                        {% elif entry.type == 'catch' %}
+                            {% if entry.hunter == team_id %}
+                                ⚔️ <b>Ihr</b> (Fänger) habt {{ entry.prey_name }} (Läufer) gefangen.
+                            {% elif entry.prey == team_id %}
+                                ⚔️ {{ entry.hunter_name }} (Fänger) hat <b>euch</b> (Läufer) gefangen.
+                            {% else %}
+                                ⚔️ {{ entry.hunter_name }} (Fänger) hat {{ entry.prey_name }} (Läufer) gefangen.
+                            {% endif %}
+                            {% if entry.is_late %}<br><span class="late-warn">⚠️ (Nachtrag nach Spielende)</span>{% endif %}
+                            
+                        {% else %}
+                            {{ entry.desc }}
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="log-entry">Noch keine Aktionen vorhanden.</div>
+                {% endfor %}
+            </div>
+
+            <div style="text-align: center; margin: 40px 0 20px 0;">
+                <a href="/rules.html" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#6c757d; color:white; padding:10px 20px; border-radius:4px;">Hier geht's zur Anleitung</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const teamSlug = "{{ slug }}";
+        const teamId = "{{ team_id }}";
+        const teamName = "{{ team_name }}";
+        const currentPhase = "{{ phase }}";
+        
+        const serverNowStr = "{{ now_time }}";
+        const startStr = "{{ start_time }}";
+        const endStr = "{{ end_time }}";
+        const midStr = "{{ mid_time }}";
+        const enableSwap = {{ 'true' if enable_swap else 'false' }};
+        
+        let serverOffset = 0;
+        let startTs = 0, endTs = 0, midTs = 0;
+        
+        if (serverNowStr && startStr && endStr) {
+            const serverNow = new Date(serverNowStr).getTime();
+            serverOffset = serverNow - Date.now();
+            startTs = new Date(startStr).getTime();
+            endTs = new Date(endStr).getTime();
+            if (midStr && midStr !== "None") midTs = new Date(midStr).getTime();
+        }
+        
+        let reloadedTrigger = false;
+
+        function updateTimer() {
+            const timerBar = document.getElementById('top-timer');
+            if (!startTs || !endTs) { timerBar.innerHTML = "Kein Spiel geplant."; return; }
+            
+            const now = Date.now() + serverOffset;
+            const preStartTs = startTs - (5 * 60 * 1000);
+            const postEndTs = endTs + (5 * 60 * 1000);
+            
+            const formatTime = (diff) => {
+                const s = Math.floor(diff / 1000); const m = Math.floor(s / 60); const h = Math.floor(m / 60);
+                return `${h.toString().padStart(2, '0')}:${(m % 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+            };
+            
+            const startDateFormatted = new Date(startTs).toLocaleString('de-DE', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+
+            let text = "";
+
+            if (now < preStartTs) {
+                text = "Spiel in Vorbereitung. Start am " + startDateFormatted;
+            } else if (now >= preStartTs && now < startTs) {
+                text = "PRE-GAME! Spiel startet in " + formatTime(startTs - now);
+            } else if (now >= startTs && now <= endTs) {
+                let swapText = "";
+                if (enableSwap && midTs && now < midTs) swapText = " | Rollentausch in " + formatTime(midTs - now);
+                text = "SPIEL LÄUFT! Ende in " + formatTime(endTs - now) + swapText;
+                timerBar.classList.add('timer-alert');
+            } else if (now > endTs && now <= postEndTs) {
+                text = "POST-GAME! Spiel beendet. Auswertung läuft.";
+                timerBar.classList.remove('timer-alert');
+            } else {
+                text = "Spielrunde ist vollständig abgeschlossen.";
+                timerBar.classList.remove('timer-alert');
+            }
+            
+            timerBar.innerHTML = text;
+
+            if ((now >= startTs + 10000 && now <= startTs + 11500) || 
+                (now >= endTs + 10000 && now <= endTs + 11500) ||
+                (enableSwap && midTs && now >= midTs + 10000 && now <= midTs + 11500) ||
+                (now >= postEndTs + 10000 && now <= postEndTs + 11500)) {
+                if(!reloadedTrigger) { reloadedTrigger = true; window.location.reload(); }
+            }
+        }
+        setInterval(updateTimer, 1000); updateTimer();
+
+        {% if role == 'läufer' %}
+        function toggleSheet() {
+            const sheet = document.getElementById('bottomSheet');
+            const toggleText = document.getElementById('sheetToggleText');
+            sheet.classList.toggle('open');
+            if(sheet.classList.contains('open')) { toggleText.innerHTML = "Menü & Rangliste zuklappen ▼"; } 
+            else { toggleText.innerHTML = "Menü & Rangliste ausklappen ▲"; }
+        }
+        
+        {% if phase == 'pre_game' or phase == 'game' or phase == 'post_game' %}
+        const map = L.map('map', {zoomControl: false}).setView([52.248874, 10.526770], 12);
+        L.control.zoom({ position: 'topright' }).addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        
+        let markers = [];
+        let isFirstMapLoad = true; // NEU: Verhindert, dass die Karte jedes mal herumspringt
+        
+        function loadStops() {
+            fetch('/api/stops').then(r => r.json()).then(data => {
+                markers.forEach(m => map.removeLayer(m)); markers = [];
+                const select = document.getElementById('stop-select');
+                const currentVal = select.value;
+                
+                let optsHTML = '<option value="">-- Haltestelle auswählen --</option>';
+                let bounds = []; // NEU: Sammelt die Koordinaten
+                
+                data.forEach(stop => {
+                    optsHTML += `<option value="${stop.name}">${stop.name}</option>`;
+                    let btnHTML = "";
+                    if (currentPhase === 'game' || currentPhase === 'post_game') {
+                        btnHTML = `<button class="btn btn-vcd-green" style="padding: 10px; font-size: 12px; margin-top:0;" onclick="requestStopFromMap('${stop.name.replace(/'/g, "\\'")}')">Hier eintragen</button>`;
+                    } else {
+                        btnHTML = `<div style="font-size:11px; color:#888;">Eintragen noch nicht möglich</div>`;
+                    }
+                    const popupContent = `
+                        <div style="text-align:center; font-family: 'Roboto', sans-serif;">
+                            <b style="font-size: 1.1em; color: #049EAB;">${stop.name}</b><br><br>
+                            ${btnHTML}
+                        </div>
+                    `;
+                    const marker = L.marker([stop.lat, stop.lon]).bindPopup(popupContent);
+                    marker.addTo(map); markers.push(marker);
+                    
+                    bounds.push([stop.lat, stop.lon]); // NEU: Koordinate hinzufügen
+                });
+                
+                if(select) { select.innerHTML = optsHTML; select.value = currentVal; }
+                
+                // NEU: Karte auf alle gesammelten Haltestellen anpassen
+                if (bounds.length > 0 && isFirstMapLoad) {
+                    map.fitBounds(bounds, { padding: [40, 40] });
+                    isFirstMapLoad = false;
+                }
+            });
+        }
+        loadStops(); setInterval(loadStops, 10000);
+        
+        function requestStopFromMap(stopName) {
+            map.closePopup();
+            if(currentPhase !== 'game' && currentPhase !== 'post_game') { alert("Aktion im aktuellen Status nicht erlaubt."); return; }
+            sendStopRequest(stopName);
+        }
+        {% endif %} 
+        
+        function requestStop() {
+            if(currentPhase !== 'game' && currentPhase !== 'post_game') return alert("Aktion momentan nicht erlaubt.");
+            const stop = document.getElementById('stop-select').value;
+            if (!stop) return alert("Bitte wähle eine Haltestelle aus.");
+            sendStopRequest(stop);
+        }
+        function sendStopRequest(stopName) {
+            fetch('/api/request_stop', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slug: teamSlug, stop: stopName })
+            }).then(r => r.json()).then(d => {
+                if(d.success) {
+                    alert(`Anfrage für "${stopName}" erfolgreich gesendet.`);
+                    document.getElementById('stop-select').value = "";
+                } else { alert(d.error || 'Fehler!'); }
+            }).catch(() => alert('Netzwerkfehler!'));
+        }
+        {% endif %}
+
+        function reportCatch(role) {
+            if(currentPhase !== 'game' && currentPhase !== 'post_game') return alert("Aktionen sind nur während des Spiels und kurz danach möglich.");
+            let hunterId, preyId;
+            if (role === 'fänger') {
+                hunterId = teamId;
+                preyId = document.getElementById('caught-team-select').value;
+                if (!preyId) return alert("Bitte wähle das gefangene Team aus.");
+            } else {
+                preyId = teamId;
+                hunterId = document.getElementById('caught-by-select').value;
+                if (!hunterId) return alert("Bitte wähle das Fänger-Team aus.");
+            }
+            fetch('/api/report_catch', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reporter_slug: teamSlug, hunter: hunterId, prey: preyId })
+            }).then(r => r.json()).then(d => {
+                if(d.success) {
+                    alert(d.message);
+                    if(role === 'fänger') document.getElementById('caught-team-select').value = "";
+                    else document.getElementById('caught-by-select').value = "";
+                    setTimeout(() => window.location.reload(), 1000); 
+                } else { alert(d.error || 'Fehler beim Senden.'); }
+            }).catch(() => alert('Netzwerkfehler!'));
+        }
+    </script>
+</body>
+</html>

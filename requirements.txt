@@ -1,0 +1,5 @@
+Flask
+requests
+filelock
+pytz
+python-dotenv

@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Catch Me</title>
+    <!-- VCD Hausschriften laden -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@700&family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Roboto', Arial, sans-serif; padding: 20px; max-width: 950px; margin: auto; background-color: #f4f7f6; color: #333; }
+        h1, h2, h3, h4 { font-family: 'Roboto Slab', serif; font-weight: 700; color: #049EAB; margin-top: 0; }
+        .header-section { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #049EAB; }
+        .header-section img { height: 60px; max-width: 100%; }
+        
+        .admin-timer { background: #fff; border: 2px solid #333; padding: 15px; text-align: center; font-weight: 900; font-size: 1.2em; margin-bottom: 30px; color: #333; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .box { background: white; padding: 25px; border: 1px solid #ddd; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        
+        .btn { padding: 10px 18px; border: none; cursor: pointer; font-family: 'Roboto', sans-serif; font-weight: 900; color: white; text-transform: uppercase; font-size: 0.85em; letter-spacing: 0.5px; transition: background-color 0.2s ease; box-sizing: border-box; }
+        .btn-green { background-color: #AEC905; color: #333; }
+        .btn-green:hover { background-color: #9cb404; }
+        .btn-petrol { background-color: #049EAB; }
+        .btn-petrol:hover { background-color: #038c98; }
+        .btn-orange { background-color: #EB6502; }
+        .btn-orange:hover { background-color: #d15902; }
+        .btn-neutral { background-color: #6c757d; }
+        .btn-neutral:hover { background-color: #5a6268; }
+        
+        .notifications { background: #fdfdfd; border-left: 5px solid #EB6502; }
+        .req-item { display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px; margin-bottom: 10px; border: 1px solid #eee; }
+        .req-actions { display: flex; gap: 5px; }
+        .late-badge { color: #EB6502; font-weight: bold; font-size: 0.85em; margin-right: 5px; }
+        
+        .team-urls { background: #f9f9f9; border-left: 5px solid #049EAB; }
+        .url-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .url-row b { width: 150px; }
+        .url-input { flex: 1; padding: 8px; border: 1px solid #ccc; font-family: monospace; font-size: 14px; box-sizing: border-box; }
+        .stop-item { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; align-items: center; }
+        .stop-controls { display: flex; gap: 10px; align-items: center; }
+        select { padding: 8px; border: 1px solid #ccc; font-size: 14px; font-family: 'Roboto', sans-serif; box-sizing: border-box; }
+        
+        .team-rank { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .team-rank:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .team-score { font-size: 1.2em; font-weight: 700; color: #049EAB; }
+        .role-badge { font-size: 0.7em; padding: 4px 8px; color: white; margin-left: 10px; vertical-align: middle; text-transform: uppercase; font-weight: 900; }
+        .badge-catcher { background-color: #EB6502; }
+        .badge-runner { background-color: #AEC905; color: #333; }
+        .team-details { font-size: 0.9em; color: #555; margin-top: 8px; line-height: 1.6em; }
+        
+        .table-wrapper { width: 100%; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.95em; }
+        th, td { padding: 12px 10px; border-bottom: 1px solid #eee; min-width: 120px; }
+        th { border-bottom: 2px solid #049EAB; color: #049EAB; }
+        .manual-catch-wrapper { display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; background: #f9f9f9; padding: 15px; border: 1px solid #eee; }
+        .manual-catch-col { display: flex; flex-direction: column; }
+
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .box { padding: 15px; }
+            .header-section { flex-direction: column; align-items: center; text-align: center; gap: 15px; }
+            .req-item { flex-direction: column; align-items: flex-start; gap: 15px; }
+            .req-actions { width: 100%; flex-direction: column; }
+            .req-actions .btn { width: 100%; }
+            .url-row { flex-direction: column; align-items: flex-start; gap: 5px; }
+            .url-row b { width: 100%; }
+            .url-input { width: 100%; }
+            .stop-item { flex-direction: column; align-items: flex-start; gap: 10px; }
+            .stop-controls { width: 100%; flex-direction: column; align-items: stretch; }
+            .manual-catch-wrapper { flex-direction: column; align-items: stretch; gap: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header-section">
+        <div>
+            <h1>Admin Console</h1>
+            <p style="margin: 5px 0 0 0; color: #666;">Catch Me - Spielverwaltung</p>
+        </div>
+        <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo">
+    </div>
+    
+    <div class="admin-timer" id="admin-timer">Timer wird geladen...</div>
+
+    <div class="box notifications" id="notifications-container">
+        <h3>Ausstehende Anfragen ({{ pending_requests|length }})</h3>
+        {% for req in pending_requests %}
+        <div class="req-item">
+            <span>
+                {% if req.is_late %}<span class="late-badge">[ZU SPÄT EINGETRAGEN]</span>{% endif %}
+                {% if req.type == 'stop' %}
+                    Team <b>{{ req.team_name }}</b> möchte Haltestelle <b>{{ req.stop }}</b> gutschreiben.
+                {% else %}
+                    Meldung von <b>{{ req.reporter_name }}</b>: <b>{{ req.hunter_name }}</b> fängt <b>{{ req.prey_name }}</b>.
+                {% endif %}
+            </span>
+            <div class="req-actions">
+                <button class="btn btn-green" onclick="resolveReq('{{ req.id }}', 'approve')">Bestätigen</button>
+                <button class="btn btn-neutral" onclick="resolveReq('{{ req.id }}', 'reject')">Ablehnen</button>
+            </div>
+        </div>
+        {% else %}
+        <p style="margin: 0; color: #666; font-style: italic;">Keine neuen Anfragen vorhanden.</p>
+        {% endfor %}
+    </div>
+
+    <div class="box">
+        <h2>Manuelles Eingreifen</h2>
+        <p style="font-size: 0.9em; color: #555; margin-bottom: 25px;">Zuweisungen korrigieren oder direkte Systemeingaben tätigen. Unabhängig vom Spielstatus jederzeit möglich.</p>
+        
+        <h4 style="margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Haltestelle zuweisen</h4>
+        <div id="stop-list">
+            {% for name in active_stops|sort %}
+            <div class="stop-item">
+                <span>{{ name }}</span>
+                <div class="stop-controls">
+                    <select id="team-select-{{ loop.index }}">
+                        <option value="">-- Kein Team --</option>
+                        {% for t in teams %}
+                        <option value="{{ t.id }}">{{ t.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-petrol" onclick="catchStop('{{ name }}', 'team-select-{{ loop.index }}', this)">Austauschen</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <h4 style="margin-top: 40px; margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Catch manuell eintragen</h4>
+        <div class="manual-catch-wrapper">
+            <div class="manual-catch-col">
+                <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Jäger (Fänger):</label>
+                <select id="hunter-select">
+                    {% for t in teams %}
+                    <option value="{{ t.id }}">{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="catch-divider" style="font-size: 0.9em; color: #666; font-weight: bold; padding-bottom: 8px;">fängt</div>
+            <div class="manual-catch-col">
+                <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Gejagter (Läufer):</label>
+                <select id="prey-select">
+                    {% for t in teams %}
+                    <option value="{{ t.id }}">{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button class="btn btn-orange" onclick="catchTeam()">Eintrag Speichern</button>
+        </div>
+
+        <!-- NEU: MANUELLE PUNKTE KORREKTUR -->
+        <h4 style="margin-top: 40px; margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Punkte manuell anpassen</h4>
+        <div class="manual-catch-wrapper">
+            <div class="manual-catch-col">
+                <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Team auswählen:</label>
+                <select id="manual-points-team">
+                    {% for t in teams %}
+                    <option value="{{ t.id }}">{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="manual-catch-col">
+                <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Punkte (+ oder -):</label>
+                <input type="number" id="manual-points-value" value="0" style="padding: 8px; border: 1px solid #ccc; font-size: 14px; width: 120px;">
+            </div>
+            <button class="btn btn-petrol" onclick="addManualPoints()">Punkte anpassen</button>
+        </div>
+    </div>
+
+    <div class="box leaderboard">
+        <h3>Rangliste & Team-Status</h3>
+        {% for entry in leaderboard %}
+        <div class="team-rank">
+            <div class="team-score">
+                {{ loop.index }}. {{ entry.display_name }} 
+                {% if entry.deactivated %}<span style="color:red; font-size: 0.7em;">(DEAKTIVIERT)</span>{% endif %}
+                — {{ entry.score }} Punkte
+                <span class="role-badge {{ 'badge-catcher' if entry.role == 'fänger' else 'badge-runner' }}">{{ entry.role }}</span>
+                {% if enable_swap and phase in ['pre_game', 'game'] and not roles_swapped and not entry.deactivated %}
+                    <span style="font-size: 0.6em; color: #888; font-weight: normal; margin-left: 5px; text-transform: uppercase;">(Danach: {{ entry.next_role }})</span>
+                {% endif %}
+            </div>
+            <div class="team-details">
+                <div><b>Erreichte Haltestellen:</b>
+                    {% if entry.stops %}{{ entry.stops | join(', ') }}{% else %}<i>Keine</i>{% endif %}
+                </div>
+                <div><b>Andere Teams gefangen:</b>
+                    {% if entry.caught %}
+                        {% for c in entry.caught %}{{ team_names_map[c] }}{% if not loop.last %}, {% endif %}{% endfor %}
+                    {% else %}<i>Niemanden</i>{% endif %}
+                </div>
+                <div><b>Gefangen worden von:</b>
+                    {% if entry.caught_by %}
+                        {% for c in entry.caught_by %}{{ team_names_map[c] }}{% if not loop.last %}, {% endif %}{% endfor %}
+                    {% else %}<i>Noch ungeschlagen</i>{% endif %}
+                </div>
+                {% if entry.manual_points != 0 %}
+                <div><b>Manuelle Korrektur:</b> {{ "+%s" % entry.manual_points if entry.manual_points > 0 else entry.manual_points }} Punkte</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="box">
+        <h3>Aktions-Historie (Letzte 50)</h3>
+        <div class="table-wrapper">
+            <table id="history-table">
+                <tr>
+                    <th>Aktion</th>
+                    <th style="width: 120px;">Verwaltung</th>
+                </tr>
+                {% for log in action_log %}
+                <tr>
+                    <td>{{ log.desc }}</td>
+                    <td>
+                        {% if log.type != "system" %}
+                        <button class="btn btn-orange" style="padding: 6px 10px; font-size: 11px;" onclick="undoAction('{{ log.id }}')">Rückgängig</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="2" style="text-align: center; color: #777;">Noch keine Aktionen im Spielverlauf verzeichnet.</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+
+    <div class="box team-urls">
+        <h3>Geheime Zugangslinks</h3>
+        {% for team_name, url in team_urls.items() %}
+        <div class="url-row">
+            <b>{{ team_name }}:</b>
+            <input type="text" value="{{ url }}" readonly class="url-input" id="url-{{ loop.index }}">
+            <button class="btn btn-neutral" onclick="copyUrl('url-{{ loop.index }}')">Kopieren</button>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div style="text-align: center; margin-top: 20px; margin-bottom: 40px;">
+        <a href="/adminconsole-{{ admin_url }}/settings" class="btn btn-petrol" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">Zu den Spiel-Einstellungen</a>
+    </div>
+
+    <script>
+        let serverOffset = 0;
+        let startTs = 0, endTs = 0, midTs = 0;
+        
+        function initTimer() {
+            const serverNowStr = "{{ now_time }}";
+            const startStr = "{{ start_time }}";
+            const endStr = "{{ end_time }}";
+            const midStr = "{{ mid_time }}";
+            
+            if (serverNowStr && startStr && endStr) {
+                const serverNow = new Date(serverNowStr).getTime();
+                serverOffset = serverNow - Date.now();
+                startTs = new Date(startStr).getTime();
+                endTs = new Date(endStr).getTime();
+                if (midStr && midStr !== "None") midTs = new Date(midStr).getTime();
+            }
+        }
+        
+        function formatTime(diff) {
+            const s = Math.floor(diff / 1000);
+            const m = Math.floor(s / 60);
+            const h = Math.floor(m / 60);
+            return `${h.toString().padStart(2, '0')}:${(m % 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+        }
+        
+        function updateAdminTimer() {
+            const el = document.getElementById('admin-timer');
+            if (!startTs || !endTs) { el.innerHTML = "Kein Spielzeiten konfiguriert."; return; }
+            const now = Date.now() + serverOffset;
+            const preStartTs = startTs - (5 * 60 * 1000);
+            const postEndTs = endTs + (5 * 60 * 1000);
+            
+            const startDateFormatted = new Date(startTs).toLocaleString('de-DE', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+            
+            if (now < preStartTs) {
+                el.innerHTML = `INAKTIV - Das Spiel startet am ${startDateFormatted}`;
+                el.style.borderColor = "#333"; el.style.color = "#333";
+            } else if (now >= preStartTs && now < startTs) {
+                el.innerHTML = `PRE-GAME (Dashboard Read-Only für Spieler) - Spiel startet in ${formatTime(startTs - now)}`;
+                el.style.borderColor = "#AEC905"; el.style.color = "#AEC905";
+            } else if (now >= startTs && now <= endTs) {
+                let swapInfo = "";
+                if (midTs && now < midTs) swapInfo = ` | Swap in: ${formatTime(midTs - now)}`;
+                el.innerHTML = `SPIEL AKTIV - Ende in ${formatTime(endTs - now)} ${swapInfo}`;
+                el.style.borderColor = "#EB6502"; el.style.color = "#EB6502";
+            } else if (now > endTs && now <= postEndTs) {
+                el.innerHTML = `POST-GAME (Nachtrag von Aktionen ist noch für Spieler möglich) - Auswertung läuft`;
+                el.style.borderColor = "#049EAB"; el.style.color = "#049EAB";
+            } else {
+                el.innerHTML = "SPIELRUNDE ABGESCHLOSSEN";
+                el.style.borderColor = "#333"; el.style.color = "#333";
+            }
+        }
+        initTimer(); setInterval(updateAdminTimer, 1000); updateAdminTimer();
+
+        function copyUrl(elementId) {
+            const el = document.getElementById(elementId);
+            el.select(); document.execCommand("copy"); alert("Link in die Zwischenablage kopiert.");
+        }
+        
+        function loadAdminData() {
+            fetch('/api/admin_data/{{ admin_url }}').then(res => res.json()).then(data => {
+                if (data.success) {
+                    renderNotifications(data.pending_requests);
+                    renderHistory(data.action_log);
+                    if (data.now_time) serverOffset = new Date(data.now_time).getTime() - Date.now();
+                }
+            }).catch(err => console.error("Update fehlgeschlagen:", err));
+        }
+        setInterval(loadAdminData, 10000);
+        
+        function renderNotifications(requests) {
+            const container = document.getElementById('notifications-container');
+            let html = `<h3>Ausstehende Anfragen (${requests.length})</h3>`;
+            if (requests.length === 0) {
+                html += `<p style="margin: 0; color: #666; font-style: italic;">Keine neuen Anfragen vorhanden.</p>`;
+            } else {
+                requests.forEach(req => {
+                    let lateBadge = req.is_late ? `<span class="late-badge">[ZU SPÄT EINGETRAGEN]</span> ` : '';
+                    let text = req.type === 'stop'
+                        ? `${lateBadge}Team <b>${req.team_name || req.team}</b> möchte Haltestelle <b>${req.stop}</b> gutschreiben.`
+                        : `${lateBadge}Meldung von <b>${req.reporter_name || req.reporter}</b>: <b>${req.hunter_name || req.hunter}</b> fängt <b>${req.prey_name || req.prey}</b>.`;
+                    html += `
+                    <div class="req-item">
+                        <span>${text}</span>
+                        <div class="req-actions">
+                            <button class="btn btn-green" onclick="resolveReq('${req.id}', 'approve')">Bestätigen</button>
+                            <button class="btn btn-neutral" onclick="resolveReq('${req.id}', 'reject')">Ablehnen</button>
+                        </div>
+                    </div>`;
+                });
+            }
+            container.innerHTML = html;
+        }
+        
+        function renderHistory(logs) {
+            const table = document.getElementById('history-table');
+            let html = `<tr><th>Aktion</th><th style="width: 120px;">Verwaltung</th></tr>`;
+            if (logs.length === 0) {
+                html += `<tr><td colspan="2" style="text-align: center; color: #777;">Noch keine Aktionen im Spielverlauf.</td></tr>`;
+            } else {
+                logs.forEach(log => {
+                    html += `<tr><td>${log.desc}</td>
+                        <td>${log.type !== 'system' ? `<button class="btn btn-orange" style="padding: 6px 10px; font-size: 11px;" onclick="undoAction('${log.id}')">Rückgängig</button>` : ''}</td>
+                    </tr>`;
+                });
+            }
+            table.innerHTML = html;
+        }
+        
+        function resolveReq(id, action) {
+            fetch('/api/resolve_request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id, action: action })
+            }).then(() => location.reload()).catch(() => alert('Netzwerkfehler!'));
+        }
+        function undoAction(id) {
+            if(!confirm("Möchtest du diese Aktion wirklich rückgängig machen?")) return;
+            fetch('/api/undo_action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id })
+            }).then(() => location.reload()).catch(() => alert('Netzwerkfehler!'));
+        }
+        function catchStop(stopName, selectId, btn) {
+            const teamSelect = document.getElementById(selectId);
+            btn.disabled = true; btn.innerText = "Lädt...";
+            fetch('/api/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: stopName, team_id: teamSelect.value })
+            }).then(r => r.json()).then(d => {
+                if (d.success) location.reload(); else { alert('Fehler!'); btn.disabled = false; btn.innerText = "Austauschen"; }
+            }).catch(() => { alert('Netzwerkfehler!'); btn.disabled = false; btn.innerText = "Austauschen"; });
+        }
+        function catchTeam() {
+            const hunter = document.getElementById('hunter-select').value;
+            const prey = document.getElementById('prey-select').value;
+            const hunterLabel = document.getElementById('hunter-select').options[document.getElementById('hunter-select').selectedIndex].text;
+            const preyLabel = document.getElementById('prey-select').options[document.getElementById('prey-select').selectedIndex].text;
+            
+            if (hunter === prey) return alert('Ein Team kann sich nicht selbst fangen.');
+            if (!confirm(`Hat "${hunterLabel}" wirklich "${preyLabel}" gefangen?`)) return;
+            
+            fetch('/api/catch_team', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hunter: hunter, prey: prey })
+            }).then(r => r.json()).then(d => {
+                if (d.success) location.reload(); else alert(d.error || 'Fehler beim Eintragen!');
+            }).catch(() => alert('Netzwerkfehler!'));
+        }
+        function addManualPoints() {
+            const teamId = document.getElementById('manual-points-team').value;
+            const pointsVal = document.getElementById('manual-points-value').value;
+            const points = parseInt(pointsVal);
+            const teamLabel = document.getElementById('manual-points-team').options[document.getElementById('manual-points-team').selectedIndex].text;
+            
+            if (isNaN(points) || points === 0) return alert('Bitte eine gültige Zahl ungleich 0 eingeben.');
+            if (!confirm(`Möchtest du dem Team "${teamLabel}" wirklich ${points > 0 ? '+' : ''}${points} Punkte geben?`)) return;
+            
+            fetch('/api/add_manual_points', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team_id: teamId, points: points })
+            }).then(r => r.json()).then(d => {
+                if (d.success) location.reload();
+                else alert(d.error || 'Fehler beim Eintragen!');
+            }).catch(() => alert('Netzwerkfehler!'));
+        }
+    </script>
+</body>
+</html>

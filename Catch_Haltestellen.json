@@ -1,0 +1,186 @@
+{
+    "Broitzem, Turmstraße ": {
+        "lat": 52.23432,
+        "lon": 10.482177
+    },
+    "Gliesmarode, Bahnhof ": {
+        "lat": 52.277102,
+        "lon": 10.548836
+    },
+    "Heidberg, Erfurtplatz": {
+        "lat": 52.230148,
+        "lon": 10.536415
+    },
+    "Heidberg, Klinikum Salzdahlumer Straße ": {
+        "lat": 52.237238,
+        "lon": 10.543394
+    },
+    "Hochschulviertel, Pockelsstraße ": {
+        "lat": 52.275566,
+        "lon": 10.52792
+    },
+    "Hondelage, Hegerdorfstraße": {
+        "lat": 52.312006,
+        "lon": 10.604471
+    },
+    "Innenstadt, Friedrich-Wilhelm-Platz": {
+        "lat": 52.260371,
+        "lon": 10.519283
+    },
+    "Kanzlerfeld, Paracelsusstraße": {
+        "lat": 52.284676,
+        "lon": 10.457083
+    },
+    "Kralenriede, Steinriedendamm": {
+        "lat": 52.303148,
+        "lon": 10.541801
+    },
+    "Lamme, Backhausweg": {
+        "lat": 52.267312,
+        "lon": 10.443009
+    },
+    "Lehndorf, Saarplatz": {
+        "lat": 52.275544,
+        "lon": 10.479568
+    },
+    "Leiferde, Thiedenbacher Weg": {
+        "lat": 52.207514,
+        "lon": 10.503147
+    },
+    "Lindenberg, Dedekindstraße ": {
+        "lat": 52.243111,
+        "lon": 10.565993
+    },
+    "Mascherode, Hinter den Hainen": {
+        "lat": 52.225178,
+        "lon": 10.568486
+    },
+    "Melverode, Trakehnenstraße": {
+        "lat": 52.222326,
+        "lon": 10.523482
+    },
+    "Ölper, Am Mühlengraben": {
+        "lat": 52.28457,
+        "lon": 10.501411
+    },
+    "Östliches Ringebiet, Prinz-Albrecht-Park": {
+        "lat": 52.264234,
+        "lon": 10.551638
+    },
+    "Querum, Essener Straße ": {
+        "lat": 52.290037,
+        "lon": 10.561455
+    },
+    "Radeklint, Inselwall": {
+        "lat": 52.267714,
+        "lon": 10.515086
+    },
+    "Rautheim, Paxmannstraße": {
+        "lat": 52.242828,
+        "lon": 10.582813
+    },
+    "Riddagshausen, Kreuzteich": {
+        "lat": 52.270156,
+        "lon": 10.571656
+    },
+    "Rühme, Lincolnsiedling": {
+        "lat": 52.311261,
+        "lon": 10.51497
+    },
+    "Rüningen, Hahnenkleestraße": {
+        "lat": 52.219678,
+        "lon": 10.502133
+    },
+    "Schwarzer Berg, Stadion": {
+        "lat": 52.290855,
+        "lon": 10.518743
+    },
+    "Siegfriedviertel, Siegfriedstraße ": {
+        "lat": 52.286929,
+        "lon": 10.538746
+    },
+    "Stiddien, Stiddien": {
+        "lat": 52.225858,
+        "lon": 10.45824
+    },
+    "Stöckheim, Stöckheimer Markt": {
+        "lat": 52.213311,
+        "lon": 10.522036
+    },
+    "Südstadt, Welfenplatz ": {
+        "lat": 52.233952,
+        "lon": 10.55887
+    },
+    "Timmerlah, Georg-Althaus-Straße": {
+        "lat": 52.243057,
+        "lon": 10.449569
+    },
+    "Veltenhof, Ernst-Böhme-Straße": {
+        "lat": 52.310623,
+        "lon": 10.493818
+    },
+    "Viewegsgarten, Helmstedter Straße": {
+        "lat": 52.255132,
+        "lon": 10.561639
+    },
+    "Viewegsgarten, Steintor": {
+        "lat": 52.262828,
+        "lon": 10.535026
+    },
+    "Volkmarode, Grenzweg": {
+        "lat": 52.284949,
+        "lon": 10.583787
+    },
+    "Waggum, Breitenhop": {
+        "lat": 52.327831,
+        "lon": 10.560116
+    },
+    "Waggum, Flugunfalluntersuchungsstelle": {
+        "lat": 52.313731,
+        "lon": 10.553109
+    },
+    "Watenbüttel, Am Grasplatz": {
+        "lat": 52.30529,
+        "lon": 10.466807
+    },
+    "Wenden, Heideblick ": {
+        "lat": 52.326002,
+        "lon": 10.508736
+    },
+    "Westliches Ringgebiet, Madamenweg": {
+        "lat": 52.260621,
+        "lon": 10.502168
+    },
+    "Westliches Ringgebiet, Otto-von-Guerike-Straße": {
+        "lat": 52.246038,
+        "lon": 10.512087
+    },
+    "Weststadt, Isarstraße ": {
+        "lat": 52.242671,
+        "lon": 10.479952
+    },
+    "Weddel, Bahnhof": {
+        "lat": 52.269118,
+        "lon": 10.623494
+    },
+    "Wolfenbüttel, Ahlumer Straße": {
+        "lat": 52.164853,
+        "lon": 10.55206
+    },
+    "Wolfenbüttel, Ernst-Moritz-Arndt-Straße": {
+        "lat": 52.15503,
+        "lon": 10.511191
+    },
+    "Wolfenbüttel, Exer Süd": {
+        "lat": 52.177871,
+        "lon": 10.558448
+    },
+    "Wolfenbüttel, Kornmarkt ": {
+        "lat": 52.161959,
+        "lon": 10.536003
+    },
+    "Wolfenbüttel, Mittelweg": {
+        "lat": 52.174772,
+        "lon": 10.539271
+    }
+}

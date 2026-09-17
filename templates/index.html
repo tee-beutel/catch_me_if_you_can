@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catch Me - Startseite</title>
+    <!-- VCD Hausschriften laden -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@700&family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+    body { font-family: 'Roboto', Arial, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; }
+
+    .timer-bar { width: 100%; background: #333; color: white; padding: 12px 15px; text-align: center; font-weight: 900; font-family: 'Roboto', sans-serif; font-size: 1.1em; box-sizing: border-box; box-shadow: 0 2px 5px rgba(0,0,0,0.2); margin-bottom: 25px; }
+    .timer-alert { background: #EB6502; }
+
+    .container { max-width: 650px; width: 100%; margin-bottom: 30px; padding: 0 20px; box-sizing: border-box; }
+    .box { background: white; padding: 25px; border: 1px solid #ddd; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 25px; }
+    h1, h2, h3 { font-family: 'Roboto Slab', serif; font-weight: 700; color: #049EAB; }
+    h1 { text-align: center; margin-bottom: 30px; font-size: 2.2em; }
+    h2 { margin-top: 0; border-bottom: 2px solid #049EAB; padding-bottom: 10px; font-size: 1.5em; }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { padding: 12px 10px; text-align: left; border-bottom: 1px solid #eee; }
+    th { background: #f8f9fa; font-weight: 700; font-size: 1.1em; color: #049EAB; border-bottom: 2px solid #049EAB; }
+    tr:last-child td { border-bottom: none; }
+    .role-badge { font-size: 0.7em; padding: 4px 8px; color: white; margin-left: 8px; text-transform: uppercase; font-weight: 900; vertical-align: middle; }
+    .role-fänger { background-color: #EB6502; }
+    .role-läufer { background-color: #AEC905; color: #333; }
+    .score { font-weight: 900; color: #049EAB; font-size: 1.1em; }
+
+    .form-group { margin-bottom: 15px; }
+    label { display: block; font-weight: 700; margin-bottom: 8px; color: #555; }
+    select, input[type="password"] { width: 100%; padding: 12px; border: 1px solid #ccc; box-sizing: border-box; font-size: 16px; font-family: 'Roboto', sans-serif; }
+
+    /* Input-Handling für Formulare im Row-Layout */
+    input[type="text"], input[type="number"], input[type="datetime-local"], textarea {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #ccc;
+        box-sizing: border-box;
+        font-size: 16px;
+        font-family: 'Roboto', sans-serif;
+    }
+
+    .btn { width: 100%; padding: 14px; border: none; cursor: pointer; font-family: 'Roboto', sans-serif; font-weight: 900; color: white; font-size: 16px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 10px; transition: background 0.2s; }
+    .btn-petrol { background-color: #049EAB; }
+    .btn-petrol:hover { background-color: #038c98; }
+    .btn-dark { background-color: #333; }
+    .btn-dark:hover { background-color: #111; }
+    .admin-section { margin-top: 50px; border-top: 2px solid #ccc; padding-top: 30px; }
+    .logo-container { text-align: center; margin-bottom: 20px; }
+    .logo-container img { max-width: 300px; height: auto; }
+
+    /* Flexbox-Row für nebeneinanderstehende Elemente */
+    .row { display: flex; gap: 15px; flex-wrap: wrap; }
+    .row .form-group { flex: 1; min-width: 200px; }
+
+    /* Ticker Styles */
+    .ticker-container { max-height: 250px; overflow-y: auto; background: #fdfdfd; padding: 10px; font-size: 0.9em; border: 1px solid #eee; }
+    .ticker-entry { padding: 8px 0; border-bottom: 1px solid #eee; line-height: 1.4; }
+    .ticker-entry:last-child { border-bottom: none; }
+    .ticker-time { font-weight: 900; color: #049EAB; margin-right: 8px; font-size: 0.85em; }
+    .ticker-system { font-weight: bold; color: #EB6502; }
+
+    @media (max-width: 480px) {
+        .row { flex-direction: column; gap: 0; }
+        .row .form-group { min-width: 100%; }
+    }
+    </style>
+</head>
+<body>
+
+    <div class="timer-bar" id="top-timer">Zeit wird synchronisiert...</div>
+
+    <div class="container">
+        <div class="logo-container">
+            <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo Kreisverband Braunschweig">
+        </div>
+        <h1>Catch Me If You Can</h1>
+
+        <!-- GEWINNER ANZEIGE -->
+        {% if phase == 'finished' %}
+            {% set top_score = leaderboard[0].score if leaderboard|length > 0 else 0 %}
+            {% set winners = [] %}
+            {% for entry in leaderboard %}
+                {% if entry.score == top_score %}
+                    {% set _ = winners.append(entry.display_name) %}
+                {% endif %}
+            {% endfor %}
+            <div class="box" style="text-align: center; border: 2px solid #049EAB; background-color: #e6f7f8;">
+                <h2 style="border:none; margin-bottom: 5px;">🎉 Spiel beendet! 🎉</h2>
+                <p style="font-size: 1.2em; margin-bottom: 10px;">Die Sieger mit <b>{{ top_score }} Punkten</b>:</p>
+                <h1 style="color: #EB6502; margin-top: 0; font-size: 2.2em;">{{ winners | join(' & ') }}</h1>
+            </div>
+        {% endif %}
+        
+        <div class="box">
+            <h2>Aktuelles Leaderboard</h2>
+            <table>
+                <tr>
+                    <th>Platz</th>
+                    <th>Team</th>
+                    <th>Punkte</th>
+                </tr>
+                {% for entry in leaderboard %}
+                <tr>
+                    <td><b>#{{ loop.index }}</b></td>
+                    <td>
+                        {{ entry.display_name }}
+                        <span class="role-badge role-{{ entry.role }}">{{ entry.role }}</span>
+                    </td>
+                    <td class="score">{{ entry.score }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" style="text-align: center; color: #777;">Noch keine Teams im Spiel.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+        
+        <div class="box">
+            <h2>Team Login</h2>
+            <div class="form-group">
+                <label for="team-select">Dein Team:</label>
+                <select id="team-select">
+                    <option value="">-- Bitte wählen --</option>
+                    {% for t in teams %}
+                    <option value="{{ t.id }}">{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="team-pin">Team PIN / Passwort:</label>
+                <input type="password" id="team-pin" placeholder="PIN eingeben">
+            </div>
+            <button class="btn btn-petrol" onclick="loginTeam()">Zum Team-Dashboard</button>
+        </div>
+
+        <!-- NEUER LIVE TICKER -->
+        <div class="box" id="live-ticker-box">
+            <h2>Live Ticker</h2>
+            <div id="ticker-content" class="ticker-container">
+                Lade Ticker...
+            </div>
+        </div>
+
+        <div style="text-align: center; margin: 40px 0;">
+            <a href="/rules.html" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#6c757d; color:white; padding:12px 24px; border-radius:4px;">Hier geht's zur Anleitung</a>
+        </div>
+        
+        <div class="admin-section">
+            <h3 style="color: #666; text-align: center; margin-bottom: 20px;">Spielleiter Bereich</h3>
+            <div class="form-group">
+                <input type="password" id="admin-pass" placeholder="Admin Passwort eingeben">
+            </div>
+            <button class="btn btn-dark" onclick="loginAdmin()">Als Admin einloggen</button>
+        </div>
+    </div>
+
+    <script>
+        const serverNowStr = "{{ now_time }}";
+        const startStr = "{{ start_time }}";
+        const endStr = "{{ end_time }}";
+        const midStr = "{{ mid_time }}";
+        const enableSwap = {{ 'true' if enable_swap else 'false' }};
+        
+        let serverOffset = 0;
+        let startTs = 0, endTs = 0, midTs = 0;
+        
+        if (serverNowStr && startStr && endStr) {
+            const serverNow = new Date(serverNowStr).getTime();
+            serverOffset = serverNow - Date.now();
+            startTs = new Date(startStr).getTime();
+            endTs = new Date(endStr).getTime();
+            if (midStr && midStr !== "None") midTs = new Date(midStr).getTime();
+        }
+
+        let reloadedTrigger = false;
+
+        function updateTimer() {
+            const timerBar = document.getElementById('top-timer');
+            if (!startTs || !endTs) { timerBar.innerHTML = "Aktuell ist kein Spiel geplant."; return; }
+            
+            const now = Date.now() + serverOffset;
+            const preStartTs = startTs - (5 * 60 * 1000);
+            const postEndTs = endTs + (5 * 60 * 1000);
+            
+            const formatTime = (diff) => {
+                const s = Math.floor(diff / 1000); const m = Math.floor(s / 60); const h = Math.floor(m / 60);
+                return `${h.toString().padStart(2, '0')}:${(m % 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+            };
+            
+            const startDateFormatted = new Date(startTs).toLocaleString('de-DE', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+
+            let text = "";
+
+            if (now < preStartTs) {
+                text = "Spiel in Vorbereitung. Start am " + startDateFormatted;
+            } else if (now >= preStartTs && now < startTs) {
+                text = "PRE-GAME! Spiel startet in " + formatTime(startTs - now);
+            } else if (now >= startTs && now <= endTs) {
+                let swapText = "";
+                if (enableSwap && midTs && now < midTs) swapText = " | Rollentausch in " + formatTime(midTs - now);
+                text = "SPIEL LÄUFT! Ende in " + formatTime(endTs - now) + swapText;
+                timerBar.classList.add('timer-alert');
+            } else if (now > endTs && now <= postEndTs) {
+                text = "POST-GAME! Spiel beendet. Auswertung läuft.";
+                timerBar.classList.remove('timer-alert');
+            } else {
+                text = "Spielrunde ist vollständig abgeschlossen.";
+                timerBar.classList.remove('timer-alert');
+            }
+            
+            timerBar.innerHTML = text;
+
+            if ((now >= startTs + 10000 && now <= startTs + 11500) || 
+                (now >= endTs + 10000 && now <= endTs + 11500) ||
+                (enableSwap && midTs && now >= midTs + 10000 && now <= midTs + 11500)) {
+                if(!reloadedTrigger) { reloadedTrigger = true; window.location.reload(); }
+            }
+        }
+        setInterval(updateTimer, 1000); updateTimer();
+
+        // --- LIVE TICKER LOGIK ---
+        let actionLog = {{ action_log | tojson | safe if action_log else '[]' }};
+        
+        function renderTicker(logs) {
+            let tickerEvents = [];
+            
+            // Reelle Server-Logs abarbeiten (Wir filtern normale Haltestellen, Catches und den Rollenwechsel (Halbzeit) System-Log)
+            logs.forEach(log => {
+                if (log.type === 'stop' || log.type === 'catch' || (log.type === 'system' && log.desc.includes('HALBZEIT'))) {
+                    tickerEvents.push({
+                        ts: log.timestamp * 1000,
+                        text: log.desc,
+                        type: log.type
+                    });
+                }
+            });
+            
+            // Hardcodierte Zeit-Events ins Array mergen basierend auf der aktuellen Zeit
+            if (startTs) {
+                const preStartTs = startTs - (5 * 60 * 1000);
+                const catchersStartTs = startTs + (5 * 60 * 1000);
+                const now = Date.now() + serverOffset;
+                
+                // Loslaufen für Läufer (5 Minuten vorher)
+                if (now >= preStartTs) {
+                    tickerEvents.push({
+                        ts: preStartTs,
+                        text: "🏃 LÄUFER STARTEN! Die Läufer dürfen jetzt loslaufen.",
+                        type: "system"
+                    });
+                }
+                
+                // Loslaufen für Fänger (5 Minuten nach Beginn)
+                if (now >= catchersStartTs) {
+                    tickerEvents.push({
+                        ts: catchersStartTs,
+                        text: "🚨 FÄNGER STARTEN! Die Fänger dürfen jetzt die Verfolgung aufnehmen.",
+                        type: "system"
+                    });
+                }
+            }
+            
+            // Absteigend nach Datum/Zeit sortieren
+            tickerEvents.sort((a, b) => b.ts - a.ts);
+            
+            const container = document.getElementById('ticker-content');
+            let html = '';
+            
+            if (tickerEvents.length === 0) {
+                html = '<div style="text-align:center; color:#777; padding: 20px;">Noch keine Ereignisse im Spiel.</div>';
+            } else {
+                tickerEvents.forEach(ev => {
+                    const date = new Date(ev.ts);
+                    const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    let textClass = ev.type === 'system' ? 'ticker-system' : '';
+                    html += `<div class="ticker-entry"><span class="ticker-time">[${timeStr}]</span> <span class="${textClass}">${ev.text}</span></div>`;
+                });
+            }
+            container.innerHTML = html;
+        }
+        
+        // Initial rendern beim Pageload
+        renderTicker(actionLog);
+        
+        // Polling für Backend-Updates (alle 10 Sekunden checken)
+        function fetchTicker() {
+            fetch('/api/ticker_data')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        actionLog = data.action_log;
+                        renderTicker(actionLog);
+                    }
+                })
+                .catch(e => console.log("Ticker Update fehlgeschlagen", e));
+        }
+        setInterval(fetchTicker, 10000);
+
+
+        // --- TEAM / ADMIN LOGINS ---
+        function loginTeam() {
+            const teamId = document.getElementById('team-select').value;
+            const pin = document.getElementById('team-pin').value;
+            if (!teamId || !pin) return alert("Bitte wähle dein Team und gib den dazugehörigen PIN ein.");
+            
+            fetch('/api/login_team', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ team_id: teamId, pin: pin })
+            }).then(r => r.json()).then(data => {
+                if (data.success) { window.location.href = '/team/' + data.slug; } else { alert(data.error); }
+            }).catch(() => alert("Netzwerkfehler!"));
+        }
+        function loginAdmin() {
+            const pass = document.getElementById('admin-pass').value;
+            if (!pass) return alert("Bitte Admin-Passwort eingeben.");
+            fetch('/api/login_admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pass })
+            }).then(r => r.json()).then(data => {
+                if (data.success) { window.location.href = data.redirect_url; } else { alert(data.error); }
+            }).catch(() => alert("Netzwerkfehler!"));
+        }
+    </script>
+</body>
+</html>

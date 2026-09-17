@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Einstellungen - Catch Me</title>
+    <!-- VCD Hausschriften laden -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@700&family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        /* Basis VCD-Typografie und Farben */
+        body {
+            font-family: 'Roboto', Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: auto;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .header-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: white;
+            padding: 30px;
+            border: 1px solid #ddd;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+        h2, h3 {
+            font-family: 'Roboto Slab', serif;
+            font-weight: 700;
+            color: #049EAB; /* VCD Petrol */
+            margin-top: 0;
+        }
+        h2 { border-bottom: 2px solid #049EAB; padding-bottom: 10px; margin-bottom: 25px; }
+        h3 { border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 30px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-weight: 700; margin-bottom: 5px; color: #555; }
+        input[type="text"], input[type="number"], input[type="datetime-local"], select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+            font-size: 14px;
+            font-family: 'Roboto', sans-serif;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            font-weight: normal;
+            font-size: 1em;
+            cursor: pointer;
+        }
+        .checkbox-label input { width: auto; margin-right: 10px; transform: scale(1.2); }
+        .help-text { font-size: 0.85em; color: #666; margin-top: 4px; line-height: 1.4; }
+        .row { display: flex; gap: 15px; }
+        .row .form-group { flex: 1; }
+        .btn-container { display: flex; gap: 10px; margin-top: 30px; border-top: 2px solid #eee; padding-top: 20px; }
+        /* Buttons */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            cursor: pointer;
+            font-family: 'Roboto', sans-serif;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: white;
+            font-size: 14px;
+            text-align: center;
+            transition: background 0.2s ease;
+        }
+        .btn-save { background-color: #049EAB; flex: 2; }
+        .btn-save:hover { background-color: #038c98; }
+        .btn-back { background-color: #6c757d; text-decoration: none; flex: 1; }
+        .btn-back:hover { background-color: #5a6268; }
+        .btn-neutral { background-color: #6c757d; }
+        .danger-zone {
+            margin-top: 40px;
+            padding: 20px;
+            background-color: #fffaf6;
+            border: 1px solid #EB6502;
+        }
+        .danger-zone h3 { margin-top: 0; color: #EB6502; font-size: 1.2em; border-bottom: none; padding-bottom: 0; }
+        .btn-danger { background-color: #EB6502; color: white; width: 100%; margin-top: 10px; }
+        .btn-danger:hover { background-color: #d15902; }
+        
+        /* Team Row Styles */
+        .team-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; background: #f8f9fa; padding: 10px; border: 1px solid #e9ecef; flex-wrap: wrap; }
+        .team-row b { width: 80px; }
+        .t-new-name { flex: 2; min-width: 150px; }
+        .t-role { flex: 1; min-width: 100px; }
+        .t-pin { flex: 1; max-width: 80px; min-width: 70px; }
+        .t-active-label { flex: 1; display:flex; align-items:center; gap:5px; min-width: 70px; }
+    </style>
+</head>
+<body>
+    <div class="header-section">
+        <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo" style="height: 50px;">
+    </div>
+    <div class="card">
+        <h2>Spiel-Einstellungen</h2>
+        
+        <h3>Zeitplan & Spielsteuerung</h3>
+        <p class="help-text" style="margin-bottom: 15px;">Lege hier fest, wann das Spiel startet und endet. Fünf Minuten vor Start und fünf Minuten nach Ende werden die Team-Dashboards in den Read-Only Modus versetzt.</p>
+        <div class="row">
+            <div class="form-group">
+                <label for="start_time">Startzeit:</label>
+                <input type="datetime-local" id="start_time" value="{{ config.start_time }}">
+            </div>
+            <div class="form-group">
+                <label for="end_time">Endzeit:</label>
+                <input type="datetime-local" id="end_time" value="{{ config.end_time }}">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" id="enable_mid_game_swap" {% if config.enable_mid_game_swap %}checked{% endif %}>
+                <b>Automatischen Rollentausch (Halbzeit) aktivieren</b>
+            </label>
+            <div class="help-text" style="margin-left: 25px;">Tauscht zur exakten Mitte zwischen Start- und Endzeit einmalig die Rollen. Teams sehen ihre kommende Rolle vorher.</div>
+        </div>
+
+        <h3>Spielablauf & Haltestellen</h3>
+        <div class="row">
+            <div class="form-group">
+                <label for="target_stops">Aktive Haltestellen:</label>
+                <input type="number" id="target_stops" value="{{ config.target_stops }}" min="1">
+                <div class="help-text">Gleichzeitig auf der Karte sichtbar.</div>
+            </div>
+            <div class="form-group">
+                <label for="max_history">Historien-Limit:</label>
+                <input type="number" id="max_history" value="{{ config.max_history }}" min="0">
+                <div class="help-text">Verhindert direkte Wiederholungen.</div>
+            </div>
+        </div>
+
+        <h3>Team-Verwaltung</h3>
+        <p class="help-text" style="margin-bottom: 15px;">Hier kannst du Teams hinzufügen, Namen ändern, Rollen und PINs vergeben sowie Teams deaktivieren. (Deaktivierte Teams werden vom öffentlichen Leaderboard entfernt, können vom Admin aber weiterhin mit Punkten versorgt werden).</p>
+        
+        <div id="teams-container">
+            {% for team_id, data in sorted_teams %}
+            <div class="team-row">
+                <b><span class="team-index-label">{{ team_id }}</span></b>
+                <input type="hidden" class="t-id" value="{{ team_id }}">
+                <input type="text" class="t-new-name" value="{{ data.display_name }}" placeholder="Teamname">
+                <select class="t-role">
+                    <option value="läufer" {% if data.role == 'läufer' %}selected{% endif %}>Läufer</option>
+                    <option value="fänger" {% if data.role == 'fänger' %}selected{% endif %}>Fänger</option>
+                </select>
+                <input type="text" class="t-pin" value="{{ data.pin }}" placeholder="PIN">
+                <label class="t-active-label">
+                    <input type="checkbox" class="t-active" {% if not data.get('deactivated', False) %}checked{% endif %}> Aktiv
+                </label>
+                <button class="btn btn-danger" style="padding: 8px; width: auto; margin:0;" onclick="this.parentElement.remove(); updateTeamIndices();">X</button>
+            </div>
+            {% endfor %}
+        </div>
+        <button class="btn btn-neutral" style="margin-top: 10px;" onclick="addTeamRow()">+ Weiteres Team hinzufügen</button>
+
+        <h3>Punkteverteilung</h3>
+        <div class="row">
+            <div class="form-group">
+                <label for="points_stop_reached">Haltestelle (Läufer):</label>
+                <input type="number" id="points_stop_reached" value="{{ config.points_stop_reached }}">
+            </div>
+            <div class="form-group">
+                <label for="points_caught_team">Team gefangen (Fänger):</label>
+                <input type="number" id="points_caught_team" value="{{ config.points_caught_team }}">
+            </div>
+            <div class="form-group">
+                <label for="points_was_caught">Gefangen worden (Läufer):</label>
+                <input type="number" id="points_was_caught" value="{{ config.points_was_caught }}">
+            </div>
+        </div>
+
+        <div class="btn-container">
+            <a href="/adminconsole-{{ admin_url }}" class="btn btn-back">Abbrechen</a>
+            <button class="btn btn-save" onclick="saveSettings()">Einstellungen Speichern</button>
+        </div>
+
+        <div class="danger-zone">
+            <h3>Gefahrenzone</h3>
+            <p style="font-size: 0.9em; color: #444; margin-bottom: 15px;">Löscht alle Teampunktestände, Action-Logs und Anfragen. Würfelt außerdem sofort frische Start-Haltestellen aus.</p>
+            <button class="btn btn-danger" onclick="resetGame()">Spiel komplett zurücksetzen</button>
+            
+            <hr style="margin: 30px 0 20px 0; border: none; border-top: 1px solid #EB6502;">
+            
+            <h3 style="margin-top: 0;">Rollen zufällig neu zuweisen</h3>
+            <p style="font-size: 0.9em; color: #444; margin-bottom: 15px;">Weist allen aktiven Teams die Rollen (Läufer / Fänger) nach dem Zufallsprinzip neu zu. Bei einer ungeraden Teamanzahl gibt es einen Läufer mehr. (Änderungen sind direkt sichtbar und gespeichert).</p>
+            <button class="btn btn-danger" onclick="randomizeRoles()">Rollen zufällig zuweisen</button>
+        </div>
+    </div>
+
+    <script>
+        function addTeamRow() {
+            const container = document.getElementById('teams-container');
+            const count = container.children.length + 1;
+            const teamId = "Team " + count;
+            const row = document.createElement('div');
+            row.className = 'team-row';
+            row.innerHTML = `
+                <b><span class="team-index-label">${teamId}</span></b>
+                <input type="hidden" class="t-id" value="${teamId}">
+                <input type="text" class="t-new-name" value="${teamId}" placeholder="Teamname">
+                <select class="t-role">
+                    <option value="läufer">Läufer</option>
+                    <option value="fänger">Fänger</option>
+                </select>
+                <input type="text" class="t-pin" value="${Math.floor(1000 + Math.random() * 9000)}" placeholder="PIN">
+                <label class="t-active-label">
+                    <input type="checkbox" class="t-active" checked> Aktiv
+                </label>
+                <button class="btn btn-danger" style="padding: 8px; width: auto; margin:0;" onclick="this.parentElement.remove(); updateTeamIndices();">X</button>
+            `;
+            container.appendChild(row);
+        }
+
+        function updateTeamIndices() {
+            document.querySelectorAll('#teams-container .team-row').forEach((row, idx) => {
+                const count = idx + 1;
+                const newId = "Team " + count;
+                row.querySelector('.team-index-label').innerText = newId;
+                row.querySelector('.t-id').value = newId;
+            });
+        }
+
+        function saveSettings() {
+            const targetStops = parseInt(document.getElementById('target_stops').value);
+            const maxHistory = parseInt(document.getElementById('max_history').value);
+            const pointsStopReached = parseInt(document.getElementById('points_stop_reached').value);
+            const pointsCaughtTeam = parseInt(document.getElementById('points_caught_team').value);
+            const pointsWasCaught = parseInt(document.getElementById('points_was_caught').value);
+            
+            const startTime = document.getElementById('start_time').value;
+            const endTime = document.getElementById('end_time').value;
+            const enableSwap = document.getElementById('enable_mid_game_swap').checked;
+
+            const teamRows = document.querySelectorAll('.team-row');
+            const teamsList = [];
+            teamRows.forEach(row => {
+                teamsList.push({
+                    team_id: row.querySelector('.t-id').value,
+                    new_name: row.querySelector('.t-new-name').value,
+                    role: row.querySelector('.t-role').value,
+                    pin: row.querySelector('.t-pin').value,
+                    active: row.querySelector('.t-active').checked
+                });
+            });
+
+            const payload = {
+                target_stops: targetStops,
+                max_history: maxHistory,
+                teams_list: teamsList,
+                points_stop_reached: pointsStopReached,
+                points_caught_team: pointsCaughtTeam,
+                points_was_caught: pointsWasCaught,
+                start_time: startTime,
+                end_time: endTime,
+                enable_mid_game_swap: enableSwap
+            };
+
+            fetch('/adminconsole-{{ admin_url }}/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Einstellungen erfolgreich gespeichert.');
+                    window.location.href = '/adminconsole-' + data.new_admin_url;
+                } else {
+                    alert(data.error || 'Fehler beim Speichern.');
+                }
+            })
+            .catch(err => alert('Netzwerkfehler beim Speichern!'));
+        }
+
+        function resetGame() {
+            if (!confirm('Bist du dir GANZ SICHER?\n\nAlle Teampunktestände, gefangene Haltestellen und der Spielverlauf werden unwiderruflich gelöscht. Das Spiel startet sofort mit neuen Haltestellen von vorne!')) {
+                return;
+            }
+            fetch('/adminconsole-{{ admin_url }}/reset', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Das Spiel wurde erfolgreich zurückgesetzt.');
+                    window.location.href = '/adminconsole-{{ admin_url }}';
+                } else alert(data.error || 'Fehler beim Zurücksetzen!');
+            })
+            .catch(err => alert('Netzwerkfehler beim Zurücksetzen!'));
+        }
+
+        function randomizeRoles() {
+            if (!confirm('Sollen die Rollen wirklich zufällig neu verteilt werden?\n\nDie Änderungen sind sofort aktiv und überschreiben die aktuellen Rollen im Dropdown oben.')) {
+                return;
+            }
+            fetch('/adminconsole-{{ admin_url }}/randomize_roles', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Rollen wurden erfolgreich neu verteilt!');
+                    window.location.reload(); // Seite neuladen um die neuen Rollen im Template anzuzeigen
+                } else alert(data.error || 'Fehler beim Neuverteilen der Rollen!');
+            })
+            .catch(err => alert('Netzwerkfehler beim Neuverteilen!'));
+        }
+    </script>
+</body>
+</html>
