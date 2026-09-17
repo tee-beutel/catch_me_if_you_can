@@ -38,6 +38,7 @@
         }
         h2 { border-bottom: 2px solid #049EAB; padding-bottom: 10px; margin-bottom: 25px; }
         h3 { border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 30px; }
+
         .form-group { margin-bottom: 20px; }
         label { display: block; font-weight: 700; margin-bottom: 5px; color: #555; }
         input[type="text"], input[type="number"], input[type="datetime-local"], select {
@@ -57,8 +58,10 @@
         }
         .checkbox-label input { width: auto; margin-right: 10px; transform: scale(1.2); }
         .help-text { font-size: 0.85em; color: #666; margin-top: 4px; line-height: 1.4; }
+
         .row { display: flex; gap: 15px; }
         .row .form-group { flex: 1; }
+
         .btn-container { display: flex; gap: 10px; margin-top: 30px; border-top: 2px solid #eee; padding-top: 20px; }
         /* Buttons */
         .btn {
@@ -79,6 +82,7 @@
         .btn-back { background-color: #6c757d; text-decoration: none; flex: 1; }
         .btn-back:hover { background-color: #5a6268; }
         .btn-neutral { background-color: #6c757d; }
+
         .danger-zone {
             margin-top: 40px;
             padding: 20px;
@@ -119,10 +123,15 @@
         </div>
         <div class="form-group">
             <label class="checkbox-label">
-                <input type="checkbox" id="enable_mid_game_swap" {% if config.enable_mid_game_swap %}checked{% endif %}>
+                <input type="checkbox" id="enable_mid_game_swap" {% if config.get('enable_mid_game_swap', True) %}checked{% endif %}>
                 <b>Automatischen Rollentausch (Halbzeit) aktivieren</b>
             </label>
             <div class="help-text" style="margin-left: 25px;">Tauscht zur exakten Mitte zwischen Start- und Endzeit einmalig die Rollen. Teams sehen ihre kommende Rolle vorher.</div>
+            
+            <label class="checkbox-label" style="margin-top: 10px; margin-left: 25px;">
+                <input type="checkbox" id="shuffle_stops_on_swap" {% if config.get('shuffle_stops_on_swap', True) %}checked{% endif %}>
+                <b>Beim Rollentausch Haltestellen neu auswürfeln</b>
+            </label>
         </div>
 
         <h3>Spielablauf & Haltestellen</h3>
@@ -157,7 +166,7 @@
                 <label class="t-active-label">
                     <input type="checkbox" class="t-active" {% if not data.get('deactivated', False) %}checked{% endif %}> Aktiv
                 </label>
-                <button class="btn btn-danger" style="padding: 8px; width: auto; margin:0;" onclick="this.parentElement.remove(); updateTeamIndices();">X</button>
+                <button class="btn btn-danger" style="padding: 8px; width: auto; margin:0;" onclick="this.parentElement.remove();">X</button>
             </div>
             {% endfor %}
         </div>
@@ -186,7 +195,7 @@
 
         <div class="danger-zone">
             <h3>Gefahrenzone</h3>
-            <p style="font-size: 0.9em; color: #444; margin-bottom: 15px;">Löscht alle Teampunktestände, Action-Logs und Anfragen. Würfelt außerdem sofort frische Start-Haltestellen aus.</p>
+            <p style="font-size: 0.9em; color: #444; margin-bottom: 15px;">Löscht alle Teampunktestände, gefangene Haltestellen und den Spielverlauf. Würfelt außerdem sofort frische Start-Haltestellen aus.</p>
             <button class="btn btn-danger" onclick="resetGame()">Spiel komplett zurücksetzen</button>
             
             <hr style="margin: 30px 0 20px 0; border: none; border-top: 1px solid #EB6502;">
@@ -194,14 +203,32 @@
             <h3 style="margin-top: 0;">Rollen zufällig neu zuweisen</h3>
             <p style="font-size: 0.9em; color: #444; margin-bottom: 15px;">Weist allen aktiven Teams die Rollen (Läufer / Fänger) nach dem Zufallsprinzip neu zu. (Änderungen sind direkt sichtbar und gespeichert).</p>
             <button class="btn btn-danger" onclick="randomizeRoles()">Rollen zufällig zuweisen</button>
+            
+            <hr style="margin: 30px 0 20px 0; border: none; border-top: 1px solid #EB6502;">
+            
+            <h3 style="margin-top: 0;">Haltestellen neu würfeln</h3>
+            <p style="font-size: 0.9em; color: #444; margin-bottom: 15px;">Würfelt sofort neue aktive Haltestellen aus und leert die Haltestellen-Historie. Die Teampunktestände und Rollen bleiben unberührt.</p>
+            <button class="btn btn-danger" onclick="shuffleStops()">Haltestellen durchwürfeln</button>
         </div>
     </div>
 
     <script>
         function addTeamRow() {
             const container = document.getElementById('teams-container');
-            const count = container.children.length + 1;
-            const teamId = "Team " + count;
+            const existingInputs = container.querySelectorAll('.t-id');
+            let usedNumbers = [];
+            
+            existingInputs.forEach(input => {
+                let match = input.value.match(/Team (\d+)/);
+                if (match) usedNumbers.push(parseInt(match[1]));
+            });
+            
+            let nextNum = 1;
+            while(usedNumbers.includes(nextNum)) {
+                nextNum++;
+            }
+            
+            const teamId = "Team " + nextNum;
             const row = document.createElement('div');
             row.className = 'team-row';
             row.innerHTML = `
@@ -217,18 +244,9 @@
                 <label class="t-active-label">
                     <input type="checkbox" class="t-active" checked> Aktiv
                 </label>
-                <button class="btn btn-danger" style="padding: 8px; width: auto; margin:0;" onclick="this.parentElement.remove(); updateTeamIndices();">X</button>
+                <button class="btn btn-danger" style="padding: 8px; width: auto; margin:0;" onclick="this.parentElement.remove();">X</button>
             `;
             container.appendChild(row);
-        }
-
-        function updateTeamIndices() {
-            document.querySelectorAll('#teams-container .team-row').forEach((row, idx) => {
-                const count = idx + 1;
-                const newId = "Team " + count;
-                row.querySelector('.team-index-label').innerText = newId;
-                row.querySelector('.t-id').value = newId;
-            });
         }
 
         function saveSettings() {
@@ -240,10 +258,13 @@
             
             const startTime = document.getElementById('start_time').value;
             const endTime = document.getElementById('end_time').value;
+            
             const enableSwap = document.getElementById('enable_mid_game_swap').checked;
+            const shuffleOnSwap = document.getElementById('shuffle_stops_on_swap').checked;
 
             const teamRows = document.querySelectorAll('.team-row');
             const teamsList = [];
+
             teamRows.forEach(row => {
                 teamsList.push({
                     team_id: row.querySelector('.t-id').value,
@@ -263,7 +284,8 @@
                 points_was_caught: pointsWasCaught,
                 start_time: startTime,
                 end_time: endTime,
-                enable_mid_game_swap: enableSwap
+                enable_mid_game_swap: enableSwap,
+                shuffle_stops_on_swap: shuffleOnSwap
             };
 
             fetch('/adminconsole-{{ admin_url }}/settings', {
@@ -287,6 +309,7 @@
             if (!confirm('Bist du dir GANZ SICHER?\n\nAlle Teampunktestände, gefangene Haltestellen und der Spielverlauf werden unwiderruflich gelöscht. Das Spiel startet sofort mit neuen Haltestellen von vorne!')) {
                 return;
             }
+
             fetch('/adminconsole-{{ admin_url }}/reset', { method: 'POST' })
             .then(response => response.json())
             .then(data => {
@@ -302,15 +325,32 @@
             if (!confirm('Sollen die Rollen wirklich zufällig neu verteilt werden?\n\nDie Änderungen sind sofort aktiv und überschreiben die aktuellen Rollen im Dropdown oben.')) {
                 return;
             }
+
             fetch('/adminconsole-{{ admin_url }}/randomize_roles', { method: 'POST' })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
                     alert('Rollen wurden erfolgreich neu verteilt!');
-                    window.location.reload(); // Seite neuladen um die neuen Rollen im Template anzuzeigen
+                    window.location.reload(); 
                 } else alert(data.error || 'Fehler beim Neuverteilen der Rollen!');
             })
             .catch(err => alert('Netzwerkfehler beim Neuverteilen!'));
+        }
+
+        function shuffleStops() {
+            if (!confirm('Sollen die aktuellen Haltestellen wirklich verworfen, neu gewürfelt und die Historie gelöscht werden?')) {
+                return;
+            }
+
+            fetch('/adminconsole-{{ admin_url }}/shuffle_stops', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Haltestellen wurden erfolgreich neu gewürfelt!');
+                    window.location.href = '/adminconsole-{{ admin_url }}'; 
+                } else alert(data.error || 'Fehler beim Neuwürfeln!');
+            })
+            .catch(err => alert('Netzwerkfehler beim Neuwürfeln!'));
         }
     </script>
 </body>

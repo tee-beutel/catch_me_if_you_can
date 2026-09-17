@@ -9,9 +9,12 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@700&family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+    
     <style>
         body { font-family: 'Roboto', Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: #f4f7f6; overflow: hidden; color: #333; }
+        
         h1, h2, h3, h4 { font-family: 'Roboto Slab', serif; font-weight: 700; color: #049EAB; margin-top: 0; }
+        
         .header { background: white; border-bottom: 2px solid #049EAB; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 2000; position: relative; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         .header h2 { margin: 0; font-size: 1.3em; display: flex; align-items: center; flex-wrap: wrap; gap: 10px;}
         .header-logo { height: 35px; }
@@ -30,12 +33,15 @@
         
         .bottom-sheet { position: absolute; bottom: 0; left: 0; right: 0; background: white; z-index: 1000; display: flex; flex-direction: column; transition: transform 0.3s ease-in-out; transform: translateY(calc(100% - 50px)); box-shadow: 0 -3px 15px rgba(0,0,0,0.2); max-height: 80dvh; }
         .bottom-sheet.open { transform: translateY(0); }
+        
         .sheet-toggle { height: 50px; flex-shrink: 0; background: #049EAB; color: white; display: flex; justify-content: center; align-items: center; font-family: 'Roboto', sans-serif; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; }
+        
         .sheet-content { padding: 20px; overflow-y: auto; flex: 1; }
         
         h3 { border-bottom: 2px solid #049EAB; padding-bottom: 5px; margin-bottom: 15px;}
         select { width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #ccc; font-size: 16px; font-family: 'Roboto', sans-serif; box-sizing: border-box; }
         select:disabled { background: #eee; cursor: not-allowed; }
+        
         .btn { padding: 14px; border: none; cursor: pointer; font-family: 'Roboto', sans-serif; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; color: white; width: 100%; margin-top: 10px; font-size: 16px; transition: background 0.2s ease; }
         .btn:disabled { background: #ccc !important; color: #888 !important; cursor: not-allowed; }
         .btn-vcd-green { background-color: #AEC905; color: #333; }
@@ -47,16 +53,20 @@
         .leaderboard-table th, .leaderboard-table td { padding: 12px 10px; text-align: left; border-bottom: 1px solid #eee; }
         .leaderboard-table th { background: #f8f9fa; color: #049EAB; border-bottom: 2px solid #049EAB;}
         .highlight-runner { font-weight: bold; background: #f7f9e6; } 
-        .highlight-catcher { font-weight: bold; background: #fdf0e6; } 
+        .highlight-catcher { font-weight: bold; background: #fdf0e6; }  
         
         .log { margin-top: 25px; font-size: 0.9em; color: #555; }
         .log h4 { color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 10px;}
         .log-entry { padding: 10px 0; border-bottom: 1px solid #f0f0f0; line-height: 1.4; }
         .log-entry:last-child { border-bottom: none; }
         .late-warn { color: #EB6502; font-size: 0.8em; font-weight: bold; }
+
+        /* Custom Factor Map Icon */
+        .custom-factor-icon { background: transparent; border: none; }
     </style>
 </head>
 <body>
+
     {% if is_deactivated %}
     <div style="position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; box-sizing: border-box;">
         <div style="background: white; padding: 30px; border-radius: 10px; max-width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
@@ -101,9 +111,7 @@
                         var duration = 5 * 1000;
                         var animationEnd = Date.now() + duration;
                         var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 3000 };
-
                         function randomInRange(min, max) { return Math.random() * (max - min) + min; }
-
                         var interval = setInterval(function() {
                             var timeLeft = animationEnd - Date.now();
                             if (timeLeft <= 0) { return clearInterval(interval); }
@@ -121,15 +129,11 @@
         <!-- KARTE FÜR BEIDE ROLLEN UNIFORMIERT -->
         <div id="map"></div>
         
-        {% if phase == 'inactive' or phase == 'finished' %}
+        {% if phase == 'finished' %}
         <div class="map-overlay-msg">
             <div>
                 <h3 style="border:none; margin:0; font-size:1.5em; color:#333;">Karte nicht verfügbar</h3>
-                {% if phase == 'inactive' %}
-                    <p style="color:#666; margin-top:10px;">Die Karte wird erst 5 Minuten vor Spielbeginn freigeschaltet.</p>
-                {% else %}
-                    <p style="color:#666; margin-top:10px;">Das Spiel ist endgültig beendet.</p>
-                {% endif %}
+                <p style="color:#666; margin-top:10px;">Das Spiel ist endgültig beendet.</p>
             </div>
         </div>
         {% endif %}
@@ -137,7 +141,7 @@
         <!-- MENÜ: Standardmäßig ausgeklappt mit "open" Klasse -->
         <div class="bottom-sheet open" id="bottomSheet">
             <div class="sheet-toggle" onclick="toggleSheet()" id="sheetToggleText">
-                Menü & Rangliste zuklappen ▼
+                Menü & Rangliste zuklappen 🔽
             </div>
             <div class="sheet-content">
                 
@@ -168,11 +172,15 @@
                         {% endfor %}
                     </select>
                     <button class="btn btn-vcd-orange" onclick="reportCatch('läufer')" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Wir wurden gefangen</button>
+                
                 {% elif role == 'fänger' %}
                     <!-- FÄNGER KONTROLLEN -->
                     <div style="text-align: center; padding: 10px 0 30px 0;">
                         <h1 style="font-size: 2.2em; margin: 0; color: #EB6502;">Die Jagd ist eröffnet</h1>
                         <p style="color: #666; margin-top: 10px; font-size: 1.1em;">Sucht die Läufer-Teams auf den Straßen.</p>
+                        <div style="background: #fdf0e6; padding: 12px; border-left: 4px solid #EB6502; margin-top: 15px; text-align: left; font-size: 0.9em; color: #333; line-height: 1.4;">
+                            <b>Hinweis zur Hintergrundkarte:</b> Die Karte zeigt dir <i>alle möglichen</i> Haltestellen im Spielgebiet. Die Läufer müssen zu jeder Zeit jedoch nur eine kleine, zufällige Auswahl davon erreichen.
+                        </div>
                     </div>
                     <h3 style="border-bottom-color: #EB6502; color: #EB6502;">Team gefangen?</h3>
                     <select id="caught-team-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
@@ -182,6 +190,7 @@
                         {% endfor %}
                     </select>
                     <button class="btn btn-vcd-orange" onclick="reportCatch('fänger')" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Fang melden</button>
+                
                 {% else %}
                     <!-- KEINE ROLLE KONTROLLEN -->
                     <div style="text-align: center; padding: 10px 0 30px 0;">
@@ -204,6 +213,17 @@
                 <div style="text-align: center; margin: 40px 0 20px 0;">
                     <a href="/rules.html" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#6c757d; color:white; padding:10px 20px; border-radius:4px;">Hier geht's zur Anleitung</a>
                 </div>
+
+                {% if role == 'läufer' %}
+                <div style="margin-top: 30px; margin-bottom: 20px; text-align: left;">
+                    <h3 style="border-bottom-color: #AEC905; color: #AEC905;">Alle möglichen Haltestellen</h3>
+                    <p style="font-size: 0.85em; color: #666; margin-top: 0; margin-bottom: 10px;">
+                        Zur Orientierung: Hier siehst du <b>alle möglichen</b> Haltestellen im Spiel.
+                    </p>
+                    <div id="all-stops-map" style="height: 350px; width: 100%; border-radius: 8px; border: 1px solid #ccc; z-index: 1;"></div>
+                </div>
+                {% endif %}
+
             </div>
         </div>
     </div>
@@ -224,6 +244,8 @@
         
         let serverOffset = 0;
         let startTs = 0, endTs = 0, midTs = 0, postEndTs = 0;
+        let lastKnownPhase = null;
+        let allStopsMap = null;
         
         if (serverNowStr && startStr && endStr) {
             const serverNow = new Date(serverNowStr).getTime();
@@ -235,7 +257,6 @@
         }
         
         let reloadedTrigger = false;
-
         function updateTimer() {
             const timerBar = document.getElementById('top-timer');
             if (!startTs || !endTs) { timerBar.innerHTML = "Kein Spiel geplant."; return; }
@@ -249,11 +270,13 @@
             };
             
             const startDateFormatted = new Date(startTs).toLocaleString('de-DE', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) + ' Uhr';
-
             let text = "";
 
             if (now < preStartTs) {
                 text = "Spiel in Vorbereitung. Start am " + startDateFormatted;
+                if (currentRole === 'läufer') {
+                    text += " | Eure Zielhaltestellen seht ihr 5 Min. vor Beginn";
+                }
             } else if (now >= preStartTs && now < startTs) {
                 text = "PRE-GAME! Spiel startet in " + formatTime(startTs - now);
             } else if (now >= startTs && now <= endTs) {
@@ -271,25 +294,38 @@
             
             timerBar.innerHTML = text;
 
-            if ((now >= startTs + 60000 && now <= startTs + 61500) || 
-                (now >= endTs + 60000 && now <= endTs + 61500) ||
-                (enableSwap && midTs && now >= midTs + 60000 && now <= midTs + 61500) ||
-                (now >= postEndTs + 60000 && now <= postEndTs + 61500) ||
-                (now >= startTs - 30 * 60000 && now <= startTs - 30 * 60000 + 1500)) {
+            // Sichere Phasen-Reload-Logik
+            let currentLogicalPhase = "inactive";
+            if (now >= (startTs - 30 * 60000) + 2000 && now < preStartTs + 2000) currentLogicalPhase = "roles_assigned";
+            if (now >= preStartTs + 2000 && now < startTs + 2000) currentLogicalPhase = "pre_game";
+            if (now >= startTs + 2000 && now <= endTs + 2000) {
+                currentLogicalPhase = "game_first_half";
+                if (enableSwap && midTs && now >= midTs + 2000) currentLogicalPhase = "game_second_half";
+            }
+            if (now > endTs + 2000 && now <= postEndTs + 2000) currentLogicalPhase = "post_game";
+            if (now > postEndTs + 2000) currentLogicalPhase = "finished";
+
+            if (lastKnownPhase !== null && lastKnownPhase !== currentLogicalPhase) {
                 if(!reloadedTrigger) { reloadedTrigger = true; window.location.reload(); }
             }
+            lastKnownPhase = currentLogicalPhase;
         }
+
         setInterval(updateTimer, 1000); updateTimer();
 
         function toggleSheet() {
             const sheet = document.getElementById('bottomSheet');
             const toggleText = document.getElementById('sheetToggleText');
             sheet.classList.toggle('open');
-            if(sheet.classList.contains('open')) { toggleText.innerHTML = "Menü & Rangliste zuklappen ▼"; } 
-            else { toggleText.innerHTML = "Menü & Rangliste ausklappen ▲"; }
+            if(sheet.classList.contains('open')) { toggleText.innerHTML = "Menü & Rangliste zuklappen 🔽"; } 
+            else { toggleText.innerHTML = "Menü & Rangliste ausklappen 🔼"; }
+            
+            // Karte neu berechnen lassen, falls sie sich im eingeklappten Zustand befand
+            if (allStopsMap) {
+                setTimeout(() => allStopsMap.invalidateSize(), 350);
+            }
         }
         
-        {% if phase == 'pre_game' or phase == 'game' or phase == 'post_game' %}
         const map = L.map('map', {zoomControl: false}).setView([52.248874, 10.526770], 12);
         L.control.zoom({ position: 'topright' }).addTo(map);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
@@ -298,7 +334,8 @@
         let isFirstMapLoad = true;
         
         function loadStopsMap() {
-            if (currentRole === 'läufer') {
+            // Läufer bekommen in der Vorbereitungsphase (inactive) ebenfalls alle Haltestellen angezeigt
+            if (currentRole === 'läufer' && currentPhase !== 'inactive') {
                 fetch('/api/stops?slug=' + teamSlug).then(r => {
                     if (r.status === 403) {
                         window.location.reload(); // Erzwinge sofortigen Neuladevorgang beim Rollenwechsel
@@ -322,13 +359,40 @@
                         } else {
                             btnHTML = `<div style="font-size:11px; color:#888;">Eintragen noch nicht möglich</div>`;
                         }
+                        
+                        let factorText = '';
+                        if (stop.factor > 1) {
+                            factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span><br>`;
+                        } else if (stop.factor < 1) {
+                            factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span><br>`;
+                        }
+
                         const popupContent = `
                             <div style="text-align:center; font-family: 'Roboto', sans-serif;">
-                                <b style="font-size: 1.1em; color: #049EAB;">${stop.name}</b><br><br>
+                                <b style="font-size: 1.1em; color: #049EAB;">${stop.name}</b><br>
+                                ${factorText}<br>
                                 ${btnHTML}
                             </div>
                         `;
-                        const marker = L.marker([stop.lat, stop.lon]).bindPopup(popupContent);
+                        
+                        let markerOpts = {};
+                        if (stop.factor > 1) {
+                            markerOpts.icon = L.divIcon({
+                                className: 'custom-factor-icon',
+                                html: '<div style="background-color: #EB6502; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⭐</div>',
+                                iconSize: [30, 30],
+                                iconAnchor: [15, 15]
+                            });
+                        } else if (stop.factor < 1) {
+                            markerOpts.icon = L.divIcon({
+                                className: 'custom-factor-icon',
+                                html: '<div style="background-color: #6c757d; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⚠️</div>',
+                                iconSize: [30, 30],
+                                iconAnchor: [15, 15]
+                            });
+                        }
+
+                        const marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
                         marker.addTo(map); markers.push(marker);
                         bounds.push([stop.lat, stop.lon]);
                     });
@@ -341,17 +405,44 @@
                     }
                 });
             } else {
+                // Fänger und Läufer in 'inactive' sehen alle Haltestellen
                 fetch('/api/all_stops').then(r => r.json()).then(data => {
                     markers.forEach(m => map.removeLayer(m)); markers = [];
                     let bounds = [];
                     
                     data.forEach(stop => {
+                        let factorText = '';
+                        if (stop.factor > 1) {
+                            factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span>`;
+                        } else if (stop.factor < 1) {
+                            factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span>`;
+                        }
+
                         const popupContent = `
                             <div style="text-align:center; font-family: 'Roboto', sans-serif;">
                                 <b style="font-size: 1.1em; color: #049EAB;">${stop.name}</b>
+                                ${factorText}
                             </div>
                         `;
-                        const marker = L.marker([stop.lat, stop.lon]).bindPopup(popupContent);
+                        
+                        let markerOpts = {};
+                        if (stop.factor > 1) {
+                            markerOpts.icon = L.divIcon({
+                                className: 'custom-factor-icon',
+                                html: '<div style="background-color: #EB6502; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⭐</div>',
+                                iconSize: [30, 30],
+                                iconAnchor: [15, 15]
+                            });
+                        } else if (stop.factor < 1) {
+                            markerOpts.icon = L.divIcon({
+                                className: 'custom-factor-icon',
+                                html: '<div style="background-color: #6c757d; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⚠️</div>',
+                                iconSize: [30, 30],
+                                iconAnchor: [15, 15]
+                            });
+                        }
+                        
+                        const marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
                         marker.addTo(map); markers.push(marker);
                         bounds.push([stop.lat, stop.lon]);
                     });
@@ -367,6 +458,59 @@
         if (currentRole === 'läufer') {
             loadStopsMap(); 
             setInterval(loadStopsMap, 10000);
+            
+            // Zweite Karte im Menü für alle Haltestellen initialisieren
+            setTimeout(() => {
+                const mapContainer = document.getElementById('all-stops-map');
+                if (mapContainer) {
+                    allStopsMap = L.map('all-stops-map', {zoomControl: true}).setView([52.248874, 10.526770], 11);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(allStopsMap);
+
+                    fetch('/api/all_stops').then(r => r.json()).then(data => {
+                        let bounds = [];
+                        data.forEach(stop => {
+                            let factorText = '';
+                            if (stop.factor > 1) {
+                                factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span>`;
+                            } else if (stop.factor < 1) {
+                                factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span>`;
+                            }
+
+                            const popupContent = `
+                                <div style="text-align:center; font-family: 'Roboto', sans-serif;">
+                                    <b style="font-size: 1.1em; color: #049EAB;">${stop.name}</b>
+                                    ${factorText}
+                                </div>
+                            `;
+                            
+                            let markerOpts = {};
+                            if (stop.factor > 1) {
+                                markerOpts.icon = L.divIcon({
+                                    className: 'custom-factor-icon',
+                                    html: '<div style="background-color: #EB6502; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⭐</div>',
+                                    iconSize: [30, 30],
+                                    iconAnchor: [15, 15]
+                                });
+                            } else if (stop.factor < 1) {
+                                markerOpts.icon = L.divIcon({
+                                    className: 'custom-factor-icon',
+                                    html: '<div style="background-color: #6c757d; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⚠️</div>',
+                                    iconSize: [30, 30],
+                                    iconAnchor: [15, 15]
+                                });
+                            }
+                            
+                            const marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
+                            marker.addTo(allStopsMap);
+                            bounds.push([stop.lat, stop.lon]);
+                        });
+                        
+                        if (bounds.length > 0) {
+                            allStopsMap.fitBounds(bounds, { padding: [20, 20] });
+                        }
+                    });
+                }
+            }, 500); // Verzögerung, damit das HTML der Bottom-Sheet vollständig gerendert ist
         } else {
             loadStopsMap();
         }
@@ -376,14 +520,14 @@
             if(currentPhase !== 'game' && currentPhase !== 'post_game') { alert("Aktion im aktuellen Status nicht erlaubt."); return; }
             sendStopRequest(stopName);
         }
-        {% endif %} 
-        
+          
         function requestStop() {
             if(currentPhase !== 'game' && currentPhase !== 'post_game') return alert("Aktion momentan nicht erlaubt.");
             const stop = document.getElementById('stop-select').value;
             if (!stop) return alert("Bitte wähle eine Haltestelle aus.");
             sendStopRequest(stop);
         }
+
         function sendStopRequest(stopName) {
             fetch('/api/request_stop', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -398,6 +542,7 @@
 
         function reportCatch(role) {
             if(currentPhase !== 'game' && currentPhase !== 'post_game') return alert("Aktionen sind nur während des Spiels und kurz danach möglich.");
+            
             let hunterId, preyId;
             if (role === 'fänger') {
                 hunterId = teamId;
@@ -408,6 +553,7 @@
                 hunterId = document.getElementById('caught-by-select').value;
                 if (!hunterId) return alert("Bitte wähle das Fänger-Team aus.");
             }
+
             fetch('/api/report_catch', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ reporter_slug: teamSlug, hunter: hunterId, prey: preyId })
@@ -425,11 +571,13 @@
         function updateLeaderboard(leaderboardData) {
             const table = document.querySelector('.leaderboard-table');
             let html = `<tr><th>Team</th><th>Punkte</th></tr>`;
+
             leaderboardData.forEach(entry => {
                 let highlight = '';
                 if (entry.id === teamId) {
                     highlight = currentRole === 'läufer' ? 'highlight-runner' : currentRole === 'fänger' ? 'highlight-catcher' : '';
                 }
+                
                 html += `<tr class="${highlight}">
                     <td>${entry.display_name} <span style="font-size: 0.7em; color: #888; text-transform: uppercase;">(${entry.role})</span></td>
                     <td style="font-weight: bold; color: #049EAB;">${entry.score}</td>
@@ -440,6 +588,7 @@
 
         function updateLog(logData) {
             const teamLog = logData.filter(entry => entry.team === teamId || entry.hunter === teamId || entry.prey === teamId || entry.type === 'system');
+            
             const logContainer = document.querySelector('.log');
             let html = `<h4>Letzte Aktionen eures Teams</h4>`;
             
@@ -448,6 +597,7 @@
             } else {
                 teamLog.forEach(entry => {
                     let text = entry.desc;
+
                     // Personalisierte Pronomen basierend auf Team-ID
                     if (entry.type === 'stop') {
                         if (entry.team === teamId) text = text.replace(teamName + " hat", "<b>Ihr</b> habt");

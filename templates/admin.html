@@ -38,6 +38,7 @@
         .url-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
         .url-row b { width: 150px; }
         .url-input { flex: 1; padding: 8px; border: 1px solid #ccc; font-family: monospace; font-size: 14px; box-sizing: border-box; }
+
         .stop-item { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; align-items: center; }
         .stop-controls { display: flex; gap: 10px; align-items: center; }
         select { padding: 8px; border: 1px solid #ccc; font-size: 14px; font-family: 'Roboto', sans-serif; box-sizing: border-box; }
@@ -55,8 +56,12 @@
         table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.95em; }
         th, td { padding: 12px 10px; border-bottom: 1px solid #eee; min-width: 120px; }
         th { border-bottom: 2px solid #049EAB; color: #049EAB; }
+
         .manual-catch-wrapper { display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; background: #f9f9f9; padding: 15px; border: 1px solid #eee; }
         .manual-catch-col { display: flex; flex-direction: column; }
+        
+        /* Custom Factor Map Icon */
+        .custom-factor-icon { background: transparent; border: none; }
 
         @media (max-width: 768px) {
             body { padding: 10px; }
@@ -175,7 +180,7 @@
         <div class="team-rank">
             <div class="team-score">
                 {{ loop.index }}. {{ entry.display_name }} 
-                {% if entry.deactivated %}<span style="color:red; font-size: 0.7em;">(DEAKTIVIERT)</span>{% endif %}
+                {% if entry.deactivated %}<span style="color:red; font-size: 0.7em;">(DEAKTIVIERT)</span>{% endif %}  
                 — {{ entry.score }} Punkte
                 <span class="role-badge {{ 'badge-catcher' if entry.role == 'fänger' else 'badge-runner' if entry.role == 'läufer' else 'badge-keine' }}">{{ entry.role }}</span>
                 {% if enable_swap and phase in ['pre_game', 'game'] and not roles_swapped and not entry.deactivated and entry.next_role != 'keine' %}
@@ -258,6 +263,7 @@
         let serverOffset = 0;
         let startTs = 0, endTs = 0, midTs = 0, postEndTs = 0;
         let reloadedTrigger = false;
+        let lastKnownPhase = null;
         
         function initTimer() {
             const serverNowStr = "{{ now_time }}";
@@ -285,6 +291,7 @@
         function updateAdminTimer() {
             const el = document.getElementById('admin-timer');
             if (!startTs || !endTs) { el.innerHTML = "Kein Spielzeiten konfiguriert."; return; }
+
             const now = Date.now() + serverOffset;
             const preStartTs = startTs - (5 * 60 * 1000);
             
@@ -309,14 +316,23 @@
                 el.style.borderColor = "#333"; el.style.color = "#333";
             }
 
-            if ((now >= startTs + 60000 && now <= startTs + 61500) || 
-                (now >= endTs + 60000 && now <= endTs + 61500) ||
-                (enableSwap && midTs && now >= midTs + 60000 && now <= midTs + 61500) ||
-                (now >= postEndTs + 60000 && now <= postEndTs + 61500) ||
-                (now >= startTs - 30 * 60000 && now <= startTs - 30 * 60000 + 1500)) {
+            // Sichere Phasen-Reload-Logik
+            let currentLogicalPhase = "inactive";
+            if (now >= (startTs - 30 * 60000) + 2000 && now < preStartTs + 2000) currentLogicalPhase = "roles_assigned";
+            if (now >= preStartTs + 2000 && now < startTs + 2000) currentLogicalPhase = "pre_game";
+            if (now >= startTs + 2000 && now <= endTs + 2000) {
+                currentLogicalPhase = "game_first_half";
+                if (enableSwap && midTs && now >= midTs + 2000) currentLogicalPhase = "game_second_half";
+            }
+            if (now > endTs + 2000 && now <= postEndTs + 2000) currentLogicalPhase = "post_game";
+            if (now > postEndTs + 2000) currentLogicalPhase = "finished";
+
+            if (lastKnownPhase !== null && lastKnownPhase !== currentLogicalPhase) {
                 if(!reloadedTrigger) { reloadedTrigger = true; window.location.reload(); }
             }
+            lastKnownPhase = currentLogicalPhase;
         }
+
         initTimer(); setInterval(updateAdminTimer, 1000); updateAdminTimer();
 
         // --- MAP LOGIK FÜR ADMIN ---
@@ -336,20 +352,44 @@
             updateAdminMap(initialActive);
         });
 
-        // Layer-Verwaltung erneuert: Löscht und zeichnet Marker dynamisch neu, 
-        // um den Wechsel zwischen Kreis (inaktiv) und Stecknadel (aktiv) zu ermöglichen.
         function updateAdminMap(activeStops) {
             mapLayerGroup.clearLayers();
+
             allStopsData.forEach(stop => {
+                let factorText = '';
+                if (stop.factor > 1) {
+                    factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span>`;
+                } else if (stop.factor < 1) {
+                    factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">🔽 Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span>`;
+                }
+                
+                let popupContent = `<b>${stop.name}</b>${factorText}`;
+
                 if (activeStops.includes(stop.name)) {
-                    // Standard Stecknadel für aktive Läufer-Ziele
-                    let marker = L.marker([stop.lat, stop.lon]).bindPopup(`<b>${stop.name}</b>`);
+                    let markerOpts = {};
+                    if (stop.factor > 1) {
+                        markerOpts.icon = L.divIcon({
+                            className: 'custom-factor-icon',
+                            html: '<div style="background-color: #EB6502; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⭐</div>',
+                            iconSize: [30, 30],
+                            iconAnchor: [15, 15]
+                        });
+                    } else if (stop.factor < 1) {
+                        markerOpts.icon = L.divIcon({
+                            className: 'custom-factor-icon',
+                            html: '<div style="background-color: #6c757d; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">🔽</div>',
+                            iconSize: [30, 30],
+                            iconAnchor: [15, 15]
+                        });
+                    }
+                    let marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
                     mapLayerGroup.addLayer(marker);
                 } else {
-                    // Grauer Kreis für alle restlichen Haltestellen
+                    let color = stop.factor > 1 ? '#EB6502' : (stop.factor < 1 ? '#333' : '#6c757d');
+                    let radius = stop.factor !== 1 ? 6 : 4;
                     let marker = L.circleMarker([stop.lat, stop.lon], {
-                        color: '#6c757d', fillColor: '#6c757d', fillOpacity: 0.5, radius: 4, weight: 1
-                    }).bindPopup(`<b>${stop.name}</b>`);
+                        color: color, fillColor: color, fillOpacity: 0.5, radius: radius, weight: 1
+                    }).bindPopup(popupContent);
                     mapLayerGroup.addLayer(marker);
                 }
             });
@@ -383,6 +423,7 @@
                     let text = req.type === 'stop'
                         ? `${lateBadge}Team <b>${req.team_name || req.team}</b> möchte Haltestelle <b>${req.stop}</b> gutschreiben.`
                         : `${lateBadge}Meldung von <b>${req.reporter_name || req.reporter}</b>: <b>${req.hunter_name || req.hunter}</b> fängt <b>${req.prey_name || req.prey}</b>.`;
+                    
                     html += `
                     <div class="req-item">
                         <span>${text}</span>
@@ -415,11 +456,13 @@
             fetch('/api/resolve_request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id, action: action })
             }).then(() => location.reload()).catch(() => alert('Netzwerkfehler!'));
         }
+
         function undoAction(id) {
             if(!confirm("Möchtest du diese Aktion wirklich rückgängig machen?")) return;
             fetch('/api/undo_action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id })
             }).then(() => location.reload()).catch(() => alert('Netzwerkfehler!'));
         }
+
         function catchStop(stopName, selectId, btn) {
             const teamSelect = document.getElementById(selectId);
             btn.disabled = true; btn.innerText = "Lädt...";
@@ -428,9 +471,11 @@
                 if (d.success) location.reload(); else { alert('Fehler!'); btn.disabled = false; btn.innerText = "Austauschen"; }
             }).catch(() => { alert('Netzwerkfehler!'); btn.disabled = false; btn.innerText = "Austauschen"; });
         }
+
         function catchTeam() {
             const hunter = document.getElementById('hunter-select').value;
             const prey = document.getElementById('prey-select').value;
+            
             const hunterLabel = document.getElementById('hunter-select').options[document.getElementById('hunter-select').selectedIndex].text;
             const preyLabel = document.getElementById('prey-select').options[document.getElementById('prey-select').selectedIndex].text;
             
@@ -442,6 +487,7 @@
                 if (d.success) location.reload(); else alert(d.error || 'Fehler beim Eintragen!');
             }).catch(() => alert('Netzwerkfehler!'));
         }
+
         function addManualPoints() {
             const teamId = document.getElementById('manual-points-team').value;
             const pointsVal = document.getElementById('manual-points-value').value;

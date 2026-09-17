@@ -17,13 +17,12 @@ try:
     from zoneinfo import ZoneInfo
 except ImportError:
     import pytz
-
     def ZoneInfo(tz_str):
         return pytz.timezone(tz_str)
 
 app = Flask(__name__)
 
-# --- ADMIN PASSWORT ---
+# --- ADMIN PASSWORT --- #
 # Zieht das Passwort aus den Umgebungsvariablen. Fallback: "1234-5"
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234-5")
 
@@ -39,7 +38,8 @@ DEFAULT_CONFIG = {
     "start_time": "",
     "end_time": "",
     "timezone": "Europe/Berlin",
-    "enable_mid_game_swap": False
+    "enable_mid_game_swap": True,        # Standardmäßig True gesetzt
+    "shuffle_stops_on_swap": True        # Neues Feature, Standard True
 }
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -52,8 +52,8 @@ STATE_LOCK = FileLock(STATE_LOCK_FILE, timeout=10)
 
 with open(DATA_FILE, 'r', encoding='utf-8') as f:
     stops_data = json.load(f)
-ALL_STOPS = list(stops_data.keys())
 
+ALL_STOPS = list(stops_data.keys())
 
 # --- HILFSFUNKTIONEN FÜR STATUS UND AKTIONEN ---
 def send_telegram_msg(text):
@@ -70,18 +70,16 @@ def send_telegram_msg(text):
     except Exception as e:
         print(f'Telegram error: {e}')
 
-
 def generate_slug(display_name, pin):
     clean_name = re.sub(r'[^a-z0-9]+', '-', display_name.lower()).strip('-')
     return f"{clean_name}_{pin}"
-
 
 def calculate_next_roles(teams_data):
     for t_id, d in teams_data.items():
         if d.get("deactivated", False):
             d["next_role"] = d.get("role", "keine")
             continue
-        
+            
         current = d.get("role", "keine")
         if current == "fänger":
             d["next_role"] = "läufer"
@@ -89,6 +87,12 @@ def calculate_next_roles(teams_data):
             d["next_role"] = "fänger"
         else:
             d["next_role"] = "keine"
+
+def calculate_score(team_data, config):
+    """Berechnet die Teampunkte inkl. Faktoren der Stationen, glättet ungerade Floats zu Integern."""
+    stops_points = sum(stops_data.get(stop, {}).get("factor", 1) * config["points_stop_reached"] for stop in team_data.get("stops", []))
+    raw_score = stops_points + (len(team_data.get("caught", [])) * config["points_caught_team"]) + (len(team_data.get("caught_by", [])) * config["points_was_caught"]) + team_data.get("manual_points", 0)
+    return int(raw_score) if raw_score == int(raw_score) else float(raw_score)
 
 
 def get_state():
@@ -110,7 +114,7 @@ def get_state():
                 "next_role": "keine",
                 "manual_points": 0
             }
-            
+        
         calculate_next_roles(teams_data)
 
         state = {
@@ -142,17 +146,14 @@ def get_state():
 
     return state
 
-
 def save_state(state):
     max_history = state["config"].get("max_history", 30)
     if len(state['history']) > max_history:
         state['history'] = state['history'][-max_history:]
     if len(state['action_log']) > 50:
         state['action_log'] = state['action_log'][:50]
-
     with open(STATE_FILE, 'w', encoding='utf-8') as f:
         json.dump(state, f)
-
 
 def get_new_random_stop(active_stops, history):
     available = set(ALL_STOPS) - set(active_stops) - set(history)
@@ -161,7 +162,6 @@ def get_new_random_stop(active_stops, history):
     if not available:
         return random.choice(ALL_STOPS)
     return random.choice(list(available))
-
 
 # --- ZEIT- UND PHASENLOGIK ---
 def update_game_time_state(state):
@@ -210,7 +210,7 @@ def update_game_time_state(state):
             save_state(state)
 
     mid_dt = None
-    if config.get("enable_mid_game_swap"):
+    if config.get("enable_mid_game_swap", True):
         mid_dt = start_dt + (end_dt - start_dt) / 2
         if now >= mid_dt and not state.get("roles_swapped", False):
             for t_id, data in state["teams_data"].items():
@@ -220,21 +220,24 @@ def update_game_time_state(state):
                         data["role"] = "fänger"
                     elif current_role == "fänger":
                         data["role"] = "läufer"
-                    
+            
             calculate_next_roles(state["teams_data"])
             state["roles_swapped"] = True
             
-            # --- Haltestellen durchwürfeln und Historie leeren ---
-            target_stops = config.get("target_stops", 12)
-            state["history"] = []
-            new_active_stops = random.sample(ALL_STOPS, min(target_stops, len(ALL_STOPS)))
-            state["active_stops"] = new_active_stops
-            state["history"] = new_active_stops.copy()
-            # -----------------------------------------------------------
+            if config.get("shuffle_stops_on_swap", True):
+                # --- Haltestellen durchwürfeln und Historie leeren ---
+                target_stops = config.get("target_stops", 12)
+                state["history"] = []
+                new_active_stops = random.sample(ALL_STOPS, min(target_stops, len(ALL_STOPS)))
+                state["active_stops"] = new_active_stops
+                state["history"] = new_active_stops.copy()
+                desc = "🔄 HALBZEIT! Die Rollen wurden getauscht. Haltestellen sind neu gewürfelt und die Historie wurde gelöscht."
+            else:
+                desc = "🔄 HALBZEIT! Die Rollen der aktiven Teams wurden getauscht."
 
             state["action_log"].insert(0, {
                 "id": str(uuid.uuid4()), "type": "system", "timestamp": time.time(),
-                "desc": "🔄 HALBZEIT! Die Rollen wurden getauscht. Haltestellen sind neu gewürfelt und die Historie wurde gelöscht."
+                "desc": desc
             })
             save_state(state)
 
@@ -254,31 +257,30 @@ def update_game_time_state(state):
 
     return phase, start_dt.isoformat(), end_dt.isoformat(), (mid_dt.isoformat() if mid_dt else None), now.isoformat()
 
-
 # --- SPIEL-AKTIONEN ---
 def execute_stop_catch(state, stop_name, team_id, is_late=False):
+    # IMMER Punkte geben, unabhängig davon, ob Stop noch in active_stops liegt.
+    # Verhindert Punkteverlust beim Bestätigen nach der Halbzeit.
+    display_name = "Unbekannt"
+    if team_id and team_id in state["teams_data"]:
+        state["teams_data"][team_id]["stops"].append(stop_name)
+        display_name = state["teams_data"][team_id]["display_name"]
+        
+    # Aber nur von Karte nehmen/ersetzen, wenn sie aktuell noch da ist
     if stop_name in state['active_stops']:
         state['active_stops'].remove(stop_name)
-        
-        display_name = "Unbekannt"
-        if team_id and team_id in state["teams_data"]:
-            state["teams_data"][team_id]["stops"].append(stop_name)
-            display_name = state["teams_data"][team_id]["display_name"]
-            
         new_stop = get_new_random_stop(state['active_stops'], state['history'])
         state['active_stops'].append(new_stop)
         state['history'].append(new_stop)
 
-        desc = f"📍 {display_name} hat die Haltestelle '{stop_name}' erreicht."
-        if is_late: desc += " ⚠️ (Nachtrag nach Spielende)"
-
-        state["action_log"].insert(0, {
-            "id": str(uuid.uuid4()), "type": "stop", "team": team_id, "team_name": display_name, "stop": stop_name,
-            "timestamp": time.time(), "desc": desc, "is_late": is_late
-        })
-        return True
-    return False
-
+    desc = f"📍 {display_name} hat die Haltestelle '{stop_name}' erreicht."
+    if is_late: desc += "   (Nachtrag nach Spielende)"
+    
+    state["action_log"].insert(0, {
+        "id": str(uuid.uuid4()), "type": "stop", "team": team_id, "team_name": display_name, "stop": stop_name,
+        "timestamp": time.time(), "desc": desc, "is_late": is_late
+    })
+    return True
 
 def execute_team_catch(state, hunter_id, prey_id, is_late=False):
     if hunter_id in state['teams_data'] and prey_id in state['teams_data']:
@@ -289,7 +291,7 @@ def execute_team_catch(state, hunter_id, prey_id, is_late=False):
         prey_name = state['teams_data'][prey_id]['display_name']
 
         desc = f"⚔️ {hunter_name} (Fänger) hat {prey_name} (Läufer) gefangen."
-        if is_late: desc += " ⚠️ (Nachtrag nach Spielende)"
+        if is_late: desc += "   (Nachtrag nach Spielende)"
 
         state["action_log"].insert(0, {
             "id": str(uuid.uuid4()), "type": "catch", "hunter": hunter_id, "prey": prey_id,
@@ -298,7 +300,6 @@ def execute_team_catch(state, hunter_id, prey_id, is_late=False):
         })
         return True
     return False
-
 
 # --- ROUTEN ---
 @app.route('/')
@@ -314,11 +315,11 @@ def index():
     for t_id, d in state["teams_data"].items():
         if d.get("deactivated", False):
             continue
+
         teams_list.append({"id": t_id, "name": d["display_name"]})
-        score = (len(d.get("stops", [])) * config["points_stop_reached"] +
-                 len(d.get("caught", [])) * config["points_caught_team"] +
-                 len(d.get("caught_by", [])) * config["points_was_caught"] +
-                 d.get("manual_points", 0))
+        
+        score = calculate_score(d, config)
+
         leaderboard.append({
             "id": t_id, "display_name": d["display_name"], "score": score, 
             "role": d.get("role", "keine"), "next_role": d.get("next_role", "")
@@ -330,15 +331,13 @@ def index():
     return render_template('index.html', teams=teams_list, leaderboard=leaderboard,
                            phase=phase, start_time=start_iso, end_time=end_iso,
                            mid_time=mid_iso, now_time=now_iso,
-                           enable_swap=config.get("enable_mid_game_swap", False),
+                           enable_swap=config.get("enable_mid_game_swap", True),
                            roles_swapped=state.get("roles_swapped", False),
                            action_log=state.get("action_log", []))
-
 
 @app.route('/rules.html')
 def rules():
     return render_template('rules.html')
-
 
 @app.route('/team/<slug>')
 def team_dashboard(slug):
@@ -375,28 +374,26 @@ def team_dashboard(slug):
         elif t_role == "fänger" and t_id_iter != team_id:
             faenger_teams.append({"id": t_id_iter, "name": d["display_name"]})
 
-        score = (len(d.get("stops", [])) * config["points_stop_reached"] +
-                 len(d.get("caught", [])) * config["points_caught_team"] +
-                 len(d.get("caught_by", [])) * config["points_was_caught"] +
-                 d.get("manual_points", 0))
+        score = calculate_score(d, config)
+
         leaderboard.append({
             "id": t_id_iter, "display_name": d["display_name"], "score": score, 
             "role": t_role, "next_role": d.get("next_role", "")
         })
 
     leaderboard.sort(key=lambda x: x["score"], reverse=True)
+
     team_log = [entry for entry in state["action_log"] if
                 entry.get("team") == team_id or entry.get("hunter") == team_id or entry.get("prey") == team_id or entry.get("type") == "system"]
 
-    return render_template('team.html', team_id=team_id, team_name=team_data["display_name"], 
-                           role=role, next_role=next_role, slug=slug,
+    return render_template('team.html', team_id=team_id, team_name=team_data["display_name"],
+                            role=role, next_role=next_role, slug=slug,
                            laeufer_teams=laeufer_teams, faenger_teams=faenger_teams,
                            leaderboard=leaderboard, log=team_log, phase=phase,
                            start_time=start_iso, end_time=end_iso, mid_time=mid_iso,
-                           now_time=now_iso, enable_swap=config.get("enable_mid_game_swap", False),
+                           now_time=now_iso, enable_swap=config.get("enable_mid_game_swap", True),
                            roles_swapped=state.get("roles_swapped", False),
                            is_deactivated=is_deactivated)
-
 
 @app.route('/api/login_team', methods=['POST'])
 def login_team():
@@ -408,9 +405,10 @@ def login_team():
         state = get_state()
         
     team_data = state["teams_data"].get(team_id)
+
     if team_data and str(team_data.get("pin")) == str(pin).strip():
         return jsonify({'success': True, 'slug': team_data["slug"]})
-            
+        
     return jsonify({'success': False, 'error': 'Falscher PIN oder Team nicht gefunden!'})
 
 
@@ -442,10 +440,8 @@ def admin(admin_slug):
         team_urls[data["display_name"]] = f"{base_url}/team/{data['slug']}"
         teams_list.append({"id": t_id, "name": data["display_name"]})
 
-        score = (len(data.get("stops", [])) * config["points_stop_reached"] +
-                 len(data.get("caught", [])) * config["points_caught_team"] +
-                 len(data.get("caught_by", [])) * config["points_was_caught"] +
-                 data.get("manual_points", 0))
+        score = calculate_score(data, config)
+
         leaderboard.append({
             "id": t_id, "display_name": data["display_name"], "score": score, "role": data.get("role", "keine"),
             "next_role": data.get("next_role", ""),
@@ -462,7 +458,7 @@ def admin(admin_slug):
                            pending_requests=state["pending_requests"], action_log=state["action_log"],
                            phase=phase, start_time=start_iso, end_time=end_iso, mid_time=mid_iso, 
                            now_time=now_iso, team_names_map=team_names_map,
-                           enable_swap=config.get("enable_mid_game_swap", False),
+                           enable_swap=config.get("enable_mid_game_swap", True),
                            roles_swapped=state.get("roles_swapped", False))
 
 
@@ -483,7 +479,6 @@ def api_admin_data(admin_slug):
         'active_stops': state.get("active_stops", [])
     })
 
-
 @app.route('/adminconsole-<admin_slug>/settings', methods=['GET', 'POST'])
 def admin_settings(admin_slug):
     if admin_slug != ADMIN_PASSWORD: return "Zugriff verweigert", 403
@@ -491,6 +486,7 @@ def admin_settings(admin_slug):
     with STATE_LOCK:
         state = get_state()
         config = state["config"]
+
         if request.method == 'GET':
             sorted_teams = sorted(state["teams_data"].items(), key=lambda x: int(x[0].replace("Team ", "")) if "Team " in x[0] else 999)
             return render_template('settings.html', config=config, sorted_teams=sorted_teams, admin_url=admin_slug)
@@ -502,10 +498,12 @@ def admin_settings(admin_slug):
 
         config["target_stops"] = int(data.get("target_stops", config["target_stops"]))
         config["max_history"] = int(data.get("max_history", config["max_history"]))
+
         config["start_time"] = data.get("start_time", config.get("start_time"))
         config["end_time"] = data.get("end_time", config.get("end_time"))
         config["timezone"] = data.get("timezone", "Europe/Berlin")
-        config["enable_mid_game_swap"] = data.get("enable_mid_game_swap", False)
+        config["enable_mid_game_swap"] = data.get("enable_mid_game_swap", True)
+        config["shuffle_stops_on_swap"] = data.get("shuffle_stops_on_swap", True)
 
         if old_start != config["start_time"] or old_end != config["end_time"] or old_swap != config["enable_mid_game_swap"]:
             state["roles_swapped"] = False
@@ -574,17 +572,17 @@ def reset_game(admin_slug):
     with STATE_LOCK:
         state = get_state()
         config = state["config"]
-
         target = config.get("target_stops", 12)
+
         initial_active = random.sample(ALL_STOPS, min(target, len(ALL_STOPS)))
         state["active_stops"] = initial_active
         state["history"] = initial_active.copy()
+
         state["pending_requests"] = []
         state["action_log"] = []
         state["roles_swapped"] = False
 
         teams_ids = list(state["teams_data"].keys())
-
         for i, t_id in enumerate(teams_ids):
             state["teams_data"][t_id]["stops"] = []
             state["teams_data"][t_id]["caught"] = []
@@ -594,10 +592,10 @@ def reset_game(admin_slug):
             
         calculate_next_roles(state["teams_data"])
         state["roles_assigned"] = False
+
         save_state(state)
         
     return jsonify({'success': True})
-
 
 @app.route('/adminconsole-<admin_slug>/randomize_roles', methods=['POST'])
 def randomize_roles(admin_slug):
@@ -628,6 +626,26 @@ def randomize_roles(admin_slug):
 
     return jsonify({'success': True})
 
+@app.route('/adminconsole-<admin_slug>/shuffle_stops', methods=['POST'])
+def shuffle_stops(admin_slug):
+    if admin_slug != ADMIN_PASSWORD: return jsonify({'success': False, 'error': 'Verboten'}), 403
+    
+    with STATE_LOCK:
+        state = get_state()
+        config = state["config"]
+        target = config.get("target_stops", 12)
+
+        new_active_stops = random.sample(ALL_STOPS, min(target, len(ALL_STOPS)))
+        state["active_stops"] = new_active_stops
+        state["history"] = new_active_stops.copy()
+        
+        state["action_log"].insert(0, {
+            "id": str(uuid.uuid4()), "type": "system", 
+            "timestamp": time.time(), "desc": "🔀 Haltestellen wurden manuell neu gewürfelt und die Historie zurückgesetzt."
+        })
+        save_state(state)
+        
+    return jsonify({'success': True})
 
 # --- PLAYER ACTIONS API ---
 @app.route('/api/request_stop', methods=['POST'])
@@ -640,12 +658,13 @@ def request_stop():
     with STATE_LOCK:
         state = get_state()
         phase, _, _, _, _ = update_game_time_state(state)
+
         if phase not in ["game", "post_game"]:
             return jsonify({'success': False, 'error': 'Einträge sind nur während des aktiven Spiels oder kurz danach möglich!'}), 403
 
         is_late = (phase == "post_game")
-        team_id = next((t_id for t_id, d in state["teams_data"].items() if d.get("slug") == team_slug), None)
 
+        team_id = next((t_id for t_id, d in state["teams_data"].items() if d.get("slug") == team_slug), None)
         if not team_id or stop_name not in state['active_stops']: return jsonify({'success': False}), 400
         
         if state["teams_data"][team_id].get("deactivated", False):
@@ -653,6 +672,7 @@ def request_stop():
 
         already_pending = next((r for r in state["pending_requests"] if
                                 r["type"] == "stop" and r["team"] == team_id and r["stop"] == stop_name), None)
+
         if not already_pending:
             display_name = state["teams_data"][team_id]["display_name"]
             state["pending_requests"].append({
@@ -660,7 +680,7 @@ def request_stop():
                 "timestamp": time.time(), "is_late": is_late
             })
             save_state(state)
-            msg_to_send = f"📍 NEUE ANFRAGE: Team '{display_name}' möchte die Haltestelle '{stop_name}' eintragen lassen."
+            msg_to_send = f"📬 NEUE ANFRAGE: Team '{display_name}' möchte die Haltestelle '{stop_name}' eintragen lassen."
 
     if msg_to_send:
         send_telegram_msg(msg_to_send)
@@ -681,16 +701,20 @@ def report_catch():
     with STATE_LOCK:
         state = get_state()
         phase, _, _, _, _ = update_game_time_state(state)
+
         if phase not in ["game", "post_game"]:
             return jsonify({'success': False,
                             'error': 'Fänge können nur während des aktiven Spiels oder kurz danach gemeldet werden!'}), 403
 
         is_late = (phase == "post_game")
-        reporter_id = next((t_id for t_id, d in state["teams_data"].items() if d.get("slug") == reporter_slug), None)
 
+        reporter_id = next((t_id for t_id, d in state["teams_data"].items() if d.get("slug") == reporter_slug), None)
         if not reporter_id or not hunter_id or not prey_id: return jsonify(
             {'success': False, 'error': 'Ungültige Daten übermittelt.'}), 400
             
+        if state["teams_data"][hunter_id].get("role") != "fänger" or state["teams_data"][prey_id].get("role") != "läufer":
+            return jsonify({'success': False, 'error': 'Ungültige Rollen! Bitte App neu laden, ggf. gab es gerade einen Rollentausch.'}), 400
+
         if state["teams_data"].get(reporter_id, {}).get("deactivated", False):
             return jsonify({'success': False, 'error': 'Dein Team ist deaktiviert.'}), 403
 
@@ -702,6 +726,7 @@ def report_catch():
         matching_req = next((r for r in state["pending_requests"] if
                              r["type"] == "catch" and r["hunter"] == hunter_id and r["prey"] == prey_id and r[
                                  "reporter"] != reporter_id), None)
+
         if matching_req:
             state["pending_requests"].remove(matching_req)
             execute_team_catch(state, hunter_id, prey_id, is_late=is_late)
@@ -726,7 +751,7 @@ def report_catch():
                     "timestamp": time.time(), "is_late": is_late
                 })
                 save_state(state)
-                msg_to_send = f"⚔️ NEUE FANG-ANFRAGE: '{r_name}' meldet, dass '{h_name}' das Team '{p_name}' gefangen hat."
+                msg_to_send = f"📬 NEUE FANG-ANFRAGE: '{r_name}' meldet, dass '{h_name}' das Team '{p_name}' gefangen hat."
             
             result = {'success': True, 'message': 'Anfrage gesendet. Warte auf Bestätigung der Gegenseite oder des Admins.'}
 
@@ -734,7 +759,6 @@ def report_catch():
         send_telegram_msg(msg_to_send)
 
     return jsonify(result)
-
 
 # --- ADMIN ACTIONS API ---
 @app.route('/api/resolve_request', methods=['POST'])
@@ -745,11 +769,11 @@ def resolve_request():
     
     with STATE_LOCK:
         state = get_state()
+
         req = next((r for r in state["pending_requests"] if r["id"] == req_id), None)
-
         if not req: return jsonify({'success': False, 'error': 'Anfrage nicht gefunden.'}), 404
-        state["pending_requests"].remove(req)
 
+        state["pending_requests"].remove(req)
         is_late = req.get("is_late", False)
 
         if action == 'approve':
@@ -773,7 +797,6 @@ def undo_action():
     with STATE_LOCK:
         state = get_state()
         action = next((a for a in state["action_log"] if a["id"] == action_id), None)
-
         if not action: return jsonify({'success': False, 'error': 'Aktion im Log nicht gefunden.'}), 404
 
         if action["type"] == "stop":
@@ -781,6 +804,7 @@ def undo_action():
             stop = action["stop"]
             if team_id and team_id in state["teams_data"] and stop in state["teams_data"][team_id]["stops"]:
                 state["teams_data"][team_id]["stops"].remove(stop)
+                
         elif action["type"] == "catch":
             hunter_id = action.get("hunter")
             prey_id = action.get("prey")
@@ -858,14 +882,12 @@ def add_manual_points():
             
     return jsonify({'success': False, 'error': 'Team nicht gefunden.'}), 400
 
-
 @app.route('/api/stops')
 def api_stops():
     team_slug = request.args.get('slug')
     
     with STATE_LOCK:
         state = get_state()
-        # Stelle sicher, dass der Spielzeit-Status und Rollentausch aktuell sind 
         update_game_time_state(state)
         
         if not team_slug:
@@ -883,17 +905,21 @@ def api_stops():
         result = []
         for name in state['active_stops']:
             if name in stops_data:
-                result.append(
-                    {'name': name, 'lat': stops_data[name]['lat'], 'lon': stops_data[name]['lon'], 'reached': False})
+                result.append({
+                    'name': name, 
+                    'lat': stops_data[name]['lat'], 
+                    'lon': stops_data[name]['lon'], 
+                    'factor': stops_data[name].get('factor', 1), 
+                    'reached': False
+                })
                     
         return jsonify(result)
-
 
 @app.route('/api/all_stops')
 def api_all_stops():
     result = []
     for name, data in stops_data.items():
-        result.append({'name': name, 'lat': data['lat'], 'lon': data['lon']})
+        result.append({'name': name, 'lat': data['lat'], 'lon': data['lon'], 'factor': data.get('factor', 1)})
     return jsonify(result)
 
 
@@ -908,10 +934,9 @@ def api_ticker_data():
         for t_id, d in state["teams_data"].items():
             if d.get("deactivated", False):
                 continue
-            score = (len(d.get("stops", [])) * config["points_stop_reached"] +
-                     len(d.get("caught", [])) * config["points_caught_team"] +
-                     len(d.get("caught_by", [])) * config["points_was_caught"] +
-                     d.get("manual_points", 0))
+
+            score = calculate_score(d, config)
+
             leaderboard.append({
                 "id": t_id, "display_name": d["display_name"], "score": score, 
                 "role": d.get("role", "keine"), "next_role": d.get("next_role", "")
