@@ -1,0 +1,13 @@
+services:
+  traccar:
+    image: traccar/traccar:5.12
+    container_name: traccar-server
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+      - "5055:5055"
+    volumes:
+      - ./traccar.xml:/opt/traccar/conf/traccar.xml:ro
+      - ./traccar_data:/opt/traccar/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

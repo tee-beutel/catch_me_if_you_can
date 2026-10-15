@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traccar Diagnose & E2E-Test</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --border: #334155;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --green: #22c55e;
+            --red: #ef4444;
+            --amber: #f59e0b;
+            --blue: #3b82f6;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+            background: var(--bg);
+            color: var(--text);
+            padding: 24px;
+            line-height: 1.5;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        h1 { font-size: 1.5rem; display: flex; align-items: center; gap: 10px; }
+        .btn {
+            background: var(--blue);
+            color: #fff;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.92rem;
+            transition: opacity 0.15s;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary { background: var(--border); }
+        .btn-green { background: var(--green); color: #052e16; }
+        .btn-red { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid var(--red); }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .card h2 {
+            font-size: 1.05rem;
+            margin-bottom: 14px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .status-row:last-child { border-bottom: none; }
+        .badge {
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-align: right;
+        }
+        .badge-ok { background: rgba(34, 197, 94, 0.2); color: var(--green); }
+        .badge-err { background: rgba(239, 68, 68, 0.2); color: var(--red); }
+        .badge-warn { background: rgba(245, 158, 11, 0.2); color: var(--amber); }
+
+        .step-list { list-style: none; margin-top: 16px; }
+        .step-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            background: rgba(0,0,0,0.2);
+            margin-bottom: 8px;
+            border-left: 4px solid var(--border);
+        }
+        .step-item.ok { border-left-color: var(--green); }
+        .step-item.fail { border-left-color: var(--red); }
+        .step-title { font-weight: 700; font-size: 0.95rem; }
+        .step-detail { font-size: 0.85rem; color: var(--muted); margin-top: 2px; word-break: break-word; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-top: 10px; }
+        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+        th { color: var(--muted); font-weight: 600; }
+        code { background: rgba(0,0,0,0.35); padding: 2px 6px; border-radius: 4px; font-size: 0.82rem; }
+        .empty { color: var(--muted); font-style: italic; padding: 12px 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>🛰️ Traccar Diagnose & End-to-End Test</h1>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-secondary" onclick="loadStatus()">🔄 Status aktualisieren</button>
+            <a class="btn btn-secondary" href="/adminconsole-{{ admin_url }}">⬅️ Zurück zum Admin-Panel</a>
+        </div>
+    </header>
+
+    <div class="grid">
+        <!-- Systemstatus -->
+        <div class="card">
+            <h2>1. Verbindungs- & API-Status</h2>
+            <div class="status-row">
+                <span>Traccar API (Port 8082)</span>
+                <span id="st-api" class="badge badge-warn">Prüfe...</span>
+            </div>
+            <div class="status-row">
+                <span>GPS OsmAnd-Eingang (Port 5055)</span>
+                <span id="st-osmand" class="badge badge-warn">Prüfe...</span>
+            </div>
+            <div class="status-row">
+                <span>Konfigurierter API-User (.env)</span>
+                <code id="st-user">-</code>
+            </div>
+            <div class="status-row">
+                <span>Geräte in Traccar registriert</span>
+                <strong id="st-dev-count">-</strong>
+            </div>
+            <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 8px;">
+                <button class="btn btn-secondary" style="width: 100%; justify-content: center;" onclick="forceSync()">
+                    🔁 Teams jetzt manuell mit Traccar synchronisieren
+                </button>
+                <button id="btn-reset" class="btn btn-red" style="width: 100%; justify-content: center;" onclick="hardResetTraccar()">
+                    🧨 Traccar-Container & DB komplett zurücksetzen
+                </button>
+            </div>
+        </div>
+
+        <!-- E2E Test -->
+        <div class="card">
+            <h2>2. Koblenz Loopback-Test (End-to-End)</h2>
+            <p style="font-size: 0.88rem; color: var(--muted); margin-bottom: 14px;">
+                Erstellt einen temporären Test-User in Traccar, sendet die Koordinaten vom
+                <strong>Deutschen Eck in Koblenz (50.3644, 7.6061)</strong> an Port 5055 und prüft,
+                ob Traccar diese per Webhook an Python (<code>/api/traccar</code>) weiterleitet.
+            </p>
+            <button id="btn-test" class="btn btn-green" style="width: 100%; justify-content: center;" onclick="runE2ETest()">
+                🚀 End-to-End Test (Koblenz) jetzt starten
+            </button>
+            <ul id="test-steps" class="step-list"></ul>
+        </div>
+    </div>
+
+    <div class="grid">
+        <!-- Registrierte Geräte in Traccar -->
+        <div class="card">
+            <h2>Registrierte Geräte in Traccar</h2>
+            <div id="devices-container">
+                <p class="empty">Lade Geräte...</p>
+            </div>
+        </div>
+
+        <!-- Letzte Webhook-Eingänge in Python -->
+        <div class="card">
+            <h2>Letzte Eingänge bei /api/traccar (Python)</h2>
+            <div id="webhooks-container">
+                <p class="empty">Noch keine GPS-Pakete empfangen.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const ADMIN_SLUG = "{{ admin_url }}";
+
+    async function loadStatus() {
+        try {
+            const res = await fetch(`/api/traccar_debug/${ADMIN_SLUG}/status`);
+            const data = await res.json();
+
+            const apiBadge = document.getElementById('st-api');
+            if (data.api_online) {
+                apiBadge.textContent = "ONLINE & AUTHENTIFIZIERT";
+                apiBadge.className = "badge badge-ok";
+            } else {
+                apiBadge.textContent = data.api_error || "OFFLINE / FEHLER";
+                apiBadge.className = "badge badge-err";
+            }
+
+            const osmandBadge = document.getElementById('st-osmand');
+            if (data.osmand_port_open) {
+                osmandBadge.textContent = "OFFEN (PORT 5055)";
+                osmandBadge.className = "badge badge-ok";
+            } else {
+                osmandBadge.textContent = "NICHT ERREICHBAR";
+                osmandBadge.className = "badge badge-err";
+            }
+
+            document.getElementById('st-user').textContent = data.traccar_user || "-";
+            document.getElementById('st-dev-count').textContent = data.devices ? data.devices.length : 0;
+
+            renderDevices(data.devices || []);
+            renderWebhooks(data.recent_webhooks || []);
+        } catch (err) {
+            console.error("Fehler beim Status-Abruf:", err);
+        }
+    }
+
+    function renderDevices(devices) {
+        const container = document.getElementById('devices-container');
+        if (!devices.length) {
+            container.innerHTML = '<p class="empty">Keine Geräte in Traccar vorhanden.</p>';
+            return;
+        }
+        let html = '<table><thead><tr><th>ID</th><th>Name</th><th>UniqueId (Slug)</th><th>Status</th></tr></thead><tbody>';
+        for (const d of devices) {
+            const statusClass = d.status === 'online' ? 'badge-ok' : 'badge-warn';
+            html += `<tr>
+                <td>${d.id}</td>
+                <td><strong>${d.name}</strong></td>
+                <td><code>${d.uniqueId}</code></td>
+                <td><span class="badge ${statusClass}">${d.status || 'unknown'}</span></td>
+            </tr>`;
+        }
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+
+    function renderWebhooks(logs) {
+        const container = document.getElementById('webhooks-container');
+        if (!logs.length) {
+            container.innerHTML = '<p class="empty">Noch keine Pakete bei /api/traccar angekommen.</p>';
+            return;
+        }
+        let html = '<table><thead><tr><th>Zeit</th><th>Kennung (ID)</th><th>Koordinaten</th><th>Ergebnis</th></tr></thead><tbody>';
+        for (const entry of logs) {
+            const badgeClass = entry.matched ? 'badge-ok' : 'badge-warn';
+            html += `<tr>
+                <td>${entry.time_str}</td>
+                <td><code>${entry.identifier}</code></td>
+                <td>${Number(entry.lat).toFixed(5)}, ${Number(entry.lon).toFixed(5)}</td>
+                <td><span class="badge ${badgeClass}">${entry.status}</span></td>
+            </tr>`;
+        }
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+
+    async function forceSync() {
+        const res = await fetch(`/api/traccar_debug/${ADMIN_SLUG}/sync`, { method: 'POST' });
+        const data = await res.json();
+        await loadStatus();
+        alert(data.success ? "✅ Synchronisation erfolgreich durchgeführt!" : "❌ Synchronisation fehlgeschlagen: " + (data.error || ""));
+    }
+
+    async function hardResetTraccar() {
+        if (!confirm("Möchtest du den Traccar-Docker-Container und dessen interne Datenbank wirklich komplett zurücksetzen und mit den .env-Zugangsdaten neu initialisieren?")) {
+            return;
+        }
+        const btn = document.getElementById('btn-reset');
+        btn.disabled = true;
+        btn.textContent = "⏳ Container & DB werden neu aufgebaut (ca. 10–15s)...";
+        try {
+            const res = await fetch(`/api/traccar_debug/${ADMIN_SLUG}/hard_reset`, { method: 'POST' });
+            const data = await res.json();
+            await loadStatus();
+            if (data.success) {
+                alert("✅ Traccar wurde frisch zurückgesetzt, mit den .env-Daten eingerichtet und synchronisiert!");
+            } else {
+                alert("⚠️ Hinweis: " + (data.error || "Container startet noch."));
+            }
+        } catch (e) {
+            alert("Fehler beim Reset: " + e);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "🧨 Traccar-Container & DB komplett zurücksetzen";
+        }
+    }
+
+    async function runE2ETest() {
+        const btn = document.getElementById('btn-test');
+        const list = document.getElementById('test-steps');
+        btn.disabled = true;
+        btn.textContent = "⏳ Test läuft (ca. 2–5 Sekunden)...";
+        list.innerHTML = '<li class="step-item"><div class="step-title">Starte End-to-End Test über Koblenz...</div></li>';
+
+        try {
+            const res = await fetch(`/api/traccar_debug/${ADMIN_SLUG}/test`, { method: 'POST' });
+            const data = await res.json();
+
+            list.innerHTML = '';
+            for (const step of (data.steps || [])) {
+                const li = document.createElement('li');
+                li.className = 'step-item ' + (step.ok ? 'ok' : 'fail');
+                li.innerHTML = `
+                    <div>${step.ok ? '✅' : '❌'}</div>
+                    <div>
+                        <div class="step-title">${step.step}</div>
+                        <div class="step-detail">${step.detail}</div>
+                    </div>
+                `;
+                list.appendChild(li);
+            }
+            await loadStatus();
+        } catch (e) {
+            list.innerHTML = `<li class="step-item fail"><div>❌</div><div><div class="step-title">Netzwerkfehler</div><div class="step-detail">${e}</div></div></li>`;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "🚀 End-to-End Test (Koblenz) erneut starten";
+        }
+    }
+
+    loadStatus();
+    setInterval(loadStatus, 5000);
+</script>
+</body>
+</html>
