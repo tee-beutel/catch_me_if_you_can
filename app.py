@@ -1,4 +1,6 @@
 import os
+import sys
+import subprocess
 import json
 import random
 import uuid
@@ -6,9 +8,11 @@ import time
 import re
 import shutil
 import socket
+import atexit
+import zipfile
+import urllib.request
 import sqlite3
 import secrets
-import subprocess
 import threading
 from collections import deque
 from datetime import datetime, timedelta
@@ -29,9 +33,21 @@ except ImportError:
 
 app = Flask(__name__)
 
-# --- ADMIN PASSWORT & SICHERER URL-SLUG --- #
+# --- PFADE & KONSTANTEN ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_FILE = os.path.join(BASE_DIR, 'Catch_Haltestellen.json')
+DB_FILE = os.path.join(BASE_DIR, 'game.db')
+
+# Alle Traccar-Dateien liegen strikt isoliert im Projektordner unter ./traccar_runtime
+TRACCAR_RUNTIME_DIR = os.path.join(BASE_DIR, 'traccar_runtime')
+TRACCAR_DATA_DIR = os.path.join(TRACCAR_RUNTIME_DIR, 'data')
+TRACCAR_LOGS_DIR = os.path.join(TRACCAR_RUNTIME_DIR, 'logs')
+TRACCAR_JAR_PATH = os.path.join(TRACCAR_RUNTIME_DIR, 'tracker-server.jar')
+TRACCAR_XML_PATH = os.path.join(BASE_DIR, 'traccar.xml')
+TRACCAR_VERSION = "5.12"
+
+# --- ADMIN PASSWORT --- #
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234-5")
-ADMIN_SLUG = secrets.token_urlsafe(16)
 
 # --- STANDARD-KONFIGURATION ---
 DEFAULT_CONFIG = {
@@ -49,11 +65,6 @@ DEFAULT_CONFIG = {
     "shuffle_stops_on_swap": True        
 }
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(BASE_DIR, 'Catch_Haltestellen.json')
-DB_FILE = os.path.join(BASE_DIR, 'game.db')
-TRACCAR_DATA_DIR = os.path.join(BASE_DIR, 'traccar_data')
-
 with open(DATA_FILE, 'r', encoding='utf-8') as f:
     stops_data = json.load(f)
 
@@ -68,282 +79,15 @@ TRACCAR_USER = os.getenv("TRACCAR_API_USER", "admin").strip()
 TRACCAR_PASS = os.getenv("TRACCAR_API_PASSWORD", "admin").strip()
 
 traccar_lock = threading.Lock()
+install_lock = threading.Lock()
 traccar_session = requests.Session()
+traccar_process = None
 traccar_ready = False
 traccar_last_error = "Initialisiere..."
 
 # In-Memory Log für das Debug-Dashboard (/traccar_debug_<admin_slug>)
 recent_traccar_webhooks = deque(maxlen=25)
 debug_test_events = {}
-
-
-def get_compose_cmd():
-    """Ermittelt, ob 'docker compose' oder 'docker-compose' auf dem System verfügbar ist."""
-    for cmd in (["docker", "compose"], ["docker-compose"]):
-        try:
-            subprocess.run(cmd + ["version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-            return cmd
-        except Exception:
-            continue
-    return None
-
-
-def start_traccar_container():
-    """Startet den Traccar Docker-Container automatisch."""
-    print("🐳 Prüfe / Starte Docker-Container für Traccar...")
-    base_cmd = get_compose_cmd()
-    if not base_cmd:
-        print("⚠️ Weder 'docker compose' noch 'docker-compose' gefunden.")
-        return False
-
-    try:
-        subprocess.run(
-            base_cmd + ["up", "-d", "--force-recreate"],
-            cwd=BASE_DIR,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        print(f"✅ Traccar via Docker gestartet ({' '.join(base_cmd)} up -d).")
-        return True
-    except subprocess.CalledProcessError as e:
-        err_msg = e.stderr.decode('utf-8', errors='ignore') if e.stderr else str(e)
-        print(f"⚠️ Docker-Warnung beim Start: {err_msg.strip()}")
-        return False
-    except Exception as e:
-        print(f"⚠️ Unerwarteter Fehler beim Docker-Start: {e}")
-        return False
-
-
-def reset_traccar_container_and_db():
-    """
-    Löscht den alten Traccar-Container inklusive kaputter/gesperrter H2-Datenbank
-    und startet ihn sauber neu, damit 'admin/admin' wieder frisch initialisiert wird.
-    """
-    global traccar_ready, traccar_last_error, traccar_session
-    print("🧨 Setze Traccar-Container und interne H2-Datenbank komplett zurück...")
-    traccar_ready = False
-    traccar_last_error = "Container wird zurückgesetzt..."
-    traccar_session = requests.Session()
-
-    base_cmd = get_compose_cmd()
-    if not base_cmd:
-        traccar_last_error = "Docker Compose nicht gefunden"
-        return False
-
-    try:
-        # 1. Container stoppen und anonyme Volumes entfernen
-        subprocess.run(base_cmd + ["down", "-v"], cwd=BASE_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        # Falls noch ein alter Container namens traccar-server hängt:
-        subprocess.run(["docker", "rm", "-f", "traccar-server"], cwd=BASE_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        # 2. Lokalen traccar_data Ordner leeren (falls durch Root/Docker angelegt, zur Not via Alpine-Container)
-        if os.path.exists(TRACCAR_DATA_DIR):
-            try:
-                shutil.rmtree(TRACCAR_DATA_DIR)
-            except PermissionError:
-                subprocess.run(
-                    ["docker", "run", "--rm", "-v", f"{TRACCAR_DATA_DIR}:/data", "alpine", "sh", "-c", "rm -rf /data/*"],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE
-                )
-        os.makedirs(TRACCAR_DATA_DIR, exist_ok=True)
-
-        # 3. Frisch starten
-        subprocess.run(base_cmd + ["up", "-d"], cwd=BASE_DIR, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        print("✅ Traccar-Container frisch erstellt. Warte auf Bootvorgang...")
-        return True
-    except Exception as e:
-        traccar_last_error = f"Reset-Fehler: {e}"
-        print(f"❌ Fehler beim Zurücksetzen von Traccar: {e}")
-        return False
-
-
-def ensure_traccar_credentials():
-    """
-    Meldet sich an der Traccar-API an (speichert Session-Cookie + BasicAuth).
-    Falls noch die Standard-Zugangsdaten (admin/admin) aktiv sind, werden diese
-    automatisch auf TRACCAR_API_USER und TRACCAR_API_PASSWORD aus der .env umgestellt.
-    """
-    global traccar_ready, traccar_last_error
-    try:
-        # 1. Prüfen, ob Login mit den .env-Zugangsdaten klappt (POST /api/session)
-        resp = traccar_session.post(
-            f"{TRACCAR_BASE_URL}/session",
-            data={"email": TRACCAR_USER, "password": TRACCAR_PASS},
-            timeout=4
-        )
-        if resp.status_code == 200:
-            traccar_session.auth = HTTPBasicAuth(TRACCAR_USER, TRACCAR_PASS)
-            traccar_ready = True
-            traccar_last_error = None
-            return True
-
-        # 2. Falls 401: Versuchen, mit Traccar-Default (admin / admin) einzuloggen
-        resp_default = traccar_session.post(
-            f"{TRACCAR_BASE_URL}/session",
-            data={"email": "admin", "password": "admin"},
-            timeout=4
-        )
-        if resp_default.status_code == 200:
-            user_data = resp_default.json()
-            user_id = user_data.get("id")
-            user_data["email"] = TRACCAR_USER
-            user_data["name"] = TRACCAR_USER
-            user_data["password"] = TRACCAR_PASS
-
-            # Benutzer über aktive Session + BasicAuth aktualisieren
-            update_resp = traccar_session.put(
-                f"{TRACCAR_BASE_URL}/users/{user_id}",
-                json=user_data,
-                auth=HTTPBasicAuth("admin", "admin"),
-                timeout=5
-            )
-            if update_resp.status_code == 200:
-                print(f"🔐 Traccar Standard-Login erfolgreich auf '{TRACCAR_USER}' geändert!")
-                # Neue Session mit den neuen Credentials öffnen
-                traccar_session.post(
-                    f"{TRACCAR_BASE_URL}/session",
-                    data={"email": TRACCAR_USER, "password": TRACCAR_PASS},
-                    timeout=4
-                )
-                traccar_session.auth = HTTPBasicAuth(TRACCAR_USER, TRACCAR_PASS)
-                traccar_ready = True
-                traccar_last_error = None
-                return True
-            else:
-                traccar_last_error = f"Admin-Update fehlgeschlagen (HTTP {update_resp.status_code})"
-        else:
-            traccar_last_error = f"Login abgelehnt (HTTP {resp.status_code}) – Alte DB im Container?"
-
-    except requests.exceptions.ConnectionError:
-        traccar_last_error = "Port 8082 nicht erreichbar (Traccar bootet oder DB-Crash)"
-    except requests.exceptions.Timeout:
-        traccar_last_error = "Timeout auf Port 8082"
-    except Exception as e:
-        traccar_last_error = f"Fehler: {e}"
-
-    traccar_ready = False
-    return False
-
-
-def sync_traccar_devices(teams_data=None):
-    """
-    Synchronisiert die Teams resilient mit Traccar:
-    - Legt fehlende aktive Teams (anhand des Slugs = Name + PIN) an.
-    - Benennt Teams um, falls sich der Anzeigename geändert hat.
-    - Löscht veraltete Geräte (z.B. nach PIN-Wechsel, Löschung oder Deaktivierung).
-    """
-    with traccar_lock:
-        if not traccar_ready:
-            if not ensure_traccar_credentials():
-                return False
-
-        if teams_data is None:
-            try:
-                with sqlite3.connect(DB_FILE, timeout=10) as conn:
-                    conn.row_factory = sqlite3.Row
-                    state = get_state(conn)
-                    teams_data = state.get("teams_data", {})
-            except Exception as e:
-                print(f"⚠️ Konnte Teams für Traccar-Sync nicht aus DB lesen: {e}")
-                return False
-
-        try:
-            resp = traccar_session.get(TRACCAR_API_URL, timeout=5)
-            if resp.status_code == 401:
-                if not ensure_traccar_credentials():
-                    return False
-                resp = traccar_session.get(TRACCAR_API_URL, timeout=5)
-
-            if resp.status_code != 200:
-                print(f"⚠️ Traccar Sync: Fehler beim Abrufen der Geräte (HTTP {resp.status_code})")
-                return False
-
-            existing_devices = resp.json()
-            existing_by_slug = {dev["uniqueId"]: dev for dev in existing_devices if "uniqueId" in dev}
-
-            # Soll-Zustand: Alle aktiven Teams mit ihrem aktuellen Slug (beinhaltet PIN)
-            desired_devices = {}
-            for t_id, t_data in teams_data.items():
-                if not t_data.get("deactivated", False):
-                    slug = t_data.get("slug")
-                    name = t_data.get("display_name", t_id)
-                    if slug:
-                        desired_devices[slug] = name
-
-            # 1. Neue Geräte anlegen oder bestehende umbenennen
-            for slug, name in desired_devices.items():
-                if slug not in existing_by_slug:
-                    payload = {"name": name, "uniqueId": slug}
-                    create_res = traccar_session.post(TRACCAR_API_URL, json=payload, timeout=5)
-                    if create_res.status_code in (200, 201):
-                        print(f"✅ Traccar Sync: Gerät '{name}' (ID: {slug}) angelegt.")
-                else:
-                    dev = existing_by_slug[slug]
-                    if dev.get("name") != name:
-                        dev["name"] = name
-                        upd_res = traccar_session.put(f"{TRACCAR_API_URL}/{dev['id']}", json=dev, timeout=5)
-                        if upd_res.status_code == 200:
-                            print(f"🔄 Traccar Sync: Gerät '{slug}' in '{name}' umbenannt.")
-
-            # 2. Veraltete Geräte (z.B. alte PIN / deaktiviertes Team) aus Traccar entfernen
-            for slug, dev in existing_by_slug.items():
-                if slug.startswith("debug-koblenz-"):
-                    continue
-                if slug not in desired_devices:
-                    del_res = traccar_session.delete(f"{TRACCAR_API_URL}/{dev['id']}", timeout=5)
-                    if del_res.status_code in (200, 204):
-                        print(f"🗑️ Traccar Sync: Veraltetes Gerät '{dev.get('name')}' (ID: {slug}) entfernt.")
-
-            return True
-
-        except Exception as e:
-            print(f"⚠️ Traccar Sync fehlgeschlagen: {e}")
-            return False
-
-
-def trigger_traccar_sync_async(teams_data):
-    """Führt den Traccar-Sync asynchron im Hintergrund aus, damit Requests nicht blockieren."""
-    copy_data = json.loads(json.dumps(teams_data))
-    threading.Thread(target=sync_traccar_devices, args=(copy_data,), daemon=True).start()
-
-
-def traccar_background_worker():
-    """
-    Hintergrund-Thread: Wartet auf Traccar beim Start.
-    Falls die alte Datenbank im Container gesperrt ist oder einen Login-Konflikt (401)
-    aus einem früheren Lauf hat, setzt er den Container einmalig automatisch zurück!
-    """
-    print("⏳ Verbinde mit Traccar API...")
-    failed_attempts = 0
-    auto_reset_done = False
-
-    while True:
-        try:
-            if ensure_traccar_credentials():
-                sync_traccar_devices()
-                break
-            else:
-                failed_attempts += 1
-                # Wenn nach 5 Versuchen (~15s) immer noch 401 oder DB-Crash vorliegt -> Auto-Self-Heal!
-                if failed_attempts >= 5 and not auto_reset_done:
-                    print(f"⚠️ Traccar antwortet nicht korrekt ({traccar_last_error}). Starte automatische Selbstheilung...")
-                    auto_reset_done = True
-                    reset_traccar_container_and_db()
-                    failed_attempts = 0
-                    time.sleep(6)
-                    continue
-        except Exception as e:
-            print(f"Fehler im Traccar-Worker: {e}")
-        time.sleep(3)
-
-    print("🚀 Traccar API verbunden und synchronisiert!")
-    while True:
-        time.sleep(30)
-        try:
-            sync_traccar_devices()
-        except Exception:
-            pass
 
 
 # --- DATENBANK SETUP ---
@@ -442,6 +186,462 @@ def init_db():
 init_db()
 
 
+def get_or_create_admin_slug():
+    """Hält den ADMIN_SLUG in der DB persistent, damit offene Browser-Tabs bei Neustart nicht 403 werfen."""
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        c = conn.cursor()
+        c.execute("SELECT value FROM settings WHERE key = 'admin_slug'")
+        row = c.fetchone()
+        if row and row[0]:
+            return row[0]
+        slug = secrets.token_urlsafe(16)
+        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_slug', ?)", (slug,))
+        conn.commit()
+        return slug
+
+ADMIN_SLUG = get_or_create_admin_slug()
+
+
+# --- LOKALER JAVA-TRACCAR MANAGER ---
+def is_port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1.0)
+        return s.connect_ex(('127.0.0.1', port)) == 0
+
+
+def stop_legacy_docker_container():
+    """Stoppt eventuell noch laufende Docker-Container von früher, damit Port 8082/5055 frei sind."""
+    if shutil.which("docker"):
+        for prefix in ([], ["sudo", "-n"]):
+            try:
+                res = subprocess.run(
+                    prefix + ["docker", "ps", "-q", "-f", "name=traccar-server"],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=3
+                )
+                if res.stdout.strip():
+                    print("🧹 Alter Docker-Container 'traccar-server' erkannt. Stoppe und entferne ihn...")
+                    subprocess.run(prefix + ["docker", "rm", "-f", "traccar-server"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    time.sleep(1)
+            except Exception:
+                pass
+
+
+def get_java_executable():
+    """Prüft auf Java und installiert es unter Debian/Ubuntu/Mint bei Bedarf automatisch nach."""
+    sys_java = shutil.which("java")
+    if sys_java:
+        return sys_java
+
+    if shutil.which("apt"):
+        print("☕ Java wurde nicht gefunden. Installiere 'default-jre-headless'...")
+        try:
+            subprocess.run(["sudo", "apt", "update"], check=True)
+            subprocess.run(["sudo", "apt", "install", "-y", "default-jre-headless"], check=True)
+            return shutil.which("java")
+        except Exception as e:
+            print(f"⚠️ Konnte Java nicht automatisch via apt installieren: {e}")
+
+    return None
+
+
+def ensure_traccar_xml():
+    """Stellt sicher, dass traccar.xml im Projektordner existiert und lokal auf 127.0.0.1 zeigt."""
+    if os.path.exists(TRACCAR_XML_PATH):
+        with open(TRACCAR_XML_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+        updated = content
+        if "host.docker.internal" in updated:
+            updated = updated.replace("host.docker.internal", "127.0.0.1")
+        # Falls noch das alte falsche Passwort auf der H2-DB steht, auf Standard 'sa' ohne Passwort korrigieren
+        if "<entry key='database.user'>admin</entry>" in updated:
+            updated = updated.replace("<entry key='database.user'>admin</entry>", "<entry key='database.user'>sa</entry>")
+            updated = re.sub(r"<entry key='database\.password'>.*?</entry>", "<entry key='database.password'></entry>", updated)
+        if updated != content:
+            print("🔧 Aktualisiere traccar.xml für lokalen Java-Betrieb...")
+            with open(TRACCAR_XML_PATH, "w", encoding="utf-8") as f:
+                f.write(updated)
+        return
+
+    xml_content = """<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE properties SYSTEM 'http://java.sun.com/dtd/properties.dtd'>
+<properties>
+    <entry key='config.default'>./conf/default.xml</entry>
+    <entry key='database.driver'>org.h2.Driver</entry>
+    <entry key='database.url'>jdbc:h2:./data/database</entry>
+    <entry key='database.user'>sa</entry>
+    <entry key='database.password'></entry>
+    <entry key='web.port'>8082</entry>
+    <entry key='osmand.port'>5055</entry>
+    <entry key='forward.enable'>true</entry>
+    <entry key='forward.url'>http://127.0.0.1:5000/api/traccar?id={uniqueId}&amp;lat={latitude}&amp;lon={longitude}&amp;timestamp={fixTime}</entry>
+    <entry key='forward.retry.enable'>true</entry>
+</properties>
+"""
+    with open(TRACCAR_XML_PATH, "w", encoding="utf-8") as f:
+        f.write(xml_content)
+
+
+def ensure_traccar_installed():
+    """
+    Lädt das plattformunabhängige 'traccar-other-5.12.zip' direkt in ./traccar_runtime herunter.
+    """
+    with install_lock:
+        ensure_traccar_xml()
+        os.makedirs(TRACCAR_DATA_DIR, exist_ok=True)
+        os.makedirs(TRACCAR_LOGS_DIR, exist_ok=True)
+
+        if os.path.isfile(TRACCAR_JAR_PATH):
+            return True
+
+        print(f"📥 Lade portables Traccar v{TRACCAR_VERSION} (traccar-other) in ./traccar_runtime herunter...")
+        os.makedirs(TRACCAR_RUNTIME_DIR, exist_ok=True)
+
+        url = f"https://github.com/traccar/traccar/releases/download/v{TRACCAR_VERSION}/traccar-other-{TRACCAR_VERSION}.zip"
+        zip_path = os.path.join(TRACCAR_RUNTIME_DIR, f"traccar-other-{TRACCAR_VERSION}.zip")
+
+        try:
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+
+            urllib.request.urlretrieve(url, zip_path)
+            print("📦 Entpacke Traccar direkt in ./traccar_runtime ...")
+            with zipfile.ZipFile(zip_path, 'r') as zf:
+                zf.extractall(TRACCAR_RUNTIME_DIR)
+
+            if os.path.isfile(zip_path):
+                os.remove(zip_path)
+
+            if os.path.isfile(TRACCAR_JAR_PATH):
+                print("✅ Traccar erfolgreich lokal in ./traccar_runtime bereitgestellt!")
+                return True
+            else:
+                print("❌ Fehler: tracker-server.jar wurde nach dem Entpacken nicht gefunden.")
+                return False
+        except Exception as e:
+            print(f"❌ Download/Entpacken von Traccar fehlgeschlagen: {e}")
+            if os.path.exists(zip_path):
+                try:
+                    os.remove(zip_path)
+                except Exception:
+                    pass
+            return False
+
+
+def stop_traccar_process():
+    """Beendet den von Python gestarteten Java-Traccar-Prozess sauber."""
+    global traccar_process
+    if traccar_process and traccar_process.poll() is None:
+        print("🛑 Beende lokalen Java-Traccar-Server...")
+        try:
+            traccar_process.terminate()
+            traccar_process.wait(timeout=5)
+        except Exception:
+            try:
+                traccar_process.kill()
+            except Exception:
+                pass
+    traccar_process = None
+
+atexit.register(stop_traccar_process)
+
+
+def start_traccar_server():
+    """Startet Traccar direkt als lokalen Java-Hintergrundprozess im Projektordner."""
+    global traccar_process, traccar_last_error
+
+    stop_legacy_docker_container()
+
+    if not ensure_traccar_installed():
+        traccar_last_error = "Traccar-Download in ./traccar_runtime fehlgeschlagen"
+        return False
+
+    if traccar_process and traccar_process.poll() is None:
+        return True
+
+    if is_port_in_use(8082):
+        if ensure_traccar_credentials():
+            print("ℹ️ Bestehender lokaler Traccar-Prozess auf Port 8082 gefunden und übernommen.")
+            return True
+        else:
+            print("⚠️ Port 8082 ist bereits belegt (alter Container oder Prozess). Bereinige Port 8082 & 5055...")
+            subprocess.run(["fuser", "-k", "8082/tcp"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            subprocess.run(["fuser", "-k", "5055/tcp"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            time.sleep(1)
+
+    java_bin = get_java_executable()
+    if not java_bin:
+        traccar_last_error = "Kein Java (JRE) gefunden! Bitte 'sudo apt install default-jre-headless' ausführen."
+        print(f"❌ {traccar_last_error}")
+        return False
+
+    log_file_path = os.path.join(TRACCAR_LOGS_DIR, "traccar-stdout.log")
+    log_file = open(log_file_path, "a", encoding="utf-8")
+
+    print(f"☕ Starte lokalen Java-Traccar-Server ({java_bin} -jar tracker-server.jar)...")
+    try:
+        traccar_process = subprocess.Popen(
+            [java_bin, "-Dfile.encoding=UTF-8", "-jar", TRACCAR_JAR_PATH, TRACCAR_XML_PATH],
+            cwd=TRACCAR_RUNTIME_DIR,
+            stdout=log_file,
+            stderr=subprocess.STDOUT
+        )
+        print(f"✅ Lokaler Traccar-Prozess gestartet (PID: {traccar_process.pid}).")
+        return True
+    except Exception as e:
+        traccar_last_error = f"Startfehler: {e}"
+        print(f"❌ Fehler beim Starten von Java-Traccar: {e}")
+        return False
+
+
+def reset_traccar_process_and_db():
+    """
+    Stoppt den lokalen Java-Traccar-Prozess, löscht den ./traccar_runtime/data Ordner (H2-DB)
+    und startet Traccar frisch.
+    """
+    global traccar_ready, traccar_last_error, traccar_session
+    print("🧨 Setze lokalen Java-Traccar-Server und H2-Datenbank zurück...")
+    traccar_ready = False
+    traccar_last_error = "Datenbank wird zurückgesetzt..."
+    traccar_session = requests.Session()
+
+    stop_traccar_process()
+    subprocess.run(["fuser", "-k", "8082/tcp"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    subprocess.run(["fuser", "-k", "5055/tcp"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    time.sleep(1)
+
+    try:
+        if os.path.exists(TRACCAR_DATA_DIR):
+            shutil.rmtree(TRACCAR_DATA_DIR, ignore_errors=True)
+        os.makedirs(TRACCAR_DATA_DIR, exist_ok=True)
+        return start_traccar_server()
+    except Exception as e:
+        traccar_last_error = f"Reset-Fehler: {e}"
+        return False
+
+
+def ensure_traccar_credentials():
+    """
+    Meldet sich an der lokalen Traccar-API an und richtet beim Erststart automatisch den Admin-User
+    aus der .env (TRACCAR_API_USER / TRACCAR_API_PASSWORD) ein.
+    """
+    global traccar_ready, traccar_last_error
+    try:
+        # 1. Prüfen, ob Login mit den .env-Zugangsdaten bereits klappt (POST /api/session)
+        resp = traccar_session.post(
+            f"{TRACCAR_BASE_URL}/session",
+            data={"email": TRACCAR_USER, "password": TRACCAR_PASS},
+            timeout=3
+        )
+        if resp.status_code == 200:
+            traccar_session.auth = HTTPBasicAuth(TRACCAR_USER, TRACCAR_PASS)
+            traccar_ready = True
+            traccar_last_error = None
+            return True
+
+        # 2. Traccar 5.12 First-Run-Setup:
+        #    WICHTIG: "administrator": True darf NICHT im unauthentifizierten POST stehen,
+        #    sonst wirft Traccar eine SecurityException (HTTP 400)!
+        #    Der allererste User in einer leeren H2-Datenbank wird von Traccar automatisch zum Admin gemacht.
+        reg_payload = {
+            "name": TRACCAR_USER,
+            "email": TRACCAR_USER,
+            "password": TRACCAR_PASS
+        }
+        reg_resp = requests.post(f"{TRACCAR_BASE_URL}/users", json=reg_payload, timeout=4)
+        if reg_resp.status_code in (200, 201):
+            print(f"🔐 Frische Traccar-Datenbank erkannt: Admin-User '{TRACCAR_USER}' erfolgreich erstregistriert!")
+            login_resp = traccar_session.post(
+                f"{TRACCAR_BASE_URL}/session",
+                data={"email": TRACCAR_USER, "password": TRACCAR_PASS},
+                timeout=3
+            )
+            if login_resp.status_code == 200:
+                traccar_session.auth = HTTPBasicAuth(TRACCAR_USER, TRACCAR_PASS)
+                traccar_ready = True
+                traccar_last_error = None
+                return True
+
+        # 3. Fallback für ältere Traccar-Datenbanken mit Default-Login (admin / admin)
+        resp_default = traccar_session.post(
+            f"{TRACCAR_BASE_URL}/session",
+            data={"email": "admin", "password": "admin"},
+            timeout=3
+        )
+        if resp_default.status_code == 200:
+            user_data = resp_default.json()
+            user_id = user_data.get("id")
+            user_data["email"] = TRACCAR_USER
+            user_data["name"] = TRACCAR_USER
+            user_data["password"] = TRACCAR_PASS
+
+            update_resp = traccar_session.put(
+                f"{TRACCAR_BASE_URL}/users/{user_id}",
+                json=user_data,
+                auth=HTTPBasicAuth("admin", "admin"),
+                timeout=5
+            )
+            if update_resp.status_code == 200:
+                print(f"🔐 Traccar Standard-Login erfolgreich auf '{TRACCAR_USER}' (.env) umgestellt!")
+                traccar_session.post(
+                    f"{TRACCAR_BASE_URL}/session",
+                    data={"email": TRACCAR_USER, "password": TRACCAR_PASS},
+                    timeout=3
+                )
+                traccar_session.auth = HTTPBasicAuth(TRACCAR_USER, TRACCAR_PASS)
+                traccar_ready = True
+                traccar_last_error = None
+                return True
+            else:
+                traccar_last_error = f"Admin-Update fehlgeschlagen (HTTP {update_resp.status_code})"
+        else:
+            traccar_last_error = f"Login abgelehnt (HTTP {resp.status_code}, Reg-HTTP {reg_resp.status_code})"
+
+    except requests.exceptions.ConnectionError:
+        traccar_last_error = "Port 8082 bootet noch (H2-Migration läuft)..."
+    except requests.exceptions.Timeout:
+        traccar_last_error = "Timeout auf Port 8082"
+    except Exception as e:
+        traccar_last_error = f"Fehler: {e}"
+
+    traccar_ready = False
+    return False
+
+
+def sync_traccar_devices(teams_data=None):
+    """Synchronisiert alle aktiven Teams (Name + PIN-Slug) direkt mit dem lokalen Traccar-Server."""
+    with traccar_lock:
+        if not traccar_ready:
+            if not ensure_traccar_credentials():
+                return False
+
+        if teams_data is None:
+            try:
+                with sqlite3.connect(DB_FILE, timeout=10) as conn:
+                    conn.row_factory = sqlite3.Row
+                    state = get_state(conn)
+                    teams_data = state.get("teams_data", {})
+            except Exception as e:
+                print(f"⚠️ Konnte Teams für Traccar-Sync nicht aus DB lesen: {e}")
+                return False
+
+        try:
+            resp = traccar_session.get(TRACCAR_API_URL, timeout=5)
+            if resp.status_code == 401:
+                if not ensure_traccar_credentials():
+                    return False
+                resp = traccar_session.get(TRACCAR_API_URL, timeout=5)
+
+            if resp.status_code != 200:
+                print(f"⚠️ Traccar Sync: Fehler beim Abrufen der Geräte (HTTP {resp.status_code})")
+                return False
+
+            existing_devices = resp.json()
+            existing_by_slug = {dev["uniqueId"]: dev for dev in existing_devices if "uniqueId" in dev}
+
+            desired_devices = {}
+            for t_id, t_data in teams_data.items():
+                if not t_data.get("deactivated", False):
+                    slug = t_data.get("slug")
+                    name = t_data.get("display_name", t_id)
+                    if slug:
+                        desired_devices[slug] = name
+
+            # 1. Neue Geräte anlegen oder bestehende umbenennen
+            for slug, name in desired_devices.items():
+                if slug not in existing_by_slug:
+                    payload = {"name": name, "uniqueId": slug}
+                    create_res = traccar_session.post(TRACCAR_API_URL, json=payload, timeout=5)
+                    if create_res.status_code in (200, 201):
+                        print(f"✅ Traccar Sync: Gerät '{name}' (ID: {slug}) angelegt.")
+                else:
+                    dev = existing_by_slug[slug]
+                    if dev.get("name") != name:
+                        dev["name"] = name
+                        upd_res = traccar_session.put(f"{TRACCAR_API_URL}/{dev['id']}", json=dev, timeout=5)
+                        if upd_res.status_code == 200:
+                            print(f"🔄 Traccar Sync: Gerät '{slug}' in '{name}' umbenannt.")
+
+            # 2. Veraltete Geräte (z.B. nach PIN-Änderung oder Deaktivierung) löschen
+            for slug, dev in existing_by_slug.items():
+                if slug.startswith("debug-koblenz-"):
+                    continue
+                if slug not in desired_devices:
+                    del_res = traccar_session.delete(f"{TRACCAR_API_URL}/{dev['id']}", timeout=5)
+                    if del_res.status_code in (200, 204):
+                        print(f"🗑️ Traccar Sync: Veraltetes Gerät '{dev.get('name')}' (ID: {slug}) entfernt.")
+
+            return True
+
+        except Exception as e:
+            print(f"⚠️ Traccar Sync fehlgeschlagen: {e}")
+            return False
+
+
+def trigger_traccar_sync_async(teams_data):
+    copy_data = json.loads(json.dumps(teams_data))
+    threading.Thread(target=sync_traccar_devices, args=(copy_data,), daemon=True).start()
+
+
+def traccar_background_worker():
+    """
+    Startet den lokalen Java-Traccar-Server, wartet auf den ersten Bootvorgang,
+    registriert/authentifiziert den Admin-Account gemäß .env und synchronisiert alle Teams.
+    """
+    if not start_traccar_server():
+        return
+
+    print("⏳ Warte auf lokalen Traccar-Server (Port 8082)...")
+    auth_401_failures = 0
+    loop_count = 0
+    auto_reset_done = False
+
+    while True:
+        loop_count += 1
+        try:
+            if traccar_process and traccar_process.poll() is not None:
+                print(f"⚠️ Lokaler Traccar-Prozess hat sich beendet (Exit-Code {traccar_process.returncode}). Letzte Log-Zeilen:")
+                log_file_path = os.path.join(TRACCAR_LOGS_DIR, "traccar-stdout.log")
+                if os.path.exists(log_file_path):
+                    with open(log_file_path, "r", encoding="utf-8", errors="ignore") as lf:
+                        for line in lf.readlines()[-12:]:
+                            print("   [Traccar]", line.strip())
+                time.sleep(3)
+                start_traccar_server()
+
+            if ensure_traccar_credentials():
+                sync_traccar_devices()
+                break
+            else:
+                if loop_count % 3 == 0:
+                    print(f"   ... warte auf Traccar ({traccar_last_error})")
+
+                if traccar_last_error and ("HTTP 401" in traccar_last_error or "HTTP 400" in traccar_last_error):
+                    auth_401_failures += 1
+                    if auth_401_failures >= 3 and not auto_reset_done:
+                        print(
+                            "⚠️ Alte/inkompatible H2-Datenbank erkannt (Login fehlgeschlagen). Setze lokale Traccar-DB automatisch zurück...")
+                        auto_reset_done = True
+                        reset_traccar_process_and_db()
+                        auth_401_failures = 0
+                        time.sleep(4)
+                        continue
+        except Exception as e:
+            print(f"Fehler im Traccar-Worker: {e}")
+        time.sleep(2)
+
+    print("🚀 Lokaler Java-Traccar-Server ist online, authentifiziert und synchronisiert!")
+    while True:
+        time.sleep(20)
+        try:
+            if traccar_process and traccar_process.poll() is not None:
+                print("⚠️ Traccar-Prozess ausgefallen! Starte automatisch neu...")
+                start_traccar_server()
+                time.sleep(5)
+            sync_traccar_devices()
+        except Exception:
+            pass
+
+
 # --- HILFSFUNKTIONEN FÜR STATUS UND AKTIONEN ---
 def send_telegram_msg(text):
     TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -481,7 +681,6 @@ def calculate_score(team_data, config):
 
 
 def save_state(conn, state):
-    """Schreibt den Dictionary-State in die relationalen DB-Tabellen"""
     c = conn.cursor()
 
     c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('config', ?)", (json.dumps(state['config']),))
@@ -531,9 +730,8 @@ def save_state(conn, state):
 
 
 def get_state(conn):
-    """Baut den State-Dictionary aus den relationalen Tabellen auf"""
     c = conn.cursor()
-    c.execute("SELECT key, value FROM settings")
+    c.execute("SELECT key, value FROM settings WHERE key != 'admin_slug'")
     rows = c.fetchall()
 
     if not rows:
@@ -1493,10 +1691,6 @@ def api_ticker_data():
 # --- TRACCAR WEBHOOK ROUTE ---
 @app.route('/api/traccar', methods=['GET', 'POST'])
 def traccar_webhook():
-    """
-    Nimmt Positions-Updates von Traccar entgegen.
-    Unterstützt URL-Forwarding (?id=...&lat=...&lon=...), JSON-Forwarding und OsmAnd.
-    """
     identifier = request.args.get('id') or request.args.get('deviceid') or request.form.get('id')
     lat = request.args.get('lat') or request.args.get('latitude') or request.form.get('lat')
     lon = request.args.get('lon') or request.args.get('longitude') or request.form.get('lon')
@@ -1617,13 +1811,7 @@ def traccar_debug_status(admin_slug):
     except Exception as e:
         api_error = str(e)
 
-    # Prüfen ob Port 5055 (OsmAnd Eingang) offen ist
-    osmand_open = False
-    try:
-        with socket.create_connection(("127.0.0.1", 5055), timeout=2):
-            osmand_open = True
-    except Exception:
-        osmand_open = False
+    osmand_open = is_port_in_use(5055)
 
     return jsonify({
         "api_online": api_online,
@@ -1645,34 +1833,25 @@ def traccar_debug_sync(admin_slug):
 
 @app.route('/api/traccar_debug/<admin_slug>/hard_reset', methods=['POST'])
 def traccar_debug_hard_reset(admin_slug):
-    """Setzt den Traccar-Docker-Container + H2-Datenbank per Klick sauber zurück."""
+    """Setzt den lokalen Java-Traccar-Prozess + H2-Datenbank per Klick sauber zurück."""
     if admin_slug != ADMIN_SLUG:
         return jsonify({'success': False, 'error': 'Zugriff verweigert'}), 403
 
-    ok = reset_traccar_container_and_db()
+    ok = reset_traccar_process_and_db()
     if not ok:
         return jsonify({'success': False, 'error': traccar_last_error})
 
-    # Bis zu 25 Sekunden warten, bis der frisch erstellte Container hochgefahren ist
-    for _ in range(12):
+    for _ in range(15):
         time.sleep(2)
         if ensure_traccar_credentials():
             sync_traccar_devices()
             return jsonify({'success': True})
 
-    return jsonify({'success': False, 'error': f"Container neu gestartet, bootet aber noch ({traccar_last_error}). Bitte 5s warten."})
+    return jsonify({'success': False, 'error': f"Java-Server neu gestartet, bootet noch ({traccar_last_error}). Bitte 5s warten."})
 
 
 @app.route('/api/traccar_debug/<admin_slug>/test', methods=['POST'])
 def traccar_debug_e2e_test(admin_slug):
-    """
-    Führt einen echten End-to-End Loopback-Test durch:
-    1. Prüft Traccar-API Login
-    2. Erstellt einen temporären Test-User (debug-koblenz-<zufall>) in Traccar
-    3. Sendet die Koordinaten von Koblenz (Deutsches Eck: 50.3644, 7.6061) an Port 5055
-    4. Wartet darauf, dass Traccar die Daten an /api/traccar weiterleitet
-    5. Löscht den temporären Test-User wieder aus Traccar
-    """
     if admin_slug != ADMIN_SLUG:
         return jsonify({'success': False, 'error': 'Zugriff verweigert'}), 403
 
@@ -1682,23 +1861,21 @@ def traccar_debug_e2e_test(admin_slug):
     target_lon = round(7.6061 + random.uniform(-0.0005, 0.0005), 6)
     created_device_id = None
 
-    # Schritt 1: Authentifizierung prüfen
     if not ensure_traccar_credentials():
         steps.append({
             "step": "1. Traccar API Login",
             "ok": False,
-            "detail": f"Login als '{TRACCAR_USER}' fehlgeschlagen ({traccar_last_error}). Tipp: Klicke links auf 'Traccar-Container & DB zurücksetzen'!"
+            "detail": f"Login als '{TRACCAR_USER}' fehlgeschlagen ({traccar_last_error})."
         })
         return jsonify({"success": False, "steps": steps})
 
     steps.append({
         "step": "1. Traccar API Login",
         "ok": True,
-        "detail": f"Erfolgreich als '{TRACCAR_USER}' authentifiziert."
+        "detail": f"Erfolgreich als '{TRACCAR_USER}' am lokalen Java-Traccar authentifiziert."
     })
 
     try:
-        # Schritt 2: Test-User in Traccar anlegen
         create_resp = traccar_session.post(
             TRACCAR_API_URL,
             json={"name": "Koblenz Debug Testuser", "uniqueId": test_unique_id},
@@ -1719,7 +1896,6 @@ def traccar_debug_e2e_test(admin_slug):
             "detail": f"Test-User 'Koblenz Debug Testuser' (uniqueId: {test_unique_id}, ID: {created_device_id}) angelegt."
         })
 
-        # Schritt 3: Koblenz-Koordinaten an Port 5055 (OsmAnd-Protokoll) senden
         debug_test_events.pop(test_unique_id, None)
         osmand_params = {
             "id": test_unique_id,
@@ -1743,27 +1919,26 @@ def traccar_debug_e2e_test(admin_slug):
             "detail": f"Koordinaten Koblenz ({target_lat}, {target_lon}) erfolgreich an {TRACCAR_OSMAND_URL} übergeben."
         })
 
-        # Schritt 4: Warten auf Rückmeldung am Python-Webhook (/api/traccar)
         received = None
         start_wait = time.time()
         while time.time() - start_wait < 5.0:
             if test_unique_id in debug_test_events:
                 received = debug_test_events.pop(test_unique_id)
                 break
-            time.sleep(0.2)
+            time.sleep(0.15)
 
         if received:
             delay_ms = int((received["timestamp"] - start_wait) * 1000)
             steps.append({
                 "step": "4. Empfang am Python-Webhook (/api/traccar)",
                 "ok": True,
-                "detail": f"Paket nach ~{max(delay_ms, 10)}ms in Python eingetroffen! Empfangene Pos: ({received['lat']}, {received['lon']})."
+                "detail": f"Paket nach ~{max(delay_ms, 5)}ms in Python eingetroffen! Empfangene Pos: ({received['lat']}, {received['lon']})."
             })
         else:
             steps.append({
                 "step": "4. Empfang am Python-Webhook (/api/traccar)",
                 "ok": False,
-                "detail": "Timeout nach 5s: Traccar hat den Ping angenommen, aber er kam nicht bei /api/traccar an. Prüfe 'forward.url' in traccar.xml."
+                "detail": "Timeout nach 5s: Traccar hat den Ping angenommen, aber er kam nicht bei /api/traccar an."
             })
 
     except Exception as e:
@@ -1773,7 +1948,6 @@ def traccar_debug_e2e_test(admin_slug):
             "detail": str(e)
         })
     finally:
-        # Schritt 5: Test-Gerät wieder sauber entfernen
         if created_device_id is not None:
             try:
                 del_resp = traccar_session.delete(f"{TRACCAR_API_URL}/{created_device_id}", timeout=5)
@@ -1794,10 +1968,8 @@ def traccar_debug_e2e_test(admin_slug):
 
 
 if __name__ == '__main__':
-    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
-        print(f"🔑 Admin-Konsole: http://127.0.0.1:5000/adminconsole-{ADMIN_SLUG}")
-        print(f"🛰️ Traccar-Debug: http://127.0.0.1:5000/traccar_debug_{ADMIN_SLUG}")
-        start_traccar_container()
-        threading.Thread(target=traccar_background_worker, daemon=True).start()
+    print(f"🔑 Admin-Konsole: http://127.0.0.1:5000/adminconsole-{ADMIN_SLUG}")
+    print(f"🛰️ Traccar-Debug: http://127.0.0.1:5000/traccar_debug_{ADMIN_SLUG}")
+    threading.Thread(target=traccar_background_worker, daemon=True).start()
 
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)

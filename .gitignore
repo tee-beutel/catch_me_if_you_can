@@ -2,3 +2,6 @@
 state.json
 state.json.lock
 __pycache__/
+traccar_runtime/
+traccar_data/
+game.db
