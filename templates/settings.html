@@ -148,6 +148,20 @@
             </div>
         </div>
 
+        <div class="form-group" style="background: #e6f7f8; padding: 15px; border-left: 4px solid #049EAB; margin-top: 10px;">
+            <label class="checkbox-label">
+                <input type="checkbox" id="auto_approve_stops" {% if config.get('auto_approve_stops', False) %}checked{% endif %}>
+                <b>Erreichte Haltestellen automatisch per GPS (Traccar) gutschreiben</b>
+            </label>
+            <div class="help-text" style="margin-left: 25px; margin-bottom: 12px;">
+                Prüft beim Einreichen einer Haltestelle automatisch, ob sich das Team in den <b>letzten 5 Minuten</b> innerhalb des angegebenen Radius um die Haltestelle befunden hat. Falls noch nicht, wird die Anfrage <b>1 Minute lang</b> weiter auf eingehende GPS-Punkte überwacht. Klappt auch das nicht, landet die Anfrage wie im Standard-Spiel zur manuellen Freigabe beim Spielleiter.
+            </div>
+            <div style="margin-left: 25px; max-width: 280px;">
+                <label for="stop_radius_meters">Ausschlaggebender Radius (in Metern):</label>
+                <input type="number" id="stop_radius_meters" value="{{ config.get('stop_radius_meters', 100) }}" min="5" step="5">
+            </div>
+        </div>
+
         <h3>Team-Verwaltung</h3>
         <p class="help-text" style="margin-bottom: 15px;">Hier kannst du Teams hinzufügen, Namen ändern, Rollen und PINs vergeben sowie Teams deaktivieren. (Deaktivierte Teams werden vom öffentlichen Leaderboard entfernt, können vom Admin aber weiterhin mit Punkten versorgt werden).</p>
         
@@ -262,6 +276,9 @@
             const enableSwap = document.getElementById('enable_mid_game_swap').checked;
             const shuffleOnSwap = document.getElementById('shuffle_stops_on_swap').checked;
 
+            const autoApproveStops = document.getElementById('auto_approve_stops').checked;
+            const stopRadiusMeters = parseFloat(document.getElementById('stop_radius_meters').value) || 100;
+
             const teamRows = document.querySelectorAll('.team-row');
             const teamsList = [];
 
@@ -285,7 +302,9 @@
                 start_time: startTime,
                 end_time: endTime,
                 enable_mid_game_swap: enableSwap,
-                shuffle_stops_on_swap: shuffleOnSwap
+                shuffle_stops_on_swap: shuffleOnSwap,
+                auto_approve_stops: autoApproveStops,
+                stop_radius_meters: stopRadiusMeters
             };
 
             fetch('/adminconsole-{{ admin_url }}/settings', {

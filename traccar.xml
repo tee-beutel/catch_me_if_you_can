@@ -1,23 +1,18 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <!DOCTYPE properties SYSTEM 'http://java.sun.com/dtd/properties.dtd'>
 <properties>
-    <!-- Standard-Konfiguration aus dem lokalen traccar_runtime Ordner erben -->
     <entry key='config.default'>./conf/default.xml</entry>
-    
-    <!-- Integrierte H2 Datenbank lokal im traccar_runtime/data Ordner nutzen -->
+
     <entry key='database.driver'>org.h2.Driver</entry>
     <entry key='database.url'>jdbc:h2:./data/database</entry>
     <entry key='database.user'>sa</entry>
     <entry key='database.password'></entry>
 
-    <!-- Web-Interface & API Port -->
     <entry key='web.port'>8082</entry>
-
-    <!-- OsmAnd GPS-Eingangsport für die Handys -->
     <entry key='osmand.port'>5055</entry>
 
-    <!-- Position Forwarding / Webhook direkt lokal an Flask -->
     <entry key='forward.enable'>true</entry>
-    <entry key='forward.url'>http://127.0.0.1:5000/api/traccar?id={uniqueId}&amp;lat={latitude}&amp;lon={longitude}&amp;timestamp={fixTime}</entry>
+    <entry key='forward.type'>json</entry>
+    <entry key='forward.url'>http://127.0.0.1:5000/api/traccar</entry>
     <entry key='forward.retry.enable'>true</entry>
 </properties>

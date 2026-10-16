@@ -33,6 +33,7 @@
         .req-item { display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px; margin-bottom: 10px; border: 1px solid #eee; }
         .req-actions { display: flex; gap: 5px; }
         .late-badge { color: #EB6502; font-weight: bold; font-size: 0.85em; margin-right: 5px; }
+        .gps-wait-badge { background: #e6f7f8; color: #049EAB; border: 1px solid #049EAB; padding: 2px 6px; font-weight: bold; font-size: 0.8em; margin-right: 5px; border-radius: 4px; }
         
         .team-urls { background: #f9f9f9; border-left: 5px solid #049EAB; }
         .url-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
@@ -56,6 +57,8 @@
         table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.95em; }
         th, td { padding: 12px 10px; border-bottom: 1px solid #eee; min-width: 120px; }
         th { border-bottom: 2px solid #049EAB; color: #049EAB; }
+        .time-meta { font-size: 0.82em; color: #666; margin-top: 4px; }
+        .time-meta b { color: #049EAB; }
 
         .manual-catch-wrapper { display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; background: #f9f9f9; padding: 15px; border: 1px solid #eee; }
         .manual-catch-col { display: flex; flex-direction: column; }
@@ -96,6 +99,7 @@
         <div class="req-item">
             <span>
                 {% if req.is_late %}<span class="late-badge">[ZU SPÄT EINGETRAGEN]</span>{% endif %}
+                {% if req.gps_check_until %}<span class="gps-wait-badge">⏳ 1-Min. GPS-Nachprüfung läuft...</span>{% endif %}
                 {% if req.type == 'stop' %}
                     Team <b>{{ req.team_name }}</b> möchte Haltestelle <b>{{ req.stop }}</b> gutschreiben.
                 {% else %}
@@ -156,7 +160,7 @@
             <button class="btn btn-orange" onclick="catchTeam()">Eintrag Speichern</button>
         </div>
 
-        <h4 style="margin-top: 40px; margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Punkte manuell anpassen</h4>
+        <h4 style="margin-top: 40px; margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Punkte manuell anpassen (z. B. bei GPS-Regelverstoß)</h4>
         <div class="manual-catch-wrapper">
             <div class="manual-catch-col">
                 <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Team auswählen:</label>
@@ -219,7 +223,15 @@
                 </tr>
                 {% for log in action_log %}
                 <tr>
-                    <td>{{ log.desc }}</td>
+                    <td>
+                        {{ log.desc }}
+                        {% if log.timestamp or log.actual_timestamp %}
+                        <div class="time-meta">
+                            {% if log.timestamp %}Eingereicht: {{ log.timestamp[11:19] }} UTC{% endif %}
+                            {% if log.actual_timestamp %} | <b>Tatsächliche Zeit: {{ log.actual_timestamp[11:19] }} UTC</b>{% endif %}
+                        </div>
+                        {% endif %}
+                    </td>
                     <td>
                         {% if log.type != "system" %}
                         <button class="btn btn-orange" style="padding: 6px 10px; font-size: 11px;" onclick="undoAction('{{ log.id }}')">Rückgängig</button>
@@ -253,8 +265,9 @@
         <div id="admin-map" style="height: 450px; width: 100%; border: 1px solid #ddd; z-index: 1;"></div>
     </div>
 
-    <div style="text-align: center; margin-top: 20px; margin-bottom: 40px;">
-        <a href="/adminconsole-{{ admin_url }}/settings" class="btn btn-petrol" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">Zu den Spiel-Einstellungen</a>
+    <div style="text-align: center; margin-top: 20px; margin-bottom: 40px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
+        <a href="/adminconsole-{{ admin_url }}/settings" class="btn btn-petrol" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">⚙️ Zu den Spiel-Einstellungen</a>
+        <a href="/traccar_debug-{{ admin_url }}" class="btn btn-neutral" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">🛰️ Traccar Diagnose & Debug</a>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -264,6 +277,7 @@
         let startTs = 0, endTs = 0, midTs = 0, postEndTs = 0;
         let reloadedTrigger = false;
         let lastKnownPhase = null;
+        let lastTeamLocations = []; // Globale Speicherung für den Sekundentakt-Timer
         
         function initTimer() {
             const serverNowStr = "{{ now_time }}";
@@ -314,6 +328,11 @@
             } else {
                 el.innerHTML = "SPIELRUNDE ABGESCHLOSSEN";
                 el.style.borderColor = "#333"; el.style.color = "#333";
+            }
+
+            // Sekundengenaue Aktualisierung der Team-Standort-Timer auf der Karte ohne neuen Server-Request
+            if (lastTeamLocations.length > 0) {
+                updateTeamMap(lastTeamLocations);
             }
 
             // Sichere Phasen-Reload-Logik
@@ -396,7 +415,7 @@
             });
         }
 
-        // Funktion zur Darstellung der Spieler auf der Karte (nach Rollen eingefärbt + Zeitangabe)
+        // Funktion zur sekundengenauen Darstellung der Spieler auf der Karte
         function updateTeamMap(teamLocations) {
             teamLayerGroup.clearLayers();
             if (!teamLocations) return;
@@ -408,18 +427,21 @@
                 if (team.role === 'fänger') bgColor = '#EB6502';
                 else if (team.role === 'läufer') bgColor = '#AEC905';
 
-                const updatedMs = team.updated_at * 1000;
-                const diffSec = Math.floor((now - updatedMs) / 1000);
+                const updatedMs = typeof team.updated_at === 'number'
+                    ? team.updated_at * 1000
+                    : new Date(team.updated_at).getTime();
+                const diffSec = Math.max(0, Math.floor((now - updatedMs) / 1000));
                 let timeAgo = "";
                 
                 if (diffSec < 60) {
-                    timeAgo = "Gerade eben";
+                    timeAgo = `vor ${diffSec} Sekunde${diffSec !== 1 ? 'n' : ''}`;
                 } else if (diffSec < 3600) {
-                    const mins = Math.floor(diffSec/60);
+                    const mins = Math.floor(diffSec / 60);
                     timeAgo = `vor ${mins} Minute${mins !== 1 ? 'n' : ''}`;
                 } else {
-                    const hours = Math.floor(diffSec/3600);
-                    timeAgo = `vor ${hours} Stunde${hours !== 1 ? 'n' : ''}`;
+                    const hours = Math.floor(diffSec / 3600);
+                    const mins = Math.floor((diffSec % 3600) / 60);
+                    timeAgo = `vor ${hours} Std. ${mins} Min.`;
                 }
 
                 const icon = L.divIcon({
@@ -430,11 +452,11 @@
                 });
 
                 const popupContent = `
-                    <div style="text-align:center; font-family: 'Roboto', sans-serif; min-width: 130px;">
+                    <div style="text-align:center; font-family: 'Roboto', sans-serif; min-width: 140px;">
                         <b style="font-size: 1.2em; color: #333;">${team.name}</b><br>
                         <span style="font-size: 0.9em; font-weight: bold; color: ${bgColor}; text-transform: uppercase;">${team.role}</span><br>
                         <div style="margin-top: 8px; font-size: 0.85em; color: #666; border-top: 1px solid #ccc; padding-top: 5px;">
-                            Letztes Update:<br><b>${timeAgo}</b>
+                            Letztes GPS-Update:<br><b style="color: ${diffSec > 120 ? '#EB6502' : '#22c55e'};">${timeAgo}</b>
                         </div>
                     </div>
                 `;
@@ -457,11 +479,15 @@
                     renderHistory(data.action_log);
                     if (data.now_time) serverOffset = new Date(data.now_time).getTime() - Date.now();
                     if (data.active_stops) updateAdminMap(data.active_stops);
-                    if (data.team_locations) updateTeamMap(data.team_locations);
+                    if (data.team_locations) {
+                        lastTeamLocations = data.team_locations;
+                        updateTeamMap(lastTeamLocations);
+                    }
                 }
             }).catch(err => console.error("Update fehlgeschlagen:", err));
         }
-        setInterval(loadAdminData, 10000);
+        loadAdminData();
+        setInterval(loadAdminData, 5000);
         
         function renderNotifications(requests) {
             const container = document.getElementById('notifications-container');
@@ -471,8 +497,9 @@
             } else {
                 requests.forEach(req => {
                     let lateBadge = req.is_late ? `<span class="late-badge">[ZU SPÄT EINGETRAGEN]</span> ` : '';
+                    let gpsWaitBadge = req.gps_check_until ? `<span class="gps-wait-badge">⏳ 1-Min. GPS-Nachprüfung läuft...</span> ` : '';
                     let text = req.type === 'stop'
-                        ? `${lateBadge}Team <b>${req.team_name || req.team}</b> möchte Haltestelle <b>${req.stop}</b> gutschreiben.`
+                        ? `${lateBadge}${gpsWaitBadge}Team <b>${req.team_name || req.team}</b> möchte Haltestelle <b>${req.stop}</b> gutschreiben.`
                         : `${lateBadge}Meldung von <b>${req.reporter_name || req.reporter}</b>: <b>${req.hunter_name || req.hunter}</b> fängt <b>${req.prey_name || req.prey}</b>.`;
                     
                     html += `
@@ -488,6 +515,13 @@
             container.innerHTML = html;
         }
         
+        function formatIsoTime(isoStr) {
+            if (!isoStr) return "";
+            const d = new Date(isoStr);
+            if (isNaN(d.getTime())) return isoStr;
+            return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' Uhr';
+        }
+
         function renderHistory(logs) {
             const table = document.getElementById('history-table');
             let html = `<tr><th>Aktion</th><th style="width: 120px;">Verwaltung</th></tr>`;
@@ -495,7 +529,15 @@
                 html += `<tr><td colspan="2" style="text-align: center; color: #777;">Noch keine Aktionen im Spielverlauf.</td></tr>`;
             } else {
                 logs.forEach(log => {
-                    html += `<tr><td>${log.desc}</td>
+                    let metaHtml = '';
+                    if (log.timestamp || log.actual_timestamp) {
+                        const subStr = log.timestamp ? `Eingereicht: ${formatIsoTime(log.timestamp)}` : '';
+                        const actStr = log.actual_timestamp ? `<b>Tatsächliche Zeit: ${formatIsoTime(log.actual_timestamp)}</b>` : '';
+                        metaHtml = `<div class="time-meta">${subStr}${subStr && actStr ? ' | ' : ''}${actStr}</div>`;
+                    }
+
+                    html += `<tr>
+                        <td>${log.desc}${metaHtml}</td>
                         <td>${log.type !== 'system' ? `<button class="btn btn-orange" style="padding: 6px 10px; font-size: 11px;" onclick="undoAction('${log.id}')">Rückgängig</button>` : ''}</td>
                     </tr>`;
                 });

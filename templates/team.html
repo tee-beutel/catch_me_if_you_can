@@ -22,6 +22,21 @@
         .timer-bar { background: #333; color: white; padding: 8px 15px; text-align: center; font-weight: 900; font-family: 'Roboto', sans-serif; font-size: 0.9em; z-index: 1999; }
         .timer-alert { background: #EB6502; }
 
+        /* GPS Warnbanner für Spieler (> 2 Minuten kein Standort) */
+        .gps-warn-banner {
+            display: none;
+            background: #dc2626;
+            color: white;
+            padding: 10px 15px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 0.88em;
+            z-index: 1998;
+            line-height: 1.4;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            border-bottom: 2px solid #991b1b;
+        }
+
         .role-badge { display: inline-block; padding: 4px 8px; font-size: 0.7em; font-family: 'Roboto', sans-serif; font-weight: 900; text-transform: uppercase; color: white; }
         .role-fänger { background: #EB6502; } 
         .role-läufer { background: #AEC905; color: #333; } 
@@ -60,9 +75,11 @@
         .log-entry { padding: 10px 0; border-bottom: 1px solid #f0f0f0; line-height: 1.4; }
         .log-entry:last-child { border-bottom: none; }
         .late-warn { color: #EB6502; font-size: 0.8em; font-weight: bold; }
+        .actual-time-badge { color: #049EAB; font-size: 0.82em; font-weight: bold; }
 
-        /* Custom Factor Map Icon */
+        /* Custom Map Icons */
         .custom-factor-icon { background: transparent; border: none; }
+        .custom-team-icon { background: transparent; border: none; }
     </style>
 </head>
 <body>
@@ -88,6 +105,12 @@
     </div>
     
     <div class="timer-bar" id="top-timer">Zeit wird synchronisiert...</div>
+
+    <!-- WARNUNG BEI FEHLENDEM GPS SIGNAL (> 2 MINUTEN) -->
+    <div class="gps-warn-banner" id="gps-warning-banner">
+        ⚠️ <b>ACHTUNG:</b> Ihr habt seit über <span id="gps-missing-mins">2</span> Minuten keinen Standort mehr gesendet! Bitte prüft sofort eure Traccar-App.<br>
+        <span style="font-weight: normal; font-size: 0.92em;">Hinweis: Bei längerem Regelverstoß können vom Spielleiter (Admin) Minuspunkte vergeben werden!</span>
+    </div>
 
     <!-- GEWINNER ANZEIGE (Global für beide Rollen sichtbar) -->
     {% if phase == 'finished' %}
@@ -157,12 +180,12 @@
 
                 {% if role == 'läufer' %}
                     <!-- LÄUFER KONTROLLEN -->
-                    <h3>Haltestelle manuell eintragen</h3>
+                    <h3>Haltestelle eintragen</h3>
                     <p style="font-size: 0.85em; color:#666; margin-top: 0; margin-bottom: 15px;">Hinweis: Du kannst Haltestellen auch direkt auf der Karte antippen.</p>
                     <select id="stop-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
                         <option value="">-- Haltestelle auswählen --</option>
                     </select>
-                    <button class="btn btn-vcd-green" onclick="requestStop()" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Beim Admin anfragen</button>
+                    <button class="btn btn-vcd-green" onclick="requestStop()" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Haltestelle melden</button>
                     
                     <h3 style="margin-top: 40px; border-bottom-color: #EB6502; color: #EB6502;">Gefangen worden?</h3>
                     <select id="caught-by-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
@@ -177,9 +200,9 @@
                     <!-- FÄNGER KONTROLLEN -->
                     <div style="text-align: center; padding: 10px 0 30px 0;">
                         <h1 style="font-size: 2.2em; margin: 0; color: #EB6502;">Die Jagd ist eröffnet</h1>
-                        <p style="color: #666; margin-top: 10px; font-size: 1.1em;">Sucht die Läufer-Teams auf den Straßen.</p>
+                        <p style="color: #666; margin-top: 10px; font-size: 1.1em;">Sucht die Läufer-Teams auf den Straßen. Ab 5 Minuten vor Spielstart seht ihr deren Live-Standorte auf der Karte!</p>
                         <div style="background: #fdf0e6; padding: 12px; border-left: 4px solid #EB6502; margin-top: 15px; text-align: left; font-size: 0.9em; color: #333; line-height: 1.4;">
-                            <b>Hinweis zur Hintergrundkarte:</b> Die Karte zeigt dir <i>alle möglichen</i> Haltestellen im Spielgebiet. Die Läufer müssen zu jeder Zeit jedoch nur eine kleine, zufällige Auswahl davon erreichen.
+                            <b>Hinweis zur Hintergrundkarte:</b> Die Karte zeigt dir <i>alle möglichen</i> Haltestellen im Spielgebiet sowie euren eigenen Standort und die Live-Positionen aller Läufer.
                         </div>
                     </div>
                     <h3 style="border-bottom-color: #EB6502; color: #EB6502;">Team gefangen?</h3>
@@ -210,50 +233,58 @@
                     </div>
                 </div>
                 
-               <!-- TRACCAR CLIENT DOWNLOAD & CONFIG -->
-                <div style="text-align: center; margin: 40px 0 20px 0; display: flex; flex-direction: column; align-items: center; gap: 15px;">
+               <!-- TRACCAR CLIENT DOWNLOAD & CONFIG (FÜR ALLE TEAMS PFLICHT) -->
+<div style="text-align: center; margin: 40px 0 20px 0; display: flex; flex-direction: column; align-items: center; gap: 15px;">
 
-                    <div style="background: #e6f7f8; border: 1px solid #049EAB; padding: 15px; border-radius: 8px; width: 100%; box-sizing: border-box;">
-                        <h4 style="margin-top: 0; color: #049EAB;">Traccar Setup (nur für Läufer)</h4>
+    <div style="background: #e6f7f8; border: 1px solid #049EAB; padding: 15px; border-radius: 8px; width: 100%; box-sizing: border-box;">
+        <h4 style="margin-top: 0; color: #049EAB;">🛰️ Traccar GPS-Setup (Für Fänger & Läufer Pflicht)</h4>
 
-                        <!-- Download Buttons (Android & iOS) -->
-                        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 15px;">
-                            <a href="https://play.google.com/store/apps/details?id=org.traccar.client" target="_blank" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#333; color:white; padding:8px 15px; border-radius:4px; font-size: 0.85em;">📥 Android App</a>
-                            <a href="https://apps.apple.com/app/traccar-client/id843156974" target="_blank" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#333; color:white; padding:8px 15px; border-radius:4px; font-size: 0.85em;">📥 iOS App</a>
-                        </div>
+        <!-- Download Buttons (Android & iOS) -->
+        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 15px;">
+            <a href="https://play.google.com/store/apps/details?id=org.traccar.client" target="_blank" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#333; color:white; padding:8px 15px; border-radius:4px; font-size: 0.85em;">📥 Android App</a>
+            <a href="https://apps.apple.com/app/traccar-client/id843156974" target="_blank" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#333; color:white; padding:8px 15px; border-radius:4px; font-size: 0.85em;">📥 iOS App</a>
+        </div>
 
-                        <!-- Dynamischer Auto-Config Button (Deep Link) -->
-                        <a href="org.traccar.client://config?serverUrl=http://{{ host_ip }}:5055&id={{ slug }}&accuracy=high&distance=5&heartbeat=5" class="btn btn-vcd-green" style="display:inline-block; width:100%; text-decoration:none; padding:12px; border-radius:4px; box-sizing: border-box;">⚙ Tracker automatisch einrichten</a>
+        <!-- 1. Dynamischer Auto-Config Button (Deep Link) -->
+        <a href="org.traccar.client://config?url=http://{{ host_ip }}:5055&id={{ slug }}&accuracy=high&distance=5&heartbeat=10" class="btn btn-vcd-green" style="display:inline-block; width:100%; text-decoration:none; padding:12px; border-radius:4px; box-sizing: border-box;">1. ⚙ Tracker automatisch einrichten</a>
 
-                        <p style="font-size: 0.8em; color: #555; margin: 10px 0 0 0; line-height: 1.4;">
-                            <b>1.</b> App herunterladen<br>
-                            <b>2.</b> Auf "Automatisch einrichten" klicken<br>
-                            <b>3.</b> Tracking-Schalter in der App anschalten
-                        </p>
-                        <p style="font-size: 0.75em; color: #888; margin: 8px 0 0 0; line-height: 1.3; border-top: 1px solid #ccc; padding-top: 8px;">
-                            Falls die Automatik klemmt:<br>Server: <b>http://{{ host_ip }}:5055</b><br>Geräte-ID: <b>{{ slug }}</b><br>
-                            Genauigkeit: <b>Hoch</b> | Distanz: <b>5m</b>
-                        </p>
-                    </div>
+        <!-- 2. NEU: Button für Standortberechtigung "Immer" -->
+        <button type="button" onclick="togglePermissionHelp()" class="btn btn-vcd-orange" style="width:100%; padding:12px; border-radius:4px; box-sizing: border-box; margin-top: 8px;">
+            2. 📍 Standort auf „Immer“ stellen (Wichtig!)
+        </button>
 
-                    <!-- Vorheriger Anleitung-Button -->
-                    <a href="/rules.html" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#6c757d; color:white; padding:10px 20px; border-radius:4px;">Hier geht's zur Anleitung</a>
-                </div>
+        <!-- Ausklappbare Hilfe für iOS & Android -->
+        <div id="permission-help-box" style="display: none; background: white; border: 2px solid #EB6502; border-radius: 6px; padding: 12px; margin-top: 10px; text-align: left; font-size: 0.85em; color: #333; line-height: 1.4;">
+            <b style="color: #EB6502; font-size: 1.05em;">Warum ist das nötig?</b><br>
+            Ohne die Einstellung <b>„Immer“</b> schaltet euer Handy das GPS ab, sobald das Display ausgeht!<br><br>
 
-                    <!-- Vorheriger Anleitung-Button -->
-                    <a href="/rules.html" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#6c757d; color:white; padding:10px 20px; border-radius:4px;">Hier geht's zur Anleitung</a>
-                </div>
+            <b>🍏 iPhone / iPad (iOS):</b>
+            <ol style="margin: 5px 0 10px 0; padding-left: 20px;">
+                <li>Öffnet die <b>Einstellungen</b> (Zahnrad-App).</li>
+                <li>Scrollt ganz nach unten zu <b>Apps</b> ➔ <b>Traccar Client</b>.</li>
+                <li>Tippt auf <b>Standort</b> und wählt <b>„Immer“</b>.</li>
+            </ol>
 
-                {% if role == 'läufer' %}
-                <div style="margin-top: 30px; margin-bottom: 20px; text-align: left;">
-                    <h3 style="border-bottom-color: #AEC905; color: #AEC905;">Alle möglichen Haltestellen</h3>
-                    <p style="font-size: 0.85em; color: #666; margin-top: 0; margin-bottom: 10px;">
-                        Zur Orientierung: Hier siehst du <b>alle möglichen</b> Haltestellen im Spiel.
-                    </p>
-                    <div id="all-stops-map" style="height: 350px; width: 100%; border-radius: 8px; border: 1px solid #ccc; z-index: 1;"></div>
-                </div>
-                {% endif %}
+            <b>🤖 Android:</b>
+            <ol style="margin: 5px 0 5px 0; padding-left: 20px;">
+                <li>Haltet das <b>Traccar-App-Icon</b> auf eurem Startbildschirm gedrückt und tippt auf <b>ⓘ (App-Info)</b>.</li>
+                <li>Tippt auf <b>Berechtigungen</b> ➔ <b>Standort</b>.</li>
+                <li>Wählt <b>„Immer zulassen“</b>.</li>
+            </ol>
+        </div>
 
+        <p style="font-size: 0.8em; color: #555; margin: 12px 0 0 0; line-height: 1.4;">
+            <b>3.</b> Tracking-Schalter in der App durchgehend eingeschaltet lassen!
+        </p>
+        <p style="font-size: 0.75em; color: #888; margin: 8px 0 0 0; line-height: 1.3; border-top: 1px solid #ccc; padding-top: 8px;">
+            Falls die Automatik klemmt:<br>Server: <b>http://{{ host_ip }}:5055</b><br>Geräte-ID: <b>{{ slug }}</b><br>
+            Genauigkeit: <b>Hoch</b> | Distanz: <b>5m</b> | Intervall/Heartbeat: <b>10s</b>
+        </p>
+    </div>
+
+    <!-- Anleitung-Button -->
+    <a href="/rules.html" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#6c757d; color:white; padding:10px 20px; border-radius:4px;">Hier geht's zur Anleitung</a>
+</div>
             </div>
         </div>
     </div>
@@ -276,6 +307,7 @@
         let startTs = 0, endTs = 0, midTs = 0, postEndTs = 0;
         let lastKnownPhase = null;
         let allStopsMap = null;
+        let cachedVisibleLocations = [];
         
         if (serverNowStr && startStr && endStr) {
             const serverNow = new Date(serverNowStr).getTime();
@@ -324,7 +356,12 @@
             
             timerBar.innerHTML = text;
 
-            // Sichere Phasen-Reload-Logik
+            // Sekundengenaue Aktualisierung der Popup-Timer für sichtbare Team-Standorte
+            if (cachedVisibleLocations.length > 0) {
+                renderTeamLocationsOnMap(cachedVisibleLocations);
+            }
+
+            // Sichere Phasen-Reload-Logik (inkl. Halbzeit-Rollentausch)
             let currentLogicalPhase = "inactive";
             if (now >= (startTs - 30 * 60000) + 2000 && now < preStartTs + 2000) currentLogicalPhase = "roles_assigned";
             if (now >= preStartTs + 2000 && now < startTs + 2000) currentLogicalPhase = "pre_game";
@@ -350,7 +387,6 @@
             if(sheet.classList.contains('open')) { toggleText.innerHTML = "Menü & Rangliste zuklappen 🔽"; } 
             else { toggleText.innerHTML = "Menü & Rangliste ausklappen 🔼"; }
             
-            // Karte neu berechnen lassen, falls sie sich im eingeklappten Zustand befand
             if (allStopsMap) {
                 setTimeout(() => allStopsMap.invalidateSize(), 350);
             }
@@ -361,14 +397,17 @@
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         
         let markers = [];
+        let teamLocationsLayer = L.layerGroup().addTo(map);
         let isFirstMapLoad = true;
         
         function loadStopsMap() {
+            if (currentPhase === 'finished') return;
+
             // Läufer bekommen in der Vorbereitungsphase (inactive) ebenfalls alle Haltestellen angezeigt
             if (currentRole === 'läufer' && currentPhase !== 'inactive') {
                 fetch('/api/stops?slug=' + teamSlug).then(r => {
                     if (r.status === 403) {
-                        window.location.reload(); // Erzwinge sofortigen Neuladevorgang beim Rollenwechsel
+                        window.location.reload(); // Sofortiger Neuladevorgang beim Rollenwechsel
                         return null;
                     }
                     return r.json();
@@ -485,65 +524,102 @@
             }
         }
         
-        if (currentRole === 'läufer') {
-            loadStopsMap(); 
-            setInterval(loadStopsMap, 10000);
-            
-            // Zweite Karte im Menü für alle Haltestellen initialisieren
-            setTimeout(() => {
-                const mapContainer = document.getElementById('all-stops-map');
-                if (mapContainer) {
-                    allStopsMap = L.map('all-stops-map', {zoomControl: true}).setView([52.248874, 10.526770], 11);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(allStopsMap);
+        loadStopsMap(); 
+        setInterval(loadStopsMap, 10000);
 
-                    fetch('/api/all_stops').then(r => r.json()).then(data => {
-                        let bounds = [];
-                        data.forEach(stop => {
-                            let factorText = '';
-                            if (stop.factor > 1) {
-                                factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span>`;
-                            } else if (stop.factor < 1) {
-                                factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span>`;
-                            }
+        // --- LIVE TEAM STANDORTE & GPS-WARNUNG ---
+        function renderTeamLocationsOnMap(locations) {
+            teamLocationsLayer.clearLayers();
+            if (!locations || currentPhase === 'finished') return;
 
-                            const popupContent = `
-                                <div style="text-align:center; font-family: 'Roboto', sans-serif;">
-                                    <b style="font-size: 1.1em; color: #049EAB;">${stop.name}</b>
-                                    ${factorText}
-                                </div>
-                            `;
-                            
-                            let markerOpts = {};
-                            if (stop.factor > 1) {
-                                markerOpts.icon = L.divIcon({
-                                    className: 'custom-factor-icon',
-                                    html: '<div style="background-color: #EB6502; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⭐</div>',
-                                    iconSize: [30, 30],
-                                    iconAnchor: [15, 15]
-                                });
-                            } else if (stop.factor < 1) {
-                                markerOpts.icon = L.divIcon({
-                                    className: 'custom-factor-icon',
-                                    html: '<div style="background-color: #6c757d; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⚠️</div>',
-                                    iconSize: [30, 30],
-                                    iconAnchor: [15, 15]
-                                });
-                            }
-                            
-                            const marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
-                            marker.addTo(allStopsMap);
-                            bounds.push([stop.lat, stop.lon]);
-                        });
-                        
-                        if (bounds.length > 0) {
-                            allStopsMap.fitBounds(bounds, { padding: [20, 20] });
-                        }
-                    });
+            const now = Date.now() + serverOffset;
+
+            locations.forEach(loc => {
+                const isSelf = loc.is_self || (loc.id === teamId);
+                let bgColor = '#6c757d';
+                if (loc.role === 'fänger') bgColor = '#EB6502';
+                else if (loc.role === 'läufer') bgColor = '#AEC905';
+
+                let updatedMs = typeof loc.updated_at === 'number'
+                    ? loc.updated_at * 1000
+                    : new Date(loc.updated_at).getTime();
+
+                const diffSec = Math.max(0, Math.floor((now - updatedMs) / 1000));
+                let timeAgo = "";
+                if (diffSec < 60) {
+                    timeAgo = `vor ${diffSec} Sekunde${diffSec !== 1 ? 'n' : ''}`;
+                } else if (diffSec < 3600) {
+                    const mins = Math.floor(diffSec / 60);
+                    timeAgo = `vor ${mins} Minute${mins !== 1 ? 'n' : ''}`;
+                } else {
+                    const hours = Math.floor(diffSec / 3600);
+                    const mins = Math.floor((diffSec % 3600) / 60);
+                    timeAgo = `vor ${hours} Std. ${mins} Min.`;
                 }
-            }, 500); // Verzögerung, damit das HTML der Bottom-Sheet vollständig gerendert ist
-        } else {
-            loadStopsMap();
+
+                const borderStyle = isSelf ? '4px solid #049EAB' : '3px solid #333';
+                const size = isSelf ? 22 : 18;
+                const labelBadge = isSelf ? '📍 IHR' : '🏃';
+
+                const icon = L.divIcon({
+                    className: 'custom-team-icon',
+                    html: `<div style="background-color: ${bgColor}; width: ${size}px; height: ${size}px; border-radius: 50%; border: ${borderStyle}; box-shadow: 0 0 8px rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; font-size:10px;"></div>`,
+                    iconSize: [size + 8, size + 8],
+                    iconAnchor: [(size + 8) / 2, (size + 8) / 2]
+                });
+
+                const popupContent = `
+                    <div style="text-align:center; font-family: 'Roboto', sans-serif; min-width: 145px;">
+                        <b style="font-size: 1.15em; color: #333;">${isSelf ? '📍 Euer Standort (' + loc.name + ')' : loc.name}</b><br>
+                        <span style="font-size: 0.85em; font-weight: bold; color: ${bgColor}; text-transform: uppercase;">${loc.role}</span><br>
+                        <div style="margin-top: 6px; font-size: 0.82em; color: #666; border-top: 1px solid #ccc; padding-top: 4px;">
+                            Letztes GPS-Signal:<br><b style="color: ${diffSec > 120 ? '#dc2626' : '#22c55e'};">${timeAgo}</b>
+                        </div>
+                    </div>
+                `;
+
+                L.marker([loc.lat, loc.lon], { icon: icon, zIndexOffset: isSelf ? 2000 : 1500 })
+                    .bindPopup(popupContent)
+                    .addTo(teamLocationsLayer);
+            });
         }
+
+        function fetchTeamLiveLocations() {
+            if (currentPhase === 'finished') {
+                teamLocationsLayer.clearLayers();
+                document.getElementById('gps-warning-banner').style.display = 'none';
+                return;
+            }
+
+            fetch('/api/team_locations?slug=' + encodeURIComponent(teamSlug))
+                .then(r => r.json())
+                .then(data => {
+                    if (!data || !data.success) return;
+
+                    // Prüfe Rollenkonsistenz (z.B. Halbzeit-Rollentausch oder Admin-Änderung)
+                    if (data.role && data.role !== currentRole) {
+                        window.location.reload();
+                        return;
+                    }
+
+                    cachedVisibleLocations = data.locations || [];
+                    renderTeamLocationsOnMap(cachedVisibleLocations);
+
+                    // 2-Minuten GPS-Warnung für Fänger und Läufer
+                    const warnBanner = document.getElementById('gps-warning-banner');
+                    const warnMinsSpan = document.getElementById('gps-missing-mins');
+                    if (data.gps_warning) {
+                        warnMinsSpan.textContent = data.missing_minutes || 2;
+                        warnBanner.style.display = 'block';
+                    } else {
+                        warnBanner.style.display = 'none';
+                    }
+                })
+                .catch(e => console.log("Standort-Abruf fehlgeschlagen", e));
+        }
+
+        fetchTeamLiveLocations();
+        setInterval(fetchTeamLiveLocations, 5000);
         
         function requestStopFromMap(stopName) {
             map.closePopup();
@@ -564,8 +640,11 @@
                 body: JSON.stringify({ slug: teamSlug, stop: stopName })
             }).then(r => r.json()).then(d => {
                 if(d.success) {
-                    alert(`Anfrage für "${stopName}" erfolgreich gesendet.`);
-                    document.getElementById('stop-select').value = "";
+                    alert(d.message || `Anfrage für "${stopName}" erfolgreich gesendet.`);
+                    const select = document.getElementById('stop-select');
+                    if (select) select.value = "";
+                    loadStopsMap();
+                    fetchTicker();
                 } else { alert(d.error || 'Fehler!'); }
             }).catch(() => alert('Netzwerkfehler!'));
         }
@@ -592,7 +671,7 @@
                     alert(d.message);
                     if(role === 'fänger') document.getElementById('caught-team-select').value = "";
                     else document.getElementById('caught-by-select').value = "";
-                    fetchTicker(); // Direkt Daten updaten statt kompletten Reload
+                    fetchTicker();
                 } else { alert(d.error || 'Fehler beim Senden.'); }
             }).catch(() => alert('Netzwerkfehler!'));
         }
@@ -617,7 +696,7 @@
         }
 
         function updateLog(logData) {
-            const teamLog = logData.filter(entry => entry.team === teamId || entry.hunter === teamId || entry.prey === teamId || entry.type === 'system');
+            const teamLog = logData.filter(entry => entry.team === teamId || entry.hunter === teamId || entry.prey === teamId || (entry.type === 'system' && !entry.admin_only));
             
             const logContainer = document.querySelector('.log');
             let html = `<h4>Letzte Aktionen eures Teams</h4>`;
@@ -628,7 +707,6 @@
                 teamLog.forEach(entry => {
                     let text = entry.desc;
 
-                    // Personalisierte Pronomen basierend auf Team-ID
                     if (entry.type === 'stop') {
                         if (entry.team === teamId) text = text.replace(teamName + " hat", "<b>Ihr</b> habt");
                     } else if (entry.type === 'catch') {
@@ -636,8 +714,17 @@
                         if (entry.prey === teamId) text = text.replace(teamName + " (Läufer)", "<b>euch</b> (Läufer)");
                     }
                     
+                    let actualTimeHtml = '';
+                    if (entry.actual_timestamp) {
+                        const actDate = new Date(entry.actual_timestamp);
+                        if (!isNaN(actDate.getTime())) {
+                            const tStr = actDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                            actualTimeHtml = `<br><span class="actual-time-badge">⏱️ Tatsächliche Zeit: ${tStr} Uhr</span>`;
+                        }
+                    }
+
                     let lateWarn = entry.is_late ? `<br><span class="late-warn">⚠️ (Nachtrag nach Spielende)</span>` : '';
-                    html += `<div class="log-entry">${text} ${lateWarn}</div>`;
+                    html += `<div class="log-entry">${text} ${actualTimeHtml} ${lateWarn}</div>`;
                 });
             }
             logContainer.innerHTML = html;
@@ -659,6 +746,10 @@
                     }
                 })
                 .catch(e => console.log("Ticker Update fehlgeschlagen", e));
+        }
+        function togglePermissionHelp() {
+            const box = document.getElementById('permission-help-box');
+            box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'block' : 'none';
         }
 
         let initialLeaderboard = {{ leaderboard | tojson | safe }};

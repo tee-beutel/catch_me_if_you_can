@@ -5,3 +5,6 @@ __pycache__/
 traccar_runtime/
 traccar_data/
 game.db
+/game.db-shm
+/game.db-wal
+/Zwischespeicher

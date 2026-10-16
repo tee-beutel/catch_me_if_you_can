@@ -162,6 +162,56 @@
             </div>
         </div>
 
+        <!-- System- & Prozess-Status (NEU) -->
+        <div class="card">
+            <h2>System- & Programm-Status</h2>
+            <div class="status-row">
+                <span>Traccar Java-Prozess</span>
+                <span id="st-proc" class="badge badge-warn">Prüfe...</span>
+            </div>
+            <div class="status-row">
+                <span>Java (JRE) Installation</span>
+                <span id="st-java" class="badge badge-warn">Prüfe...</span>
+            </div>
+            <div class="status-row">
+                <span>Traccar Server (.jar)</span>
+                <span id="st-jar" class="badge badge-warn">Prüfe...</span>
+            </div>
+            <div class="status-row">
+                <span>Konfiguration (traccar.xml)</span>
+                <span id="st-xml" class="badge badge-warn">Prüfe...</span>
+            </div>
+            <div class="status-row">
+                <span>H2-Datenbank (lokal)</span>
+                <span id="st-db" class="badge badge-warn">Prüfe...</span>
+            </div>
+        </div>
+
+        <!-- Allgemeiner System- & Spielstatus (NEU) -->
+        <div class="card">
+            <h2>Allgemeiner System- & Spielstatus</h2>
+            <div class="status-row">
+                <span>Spieldatenbank (game.db)</span>
+                <span id="st-gamedb" class="badge badge-ok">Prüfe...</span>
+            </div>
+            <div class="status-row">
+                <span>Aktuelle Spielphase</span>
+                <strong id="st-phase">-</strong>
+            </div>
+            <div class="status-row">
+                <span>Registrierte Teams</span>
+                <strong id="st-teams">-</strong>
+            </div>
+            <div class="status-row">
+                <span>Aktive Python-Threads</span>
+                <code id="st-threads">-</code>
+            </div>
+            <div class="status-row">
+                <span>Python Version</span>
+                <code id="st-python">-</code>
+            </div>
+        </div>
+
         <!-- E2E Test -->
         <div class="card">
             <h2>2. Koblenz Loopback-Test (End-to-End)</h2>
@@ -224,6 +274,67 @@
 
             document.getElementById('st-user').textContent = data.traccar_user || "-";
             document.getElementById('st-dev-count').textContent = data.devices ? data.devices.length : 0;
+
+            // --- NEUE MERKMALE AKTUALISIEREN ---
+            const procBadge = document.getElementById('st-proc');
+            if (data.process_running) {
+                procBadge.textContent = `LÄUFT (PID: ${data.process_pid})`;
+                procBadge.className = "badge badge-ok";
+            } else {
+                procBadge.textContent = "GESTOPPT / FEHLT";
+                procBadge.className = "badge badge-err";
+            }
+
+            const javaBadge = document.getElementById('st-java');
+            if (data.java_installed) {
+                javaBadge.textContent = "VORHANDEN";
+                javaBadge.className = "badge badge-ok";
+            } else {
+                javaBadge.textContent = "NICHT GEFUNDEN";
+                javaBadge.className = "badge badge-err";
+            }
+
+            const jarBadge = document.getElementById('st-jar');
+            if (data.jar_exists) {
+                jarBadge.textContent = "OK";
+                jarBadge.className = "badge badge-ok";
+            } else {
+                jarBadge.textContent = "FEHLT";
+                jarBadge.className = "badge badge-err";
+            }
+
+            const xmlBadge = document.getElementById('st-xml');
+            if (data.xml_exists) {
+                xmlBadge.textContent = "OK";
+                xmlBadge.className = "badge badge-ok";
+            } else {
+                xmlBadge.textContent = "FEHLT";
+                xmlBadge.className = "badge badge-err";
+            }
+
+            const dbBadge = document.getElementById('st-db');
+            if (data.db_exists) {
+                dbBadge.textContent = "ANGELEGT";
+                dbBadge.className = "badge badge-ok";
+            } else {
+                dbBadge.textContent = "LEER / FEHLT";
+                dbBadge.className = "badge badge-warn";
+            }
+
+            // --- NEUE ALLGEMEINE MERKMALE AKTUALISIEREN ---
+            const gameDbBadge = document.getElementById('st-gamedb');
+            gameDbBadge.textContent = data.game_db_size_kb > 0 ? `${data.game_db_size_kb} KB` : "FEHLT";
+            gameDbBadge.className = data.game_db_size_kb > 0 ? "badge badge-ok" : "badge badge-err";
+
+            const phaseEl = document.getElementById('st-phase');
+            phaseEl.textContent = data.game_phase ? data.game_phase.toUpperCase() : "-";
+            if (data.game_phase === 'game') phaseEl.style.color = 'var(--green)';
+            else if (data.game_phase === 'inactive') phaseEl.style.color = 'var(--muted)';
+            else phaseEl.style.color = 'var(--amber)';
+
+            document.getElementById('st-teams').textContent = data.num_teams !== undefined ? data.num_teams : "-";
+            document.getElementById('st-threads').textContent = data.active_threads || "-";
+            document.getElementById('st-python').textContent = data.python_version || "-";
 
             renderDevices(data.devices || []);
             renderWebhooks(data.recent_webhooks || []);

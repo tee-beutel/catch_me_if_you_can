@@ -5,6 +5,7 @@ import json
 import random
 import uuid
 import time
+import math
 import re
 import shutil
 import socket
@@ -15,7 +16,7 @@ import sqlite3
 import secrets
 import threading
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, jsonify
 import requests
 from requests.auth import HTTPBasicAuth
@@ -46,8 +47,10 @@ TRACCAR_JAR_PATH = os.path.join(TRACCAR_RUNTIME_DIR, 'tracker-server.jar')
 TRACCAR_XML_PATH = os.path.join(BASE_DIR, 'traccar.xml')
 TRACCAR_VERSION = "5.12"
 
-# --- ADMIN PASSWORT --- #
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234-5")
+# --- ADMIN PASSWORT / PIN --- #
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234-5").strip()
+# Damit die Adminseiten exakt über /adminconsole-{adminpin} erreichbar sind:
+ADMIN_SLUG = ADMIN_PASSWORD
 
 # --- STANDARD-KONFIGURATION ---
 DEFAULT_CONFIG = {
@@ -61,8 +64,10 @@ DEFAULT_CONFIG = {
     "start_time": "",
     "end_time": "",
     "timezone": "Europe/Berlin",
-    "enable_mid_game_swap": True,        
-    "shuffle_stops_on_swap": True        
+    "enable_mid_game_swap": True,
+    "shuffle_stops_on_swap": True,
+    "auto_approve_stops": False,
+    "stop_radius_meters": 100
 }
 
 with open(DATA_FILE, 'r', encoding='utf-8') as f:
@@ -78,28 +83,42 @@ TRACCAR_API_URL = f"{TRACCAR_BASE_URL}/devices"
 TRACCAR_USER = os.getenv("TRACCAR_API_USER", "admin").strip()
 TRACCAR_PASS = os.getenv("TRACCAR_API_PASSWORD", "admin").strip()
 
-traccar_lock = threading.Lock()
+traccar_lock = threading.RLock()
 install_lock = threading.Lock()
+gps_rules_lock = threading.Lock()
 traccar_session = requests.Session()
 traccar_process = None
 traccar_ready = False
 traccar_last_error = "Initialisiere..."
 
-# In-Memory Log für das Debug-Dashboard (/traccar_debug_<admin_slug>)
+# In-Memory Log für das Debug-Dashboard (/traccar_debug-<adminpin>)
 recent_traccar_webhooks = deque(maxlen=25)
 debug_test_events = {}
 
+# Merkt sich pro Team die zuletzt im Admin-Log gemeldete GPS-Ausfall-Stufe (5, 10, 15, ...)
+gps_inactivity_notified_stage = {}
 
-# --- DATENBANK SETUP ---
+
+# --- DATENBANK SETUP & MIGRATION ---
+def ensure_column(cursor, table_name, column_name, column_type):
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    existing_cols = [row[1] for row in cursor.fetchall()]
+    if column_name not in existing_cols:
+        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+
+
 def init_db():
     with sqlite3.connect(DB_FILE, timeout=10) as conn:
         c = conn.cursor()
-        
+
+        c.execute("PRAGMA journal_mode=WAL;")
+        c.execute("PRAGMA synchronous=NORMAL;")
+
         c.execute('''CREATE TABLE IF NOT EXISTS settings (
                         key TEXT PRIMARY KEY,
                         value TEXT
                     )''')
-                    
+
         c.execute('''CREATE TABLE IF NOT EXISTS teams (
                         id TEXT PRIMARY KEY,
                         display_name TEXT,
@@ -110,29 +129,33 @@ def init_db():
                         deactivated INTEGER,
                         manual_points INTEGER
                     )''')
-                    
+
         c.execute('''CREATE TABLE IF NOT EXISTS team_stops (
                         team_id TEXT,
                         stop_name TEXT,
+                        submitted_at TEXT,
+                        actual_timestamp TEXT,
                         FOREIGN KEY(team_id) REFERENCES teams(id)
                     )''')
-                    
+
         c.execute('''CREATE TABLE IF NOT EXISTS team_catches (
                         hunter_id TEXT,
                         prey_id TEXT,
+                        submitted_at TEXT,
+                        actual_timestamp TEXT,
                         FOREIGN KEY(hunter_id) REFERENCES teams(id),
                         FOREIGN KEY(prey_id) REFERENCES teams(id)
                     )''')
-                    
+
         c.execute('''CREATE TABLE IF NOT EXISTS active_stops (
                         stop_name TEXT
                     )''')
-                    
+
         c.execute('''CREATE TABLE IF NOT EXISTS stop_history (
                         history_order INTEGER PRIMARY KEY AUTOINCREMENT,
                         stop_name TEXT
                     )''')
-                    
+
         c.execute('''CREATE TABLE IF NOT EXISTS pending_requests (
                         id TEXT PRIMARY KEY,
                         type TEXT,
@@ -145,10 +168,12 @@ def init_db():
                         hunter_name TEXT,
                         prey TEXT,
                         prey_name TEXT,
-                        timestamp REAL,
-                        is_late INTEGER
+                        timestamp TEXT,
+                        is_late INTEGER,
+                        gps_check_until TEXT,
+                        notified_admin INTEGER
                     )''')
-                    
+
         c.execute('''CREATE TABLE IF NOT EXISTS action_logs (
                         id TEXT PRIMARY KEY,
                         type TEXT,
@@ -159,47 +184,188 @@ def init_db():
                         hunter_name TEXT,
                         prey TEXT,
                         prey_name TEXT,
-                        timestamp REAL,
+                        timestamp TEXT,
+                        actual_timestamp TEXT,
                         desc TEXT,
-                        is_late INTEGER
+                        is_late INTEGER,
+                        admin_only INTEGER
                     )''')
-                    
+
         c.execute('''CREATE TABLE IF NOT EXISTS team_locations (
                         team_id TEXT PRIMARY KEY,
                         lat REAL,
                         lon REAL,
-                        updated_at REAL,
+                        updated_at TEXT,
                         FOREIGN KEY(team_id) REFERENCES teams(id)
                     )''')
-                    
+
         c.execute('''CREATE TABLE IF NOT EXISTS location_history (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         team_id TEXT,
                         lat REAL,
                         lon REAL,
-                        timestamp REAL,
+                        timestamp TEXT,
                         FOREIGN KEY(team_id) REFERENCES teams(id)
                     )''')
-                    
+
+        c.execute('''CREATE INDEX IF NOT EXISTS idx_location_history_team_timestamp
+                     ON location_history (team_id, timestamp)''')
+
+        # Sicherstellen, dass bestehende Datenbanken nahtlos um die neuen Zeitspalten erweitert werden
+        ensure_column(c, "team_stops", "submitted_at", "TEXT")
+        ensure_column(c, "team_stops", "actual_timestamp", "TEXT")
+        ensure_column(c, "team_catches", "submitted_at", "TEXT")
+        ensure_column(c, "team_catches", "actual_timestamp", "TEXT")
+        ensure_column(c, "pending_requests", "gps_check_until", "TEXT")
+        ensure_column(c, "pending_requests", "notified_admin", "INTEGER")
+        ensure_column(c, "action_logs", "actual_timestamp", "TEXT")
+        ensure_column(c, "action_logs", "admin_only", "INTEGER")
+
+        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_slug', ?)", (ADMIN_SLUG,))
+
         conn.commit()
 
 init_db()
 
 
-def get_or_create_admin_slug():
-    """Hält den ADMIN_SLUG in der DB persistent, damit offene Browser-Tabs bei Neustart nicht 403 werfen."""
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
-        c = conn.cursor()
-        c.execute("SELECT value FROM settings WHERE key = 'admin_slug'")
-        row = c.fetchone()
-        if row and row[0]:
-            return row[0]
-        slug = secrets.token_urlsafe(16)
-        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_slug', ?)", (slug,))
-        conn.commit()
-        return slug
+def is_valid_admin_slug(slug):
+    return str(slug).strip() == ADMIN_SLUG
 
-ADMIN_SLUG = get_or_create_admin_slug()
+
+# --- GEODÄTISCHE & ZEITLICHE HILFSFUNKTIONEN (TRACCAR SPIELLOGIK) ---
+def haversine_meters(lat1, lon1, lat2, lon2):
+    R = 6371000.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2.0) ** 2
+    return 2.0 * R * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+
+
+def parse_iso_utc(iso_str):
+    if not iso_str:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(iso_str).replace('Z', '+00:00'))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+def find_closest_stop_approach(conn, team_id, stop_name, start_dt, end_dt):
+    """
+    Sucht in location_history (sowie aktuellem Live-Standort) im Zeitfenster [start_dt, end_dt] den Punkt,
+    an dem team_id der Haltestelle stop_name am nächsten war.
+    Gibt (min_distance_meters, closest_timestamp_iso) oder (None, None) zurück.
+    """
+    if stop_name not in stops_data:
+        return None, None
+    stop_lat = stops_data[stop_name]["lat"]
+    stop_lon = stops_data[stop_name]["lon"]
+
+    c = conn.cursor()
+    c.execute("""
+        SELECT lat, lon, timestamp
+        FROM location_history
+        WHERE team_id = ? AND timestamp >= ? AND timestamp <= ?
+        ORDER BY timestamp ASC
+    """, (team_id, start_dt.isoformat(), end_dt.isoformat()))
+    rows = list(c.fetchall())
+
+    c.execute("""
+        SELECT lat, lon, updated_at
+        FROM team_locations
+        WHERE team_id = ? AND updated_at >= ? AND updated_at <= ?
+    """, (team_id, start_dt.isoformat(), end_dt.isoformat()))
+    live_row = c.fetchone()
+    if live_row:
+        rows.append(live_row)
+
+    if not rows:
+        return None, None
+
+    min_dist = None
+    best_ts = None
+    for r in rows:
+        d = haversine_meters(r[0], r[1], stop_lat, stop_lon)
+        if min_dist is None or d < min_dist:
+            min_dist = d
+            best_ts = r[2]
+
+    return min_dist, best_ts
+
+
+def find_closest_teams_approach(conn, hunter_id, prey_id, ref_dt=None, window_minutes=15, max_distance_meters=250.0):
+    """
+    Bestimmt den Zeitpunkt, an dem sich Fänger (hunter_id) und Läufer (prey_id)
+    im Zeitraum vor ref_dt am nächsten waren (nur bei plausibler Annäherung < max_distance_meters).
+    Falls keine passende GPS-Annäherung vorliegt, wird None zurückgegeben.
+    """
+    if ref_dt is None:
+        ref_dt = datetime.now(timezone.utc)
+    start_dt = ref_dt - timedelta(minutes=window_minutes)
+    end_dt = ref_dt + timedelta(minutes=2)
+
+    c = conn.cursor()
+    c.execute("""
+        SELECT lat, lon, timestamp
+        FROM location_history
+        WHERE team_id = ? AND timestamp >= ? AND timestamp <= ?
+        ORDER BY timestamp ASC
+    """, (hunter_id, start_dt.isoformat(), end_dt.isoformat()))
+    hunter_rows = list(c.fetchall())
+    c.execute("""
+        SELECT lat, lon, updated_at
+        FROM team_locations
+        WHERE team_id = ? AND updated_at >= ? AND updated_at <= ?
+    """, (hunter_id, start_dt.isoformat(), end_dt.isoformat()))
+    hunter_live = c.fetchone()
+    if hunter_live:
+        hunter_rows.append(hunter_live)
+
+    hunter_pts = [(r[0], r[1], parse_iso_utc(r[2]), r[2]) for r in hunter_rows]
+    hunter_pts = [p for p in hunter_pts if p[2] is not None]
+
+    c.execute("""
+        SELECT lat, lon, timestamp
+        FROM location_history
+        WHERE team_id = ? AND timestamp >= ? AND timestamp <= ?
+        ORDER BY timestamp ASC
+    """, (prey_id, start_dt.isoformat(), end_dt.isoformat()))
+    prey_rows = list(c.fetchall())
+    c.execute("""
+        SELECT lat, lon, updated_at
+        FROM team_locations
+        WHERE team_id = ? AND updated_at >= ? AND updated_at <= ?
+    """, (prey_id, start_dt.isoformat(), end_dt.isoformat()))
+    prey_live = c.fetchone()
+    if prey_live:
+        prey_rows.append(prey_live)
+
+    prey_pts = [(r[0], r[1], parse_iso_utc(r[2]), r[2]) for r in prey_rows]
+    prey_pts = [p for p in prey_pts if p[2] is not None]
+
+    if not hunter_pts or not prey_pts:
+        return None
+
+    min_dist = None
+    best_iso = None
+
+    # Für jeden Messpunkt eines Teams den zeitlich nächstgelegenen Punkt des anderen Teams prüfen (max 120s Versatz & < 250m Distanz)
+    for h_lat, h_lon, h_dt, h_iso in hunter_pts:
+        closest_p = min(prey_pts, key=lambda p: abs((p[2] - h_dt).total_seconds()))
+        p_lat, p_lon, p_dt, p_iso = closest_p
+        if abs((p_dt - h_dt).total_seconds()) <= 120:
+            dist = haversine_meters(h_lat, h_lon, p_lat, p_lon)
+            if dist < max_distance_meters and (min_dist is None or dist < min_dist):
+                min_dist = dist
+                mid_ts = (h_dt.timestamp() + p_dt.timestamp()) / 2.0
+                best_iso = datetime.fromtimestamp(mid_ts, tz=timezone.utc).isoformat()
+
+    return best_iso
 
 
 # --- LOKALER JAVA-TRACCAR MANAGER ---
@@ -210,7 +376,6 @@ def is_port_in_use(port):
 
 
 def stop_legacy_docker_container():
-    """Stoppt eventuell noch laufende Docker-Container von früher, damit Port 8082/5055 frei sind."""
     if shutil.which("docker"):
         for prefix in ([], ["sudo", "-n"]):
             try:
@@ -227,7 +392,6 @@ def stop_legacy_docker_container():
 
 
 def get_java_executable():
-    """Prüft auf Java und installiert es unter Debian/Ubuntu/Mint bei Bedarf automatisch nach."""
     sys_java = shutil.which("java")
     if sys_java:
         return sys_java
@@ -245,14 +409,12 @@ def get_java_executable():
 
 
 def ensure_traccar_xml():
-    """Stellt sicher, dass traccar.xml im Projektordner existiert und lokal auf 127.0.0.1 zeigt."""
     if os.path.exists(TRACCAR_XML_PATH):
         with open(TRACCAR_XML_PATH, "r", encoding="utf-8") as f:
             content = f.read()
         updated = content
         if "host.docker.internal" in updated:
             updated = updated.replace("host.docker.internal", "127.0.0.1")
-        # Falls noch das alte falsche Passwort auf der H2-DB steht, auf Standard 'sa' ohne Passwort korrigieren
         if "<entry key='database.user'>admin</entry>" in updated:
             updated = updated.replace("<entry key='database.user'>admin</entry>", "<entry key='database.user'>sa</entry>")
             updated = re.sub(r"<entry key='database\.password'>.*?</entry>", "<entry key='database.password'></entry>", updated)
@@ -273,7 +435,8 @@ def ensure_traccar_xml():
     <entry key='web.port'>8082</entry>
     <entry key='osmand.port'>5055</entry>
     <entry key='forward.enable'>true</entry>
-    <entry key='forward.url'>http://127.0.0.1:5000/api/traccar?id={uniqueId}&amp;lat={latitude}&amp;lon={longitude}&amp;timestamp={fixTime}</entry>
+    <entry key='forward.type'>json</entry>
+    <entry key='forward.url'>http://127.0.0.1:5000/api/traccar</entry>
     <entry key='forward.retry.enable'>true</entry>
 </properties>
 """
@@ -282,9 +445,6 @@ def ensure_traccar_xml():
 
 
 def ensure_traccar_installed():
-    """
-    Lädt das plattformunabhängige 'traccar-other-5.12.zip' direkt in ./traccar_runtime herunter.
-    """
     with install_lock:
         ensure_traccar_xml()
         os.makedirs(TRACCAR_DATA_DIR, exist_ok=True)
@@ -328,7 +488,6 @@ def ensure_traccar_installed():
 
 
 def stop_traccar_process():
-    """Beendet den von Python gestarteten Java-Traccar-Prozess sauber."""
     global traccar_process
     if traccar_process and traccar_process.poll() is None:
         print("🛑 Beende lokalen Java-Traccar-Server...")
@@ -346,7 +505,6 @@ atexit.register(stop_traccar_process)
 
 
 def start_traccar_server():
-    """Startet Traccar direkt als lokalen Java-Hintergrundprozess im Projektordner."""
     global traccar_process, traccar_last_error
 
     stop_legacy_docker_container()
@@ -394,121 +552,108 @@ def start_traccar_server():
 
 
 def reset_traccar_process_and_db():
-    """
-    Stoppt den lokalen Java-Traccar-Prozess, löscht den ./traccar_runtime/data Ordner (H2-DB)
-    und startet Traccar frisch.
-    """
     global traccar_ready, traccar_last_error, traccar_session
-    print("🧨 Setze lokalen Java-Traccar-Server und H2-Datenbank zurück...")
-    traccar_ready = False
-    traccar_last_error = "Datenbank wird zurückgesetzt..."
-    traccar_session = requests.Session()
+    with traccar_lock:
+        print("🧨 Setze lokalen Java-Traccar-Server und H2-Datenbank zurück...")
+        traccar_ready = False
+        traccar_last_error = "Datenbank wird zurückgesetzt..."
+        traccar_session = requests.Session()
 
-    stop_traccar_process()
-    subprocess.run(["fuser", "-k", "8082/tcp"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    subprocess.run(["fuser", "-k", "5055/tcp"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    time.sleep(1)
+        stop_traccar_process()
+        subprocess.run(["fuser", "-k", "8082/tcp"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(["fuser", "-k", "5055/tcp"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        time.sleep(1)
 
-    try:
-        if os.path.exists(TRACCAR_DATA_DIR):
-            shutil.rmtree(TRACCAR_DATA_DIR, ignore_errors=True)
-        os.makedirs(TRACCAR_DATA_DIR, exist_ok=True)
-        return start_traccar_server()
-    except Exception as e:
-        traccar_last_error = f"Reset-Fehler: {e}"
-        return False
+        try:
+            if os.path.exists(TRACCAR_DATA_DIR):
+                shutil.rmtree(TRACCAR_DATA_DIR, ignore_errors=True)
+            os.makedirs(TRACCAR_DATA_DIR, exist_ok=True)
+            return start_traccar_server()
+        except Exception as e:
+            traccar_last_error = f"Reset-Fehler: {e}"
+            return False
 
 
 def ensure_traccar_credentials():
-    """
-    Meldet sich an der lokalen Traccar-API an und richtet beim Erststart automatisch den Admin-User
-    aus der .env (TRACCAR_API_USER / TRACCAR_API_PASSWORD) ein.
-    """
     global traccar_ready, traccar_last_error
-    try:
-        # 1. Prüfen, ob Login mit den .env-Zugangsdaten bereits klappt (POST /api/session)
-        resp = traccar_session.post(
-            f"{TRACCAR_BASE_URL}/session",
-            data={"email": TRACCAR_USER, "password": TRACCAR_PASS},
-            timeout=3
-        )
-        if resp.status_code == 200:
-            traccar_session.auth = HTTPBasicAuth(TRACCAR_USER, TRACCAR_PASS)
-            traccar_ready = True
-            traccar_last_error = None
-            return True
-
-        # 2. Traccar 5.12 First-Run-Setup:
-        #    WICHTIG: "administrator": True darf NICHT im unauthentifizierten POST stehen,
-        #    sonst wirft Traccar eine SecurityException (HTTP 400)!
-        #    Der allererste User in einer leeren H2-Datenbank wird von Traccar automatisch zum Admin gemacht.
-        reg_payload = {
-            "name": TRACCAR_USER,
-            "email": TRACCAR_USER,
-            "password": TRACCAR_PASS
-        }
-        reg_resp = requests.post(f"{TRACCAR_BASE_URL}/users", json=reg_payload, timeout=4)
-        if reg_resp.status_code in (200, 201):
-            print(f"🔐 Frische Traccar-Datenbank erkannt: Admin-User '{TRACCAR_USER}' erfolgreich erstregistriert!")
-            login_resp = traccar_session.post(
+    with traccar_lock:
+        try:
+            resp = traccar_session.post(
                 f"{TRACCAR_BASE_URL}/session",
                 data={"email": TRACCAR_USER, "password": TRACCAR_PASS},
                 timeout=3
             )
-            if login_resp.status_code == 200:
+            if resp.status_code == 200:
                 traccar_session.auth = HTTPBasicAuth(TRACCAR_USER, TRACCAR_PASS)
                 traccar_ready = True
                 traccar_last_error = None
                 return True
 
-        # 3. Fallback für ältere Traccar-Datenbanken mit Default-Login (admin / admin)
-        resp_default = traccar_session.post(
-            f"{TRACCAR_BASE_URL}/session",
-            data={"email": "admin", "password": "admin"},
-            timeout=3
-        )
-        if resp_default.status_code == 200:
-            user_data = resp_default.json()
-            user_id = user_data.get("id")
-            user_data["email"] = TRACCAR_USER
-            user_data["name"] = TRACCAR_USER
-            user_data["password"] = TRACCAR_PASS
-
-            update_resp = traccar_session.put(
-                f"{TRACCAR_BASE_URL}/users/{user_id}",
-                json=user_data,
-                auth=HTTPBasicAuth("admin", "admin"),
-                timeout=5
-            )
-            if update_resp.status_code == 200:
-                print(f"🔐 Traccar Standard-Login erfolgreich auf '{TRACCAR_USER}' (.env) umgestellt!")
-                traccar_session.post(
+            reg_payload = {
+                "name": TRACCAR_USER,
+                "email": TRACCAR_USER,
+                "password": TRACCAR_PASS
+            }
+            reg_resp = requests.post(f"{TRACCAR_BASE_URL}/users", json=reg_payload, timeout=4)
+            if reg_resp.status_code in (200, 201):
+                print(f"🔐 Frische Traccar-Datenbank erkannt: Admin-User '{TRACCAR_USER}' erfolgreich erstregistriert!")
+                login_resp = traccar_session.post(
                     f"{TRACCAR_BASE_URL}/session",
                     data={"email": TRACCAR_USER, "password": TRACCAR_PASS},
                     timeout=3
                 )
-                traccar_session.auth = HTTPBasicAuth(TRACCAR_USER, TRACCAR_PASS)
-                traccar_ready = True
-                traccar_last_error = None
-                return True
+                if login_resp.status_code == 200:
+                    traccar_session.auth = HTTPBasicAuth(TRACCAR_USER, TRACCAR_PASS)
+                    traccar_ready = True
+                    traccar_last_error = None
+                    return True
+
+            resp_default = traccar_session.post(
+                f"{TRACCAR_BASE_URL}/session",
+                data={"email": "admin", "password": "admin"},
+                timeout=3
+            )
+            if resp_default.status_code == 200:
+                user_data = resp_default.json()
+                user_id = user_data.get("id")
+                user_data["email"] = TRACCAR_USER
+                user_data["name"] = TRACCAR_USER
+                user_data["password"] = TRACCAR_PASS
+
+                update_resp = traccar_session.put(
+                    f"{TRACCAR_BASE_URL}/users/{user_id}",
+                    json=user_data,
+                    auth=HTTPBasicAuth("admin", "admin"),
+                    timeout=5
+                )
+                if update_resp.status_code == 200:
+                    print(f"🔐 Traccar Standard-Login erfolgreich auf '{TRACCAR_USER}' (.env) umgestellt!")
+                    traccar_session.post(
+                        f"{TRACCAR_BASE_URL}/session",
+                        data={"email": TRACCAR_USER, "password": TRACCAR_PASS},
+                        timeout=3
+                    )
+                    traccar_session.auth = HTTPBasicAuth(TRACCAR_USER, TRACCAR_PASS)
+                    traccar_ready = True
+                    traccar_last_error = None
+                    return True
+                else:
+                    traccar_last_error = f"Admin-Update fehlgeschlagen (HTTP {update_resp.status_code})"
             else:
-                traccar_last_error = f"Admin-Update fehlgeschlagen (HTTP {update_resp.status_code})"
-        else:
-            traccar_last_error = f"Login abgelehnt (HTTP {resp.status_code}, Reg-HTTP {reg_resp.status_code})"
+                traccar_last_error = f"Login abgelehnt (HTTP {resp.status_code}, Reg-HTTP {reg_resp.status_code})"
 
-    except requests.exceptions.ConnectionError:
-        traccar_last_error = "Port 8082 bootet noch (H2-Migration läuft)..."
-    except requests.exceptions.Timeout:
-        traccar_last_error = "Timeout auf Port 8082"
-    except Exception as e:
-        traccar_last_error = f"Fehler: {e}"
+        except requests.exceptions.ConnectionError:
+            traccar_last_error = "Port 8082 bootet noch (H2-Migration läuft)..."
+        except requests.exceptions.Timeout:
+            traccar_last_error = "Timeout auf Port 8082"
+        except Exception as e:
+            traccar_last_error = f"Fehler: {e}"
 
-    traccar_ready = False
-    return False
+        traccar_ready = False
+        return False
 
 
 def sync_traccar_devices(teams_data=None):
-    """Synchronisiert alle aktiven Teams (Name + PIN-Slug) direkt mit dem lokalen Traccar-Server."""
     with traccar_lock:
         if not traccar_ready:
             if not ensure_traccar_credentials():
@@ -546,7 +691,6 @@ def sync_traccar_devices(teams_data=None):
                     if slug:
                         desired_devices[slug] = name
 
-            # 1. Neue Geräte anlegen oder bestehende umbenennen
             for slug, name in desired_devices.items():
                 if slug not in existing_by_slug:
                     payload = {"name": name, "uniqueId": slug}
@@ -561,7 +705,6 @@ def sync_traccar_devices(teams_data=None):
                         if upd_res.status_code == 200:
                             print(f"🔄 Traccar Sync: Gerät '{slug}' in '{name}' umbenannt.")
 
-            # 2. Veraltete Geräte (z.B. nach PIN-Änderung oder Deaktivierung) löschen
             for slug, dev in existing_by_slug.items():
                 if slug.startswith("debug-koblenz-"):
                     continue
@@ -582,11 +725,139 @@ def trigger_traccar_sync_async(teams_data):
     threading.Thread(target=sync_traccar_devices, args=(copy_data,), daemon=True).start()
 
 
+# --- HINTERGRUND-PRÜFUNG FÜR GPS-INAKTIVITÄT & 1-MINUTEN-HALTESTELLEN-CHECKS ---
+def check_game_gps_rules():
+    """
+    Wird regelmäßig im Hintergrund ausgeführt:
+    1. Prüft offene Haltestellen-Anfragen im 1-Minuten-Nachprüfungsfenster.
+    2. Prüft während des aktiven Spiels, ob Teams seit 5, 10, 15... Minuten keinen Standort geschickt haben,
+       und trägt dies in die Aktions-Historie des Admins ein.
+    """
+    if not gps_rules_lock.acquire(blocking=False):
+        return
+
+    telegram_messages = []
+    now_utc = datetime.now(timezone.utc)
+
+    try:
+        with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
+            conn.row_factory = sqlite3.Row
+            state = get_state(conn)
+            phase, start_iso, end_iso, _, _ = update_game_time_state(conn, state)
+            config = state["config"]
+            state_changed = False
+
+            # 1. 1-Minuten-Nachprüfung für offene Haltestellen-Anfragen
+            if config.get("auto_approve_stops", False):
+                radius_m = float(config.get("stop_radius_meters", 100))
+                remaining_requests = []
+                for req in state["pending_requests"]:
+                    if req.get("type") == "stop" and req.get("gps_check_until"):
+                        if req.get("stop") not in state["active_stops"]:
+                            # Haltestelle ist nicht mehr aktiv (z.B. von anderem Team geholt oder neu gewürfelt) -> verwerfen
+                            state_changed = True
+                            continue
+
+                        req_dt = parse_iso_utc(req.get("timestamp")) or now_utc
+                        until_dt = parse_iso_utc(req.get("gps_check_until"))
+                        window_start = req_dt - timedelta(minutes=5)
+                        window_end = min(now_utc, until_dt) if until_dt else now_utc
+
+                        min_dist, closest_iso = find_closest_stop_approach(
+                            conn, req["team"], req["stop"], window_start, window_end
+                        )
+
+                        if min_dist is not None and min_dist <= radius_m:
+                            execute_stop_catch(
+                                state, req["stop"], req["team"],
+                                is_late=req.get("is_late", False),
+                                submitted_ts=req.get("timestamp"),
+                                actual_ts=closest_iso or req.get("timestamp"),
+                                auto_approved=True
+                            )
+                            state_changed = True
+                            t_name = req.get("team_name", req["team"])
+                            telegram_messages.append(
+                                f"✅ AUTO-GPS-FREIGABE (Nachprüfung): Team '{t_name}' hat Haltestelle '{req['stop']}' ({int(min_dist)}m) erreicht."
+                            )
+                            continue
+                        elif until_dt and now_utc >= until_dt:
+                            # 1 Minute ist abgelaufen -> wird zur regulären manuellen Admin-Anfrage
+                            req.pop("gps_check_until", None)
+                            if not req.get("notified_admin"):
+                                req["notified_admin"] = True
+                                t_name = req.get("team_name", req["team"])
+                                telegram_messages.append(
+                                    f"📬 MANUELLE FREIGABE NÖTIG: Team '{t_name}' möchte Haltestelle '{req['stop']}' eintragen (kein GPS-Punkt im {int(radius_m)}m Radius gefunden)."
+                                )
+                            state_changed = True
+                    remaining_requests.append(req)
+                state["pending_requests"] = remaining_requests
+
+            # 2. 5 / 10 / 15... Minuten Standort-Ausfall-Historie für den Admin (während 'game')
+            if phase == "game":
+                c = conn.cursor()
+                c.execute("SELECT team_id, updated_at FROM team_locations")
+                loc_map = {r["team_id"]: parse_iso_utc(r["updated_at"]) for r in c.fetchall()}
+                start_dt_utc = parse_iso_utc(start_iso)
+
+                for t_id, t_data in state["teams_data"].items():
+                    if t_data.get("deactivated", False):
+                        continue
+                    if t_data.get("role") not in ("läufer", "fänger"):
+                        continue
+
+                    last_dt = loc_map.get(t_id)
+                    if last_dt is not None and start_dt_utc is not None and last_dt < start_dt_utc:
+                        ref_dt = start_dt_utc
+                    else:
+                        ref_dt = last_dt or start_dt_utc
+
+                    if not ref_dt:
+                        continue
+
+                    missing_sec = (now_utc - ref_dt).total_seconds()
+                    if missing_sec >= 300:
+                        stage = int(missing_sec // 300) * 5  # 5, 10, 15, 20...
+                        prev_stage = gps_inactivity_notified_stage.get(t_id, 0)
+                        if stage > prev_stage:
+                            gps_inactivity_notified_stage[t_id] = stage
+                            t_name = t_data.get("display_name", t_id)
+                            role_label = t_data.get("role", "Team").capitalize()
+                            desc = f"⚠️ GPS-WARNUNG: {t_name} ({role_label}) hat seit {stage} Minuten keinen Standort mehr gesendet!"
+                            state["action_log"].insert(0, {
+                                "id": str(uuid.uuid4()),
+                                "type": "system",
+                                "team": t_id,
+                                "team_name": t_name,
+                                "timestamp": now_utc.isoformat(),
+                                "desc": desc,
+                                "is_late": False,
+                                "admin_only": True
+                            })
+                            state_changed = True
+                    else:
+                        gps_inactivity_notified_stage[t_id] = 0
+
+            if state_changed:
+                save_state(conn, state)
+
+    except Exception as e:
+        print(f"⚠️ Fehler in check_game_gps_rules: {e}")
+    finally:
+        gps_rules_lock.release()
+
+    for msg in telegram_messages:
+        send_telegram_msg(msg)
+
+
+def game_rules_background_worker():
+    while True:
+        time.sleep(5)
+        check_game_gps_rules()
+
+
 def traccar_background_worker():
-    """
-    Startet den lokalen Java-Traccar-Server, wartet auf den ersten Bootvorgang,
-    registriert/authentifiziert den Admin-Account gemäß .env und synchronisiert alle Teams.
-    """
     if not start_traccar_server():
         return
 
@@ -618,8 +889,7 @@ def traccar_background_worker():
                 if traccar_last_error and ("HTTP 401" in traccar_last_error or "HTTP 400" in traccar_last_error):
                     auth_401_failures += 1
                     if auth_401_failures >= 3 and not auto_reset_done:
-                        print(
-                            "⚠️ Alte/inkompatible H2-Datenbank erkannt (Login fehlgeschlagen). Setze lokale Traccar-DB automatisch zurück...")
+                        print("⚠️ Alte/inkompatible H2-Datenbank erkannt (Login fehlgeschlagen). Setze lokale Traccar-DB automatisch zurück...")
                         auto_reset_done = True
                         reset_traccar_process_and_db()
                         auth_401_failures = 0
@@ -697,6 +967,50 @@ def save_state(conn, state):
     for stop in history:
         c.execute("INSERT INTO stop_history (stop_name) VALUES (?)", (stop,))
 
+    # Bestehende Zeitstempel aus der Datenbank sichern, damit sie auch nach > 50 action_log-Einträgen erhalten bleiben
+    stop_times_by_team = {}
+    catch_times_by_pair = {}
+
+    c.execute("SELECT team_id, stop_name, submitted_at, actual_timestamp FROM team_stops")
+    for r in c.fetchall():
+        if r[2] is not None or r[3] is not None:
+            stop_times_by_team.setdefault((r[0], r[1]), []).append((r[2], r[3] or r[2]))
+
+    c.execute("SELECT hunter_id, prey_id, submitted_at, actual_timestamp FROM team_catches")
+    for r in c.fetchall():
+        if r[2] is not None or r[3] is not None:
+            catch_times_by_pair.setdefault((r[0], r[1]), []).append((r[2], r[3] or r[2]))
+
+    # Falls im State bereits stop_timestamps / catch_timestamps mitgeführt wurden, diese berücksichtigen
+    for t_id, data in state.get('teams_data', {}).items():
+        for entry in data.get('stop_timestamps', []):
+            if len(entry) >= 3 and (entry[1] is not None or entry[2] is not None):
+                key = (t_id, entry[0])
+                pair = (entry[1], entry[2] or entry[1])
+                if pair not in stop_times_by_team.get(key, []):
+                    stop_times_by_team.setdefault(key, []).append(pair)
+        for entry in data.get('catch_timestamps', []):
+            if len(entry) >= 3 and (entry[1] is not None or entry[2] is not None):
+                key = (t_id, entry[0])
+                pair = (entry[1], entry[2] or entry[1])
+                if pair not in catch_times_by_pair.get(key, []):
+                    catch_times_by_pair.setdefault(key, []).append(pair)
+
+    # Zeitstempel aus action_log für team_stops und team_catches ergänzen
+    for log in reversed(state.get('action_log', [])):
+        if log.get('type') == 'stop' and log.get('team') and log.get('stop'):
+            key = (log['team'], log['stop'])
+            pair = (log.get('timestamp'), log.get('actual_timestamp') or log.get('timestamp'))
+            if pair[0] is not None or pair[1] is not None:
+                if pair not in stop_times_by_team.get(key, []):
+                    stop_times_by_team.setdefault(key, []).append(pair)
+        elif log.get('type') == 'catch' and log.get('hunter') and log.get('prey'):
+            key = (log['hunter'], log['prey'])
+            pair = (log.get('timestamp'), log.get('actual_timestamp') or log.get('timestamp'))
+            if pair[0] is not None or pair[1] is not None:
+                if pair not in catch_times_by_pair.get(key, []):
+                    catch_times_by_pair.setdefault(key, []).append(pair)
+
     c.execute("DELETE FROM teams")
     c.execute("DELETE FROM team_stops")
     c.execute("DELETE FROM team_catches")
@@ -707,24 +1021,39 @@ def save_state(conn, state):
         """, (t_id, data['display_name'], data['pin'], data.get('role', 'keine'), data.get('next_role', 'keine'), data['slug'], 1 if data.get('deactivated') else 0, data.get('manual_points', 0)))
 
         for stop in data.get('stops', []):
-            c.execute("INSERT INTO team_stops (team_id, stop_name) VALUES (?, ?)", (t_id, stop))
+            times_list = stop_times_by_team.get((t_id, stop), [])
+            sub_ts, act_ts = times_list.pop(0) if times_list else (None, None)
+            c.execute("INSERT INTO team_stops (team_id, stop_name, submitted_at, actual_timestamp) VALUES (?, ?, ?, ?)", (t_id, stop, sub_ts, act_ts))
         for prey_id in data.get('caught', []):
-            c.execute("INSERT INTO team_catches (hunter_id, prey_id) VALUES (?, ?)", (t_id, prey_id))
+            times_list = catch_times_by_pair.get((t_id, prey_id), [])
+            sub_ts, act_ts = times_list.pop(0) if times_list else (None, None)
+            c.execute("INSERT INTO team_catches (hunter_id, prey_id, submitted_at, actual_timestamp) VALUES (?, ?, ?, ?)", (t_id, prey_id, sub_ts, act_ts))
 
     c.execute("DELETE FROM pending_requests")
     for req in state['pending_requests']:
         c.execute("""
-            INSERT INTO pending_requests (id, type, team, team_name, stop, reporter, reporter_name, hunter, hunter_name, prey, prey_name, timestamp, is_late)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (req['id'], req['type'], req.get('team'), req.get('team_name'), req.get('stop'), req.get('reporter'), req.get('reporter_name'), req.get('hunter'), req.get('hunter_name'), req.get('prey'), req.get('prey_name'), req.get('timestamp'), 1 if req.get('is_late') else 0))
+            INSERT INTO pending_requests (id, type, team, team_name, stop, reporter, reporter_name, hunter, hunter_name, prey, prey_name, timestamp, is_late, gps_check_until, notified_admin)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            req['id'], req['type'], req.get('team'), req.get('team_name'), req.get('stop'),
+            req.get('reporter'), req.get('reporter_name'), req.get('hunter'), req.get('hunter_name'),
+            req.get('prey'), req.get('prey_name'), req.get('timestamp'),
+            1 if req.get('is_late') else 0, req.get('gps_check_until'),
+            1 if req.get('notified_admin') else 0
+        ))
 
     c.execute("DELETE FROM action_logs")
     logs = state['action_log'][:50] if len(state['action_log']) > 50 else state['action_log']
     for log in logs:
         c.execute("""
-            INSERT INTO action_logs (id, type, team, team_name, stop, hunter, hunter_name, prey, prey_name, timestamp, desc, is_late)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (log['id'], log['type'], log.get('team'), log.get('team_name'), log.get('stop'), log.get('hunter'), log.get('hunter_name'), log.get('prey'), log.get('prey_name'), log.get('timestamp'), log.get('desc'), 1 if log.get('is_late') else 0))
+            INSERT INTO action_logs (id, type, team, team_name, stop, hunter, hunter_name, prey, prey_name, timestamp, actual_timestamp, desc, is_late, admin_only)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            log['id'], log['type'], log.get('team'), log.get('team_name'), log.get('stop'),
+            log.get('hunter'), log.get('hunter_name'), log.get('prey'), log.get('prey_name'),
+            log.get('timestamp'), log.get('actual_timestamp'), log.get('desc'),
+            1 if log.get('is_late') else 0, 1 if log.get('admin_only') else 0
+        ))
 
     conn.commit()
 
@@ -744,14 +1073,14 @@ def get_state(conn):
             team_id = f"Team {i + 1}"
             display_name = team_names[i].strip() if i < len(team_names) and team_names[i].strip() else team_id
             pin = f"{random.randint(0, 9999):04d}"
-            
+
             teams_data[team_id] = {
                 "display_name": display_name,
-                "stops": [], "caught": [], "caught_by": [], "pin": pin, "role": "keine",
+                "stops": [], "stop_timestamps": [], "caught": [], "catch_timestamps": [], "caught_by": [], "pin": pin, "role": "keine",
                 "slug": generate_slug(team_id, pin), "deactivated": False,
                 "next_role": "keine", "manual_points": 0
             }
-        
+
         calculate_next_roles(teams_data)
         state = {
             "config": DEFAULT_CONFIG.copy(),
@@ -768,7 +1097,7 @@ def get_state(conn):
 
     state = {}
     settings_dict = {row['key']: row['value'] for row in rows}
-    
+
     state['config'] = json.loads(settings_dict.get('config', '{}'))
     state['roles_assigned'] = bool(int(settings_dict.get('roles_assigned', 0)))
     state['roles_swapped'] = bool(int(settings_dict.get('roles_swapped', 0)))
@@ -792,20 +1121,30 @@ def get_state(conn):
             'deactivated': bool(t['deactivated']),
             'manual_points': t['manual_points'],
             'stops': [],
+            'stop_timestamps': [],
             'caught': [],
+            'catch_timestamps': [],
             'caught_by': []
         }
 
-    c.execute("SELECT team_id, stop_name FROM team_stops")
+    c.execute("SELECT team_id, stop_name, submitted_at, actual_timestamp FROM team_stops")
     for r in c.fetchall():
         if r['team_id'] in state['teams_data']:
             state['teams_data'][r['team_id']]['stops'].append(r['stop_name'])
+            if r['submitted_at'] is not None or r['actual_timestamp'] is not None:
+                state['teams_data'][r['team_id']]['stop_timestamps'].append(
+                    (r['stop_name'], r['submitted_at'], r['actual_timestamp'])
+                )
 
-    c.execute("SELECT hunter_id, prey_id FROM team_catches")
+    c.execute("SELECT hunter_id, prey_id, submitted_at, actual_timestamp FROM team_catches")
     for r in c.fetchall():
         h_id, p_id = r['hunter_id'], r['prey_id']
         if h_id in state['teams_data']:
             state['teams_data'][h_id]['caught'].append(p_id)
+            if r['submitted_at'] is not None or r['actual_timestamp'] is not None:
+                state['teams_data'][h_id]['catch_timestamps'].append(
+                    (p_id, r['submitted_at'], r['actual_timestamp'])
+                )
         if p_id in state['teams_data']:
             state['teams_data'][p_id]['caught_by'].append(h_id)
 
@@ -813,14 +1152,16 @@ def get_state(conn):
     c.execute("SELECT * FROM pending_requests")
     for r in c.fetchall():
         req = dict(r)
-        req['is_late'] = bool(req['is_late'])
+        req['is_late'] = bool(req.get('is_late'))
+        req['notified_admin'] = bool(req.get('notified_admin'))
         state['pending_requests'].append({k: v for k, v in req.items() if v is not None})
 
     state['action_log'] = []
     c.execute("SELECT * FROM action_logs ORDER BY timestamp DESC")
     for r in c.fetchall():
         log = dict(r)
-        log['is_late'] = bool(log['is_late'])
+        log['is_late'] = bool(log.get('is_late'))
+        log['admin_only'] = bool(log.get('admin_only'))
         state['action_log'].append({k: v for k, v in log.items() if v is not None})
 
     for k, v in DEFAULT_CONFIG.items():
@@ -855,14 +1196,14 @@ def update_game_time_state(conn, state):
     try:
         start_dt = datetime.fromisoformat(start_str)
         end_dt = datetime.fromisoformat(end_str)
-        
+
         if hasattr(tz, 'localize'):
             start_dt = tz.localize(start_dt.replace(tzinfo=None))
             end_dt = tz.localize(end_dt.replace(tzinfo=None))
         else:
             start_dt = start_dt.replace(tzinfo=tz)
             end_dt = end_dt.replace(tzinfo=tz)
-            
+
     except ValueError:
         return "inactive", None, None, None, now.isoformat()
 
@@ -887,7 +1228,7 @@ def update_game_time_state(conn, state):
             calculate_next_roles(state["teams_data"])
             state["roles_assigned"] = True
             state["action_log"].insert(0, {
-                "id": str(uuid.uuid4()), "type": "system", "timestamp": time.time(),
+                "id": str(uuid.uuid4()), "type": "system", "timestamp": datetime.now(timezone.utc).isoformat(),
                 "desc": "🎲 Die Rollen wurden zugewiesen!"
             })
             save_state(conn, state)
@@ -903,10 +1244,16 @@ def update_game_time_state(conn, state):
                         data["role"] = "fänger"
                     elif current_role == "fänger":
                         data["role"] = "läufer"
-            
+
             calculate_next_roles(state["teams_data"])
             state["roles_swapped"] = True
-            
+
+            # Beim Rollentausch offene Haltestellen-Anfragen von ehemaligen Läufern bereinigen
+            state["pending_requests"] = [
+                r for r in state["pending_requests"]
+                if not (r.get("type") == "stop" and state["teams_data"].get(r.get("team"), {}).get("role") != "läufer")
+            ]
+
             if config.get("shuffle_stops_on_swap", True):
                 target_stops = config.get("target_stops", 12)
                 state["history"] = []
@@ -918,7 +1265,7 @@ def update_game_time_state(conn, state):
                 desc = "🔄 HALBZEIT! Die Rollen der aktiven Teams wurden getauscht."
 
             state["action_log"].insert(0, {
-                "id": str(uuid.uuid4()), "type": "system", "timestamp": time.time(),
+                "id": str(uuid.uuid4()), "type": "system", "timestamp": datetime.now(timezone.utc).isoformat(),
                 "desc": desc
             })
             save_state(conn, state)
@@ -940,13 +1287,18 @@ def update_game_time_state(conn, state):
     return phase, start_dt.isoformat(), end_dt.isoformat(), (mid_dt.isoformat() if mid_dt else None), now.isoformat()
 
 
-# --- SPIEL-AKTIONEN ---
-def execute_stop_catch(state, stop_name, team_id, is_late=False):
+# --- SPIEL-AKTIONEN MIT TATSÄCHLICHER ZEIT ---
+def execute_stop_catch(state, stop_name, team_id, is_late=False, submitted_ts=None, actual_ts=None, auto_approved=False):
+    now_iso = datetime.now(timezone.utc).isoformat()
+    sub_iso = submitted_ts or now_iso
+    act_iso = actual_ts or sub_iso
+
     display_name = "Unbekannt"
     if team_id and team_id in state["teams_data"]:
         state["teams_data"][team_id]["stops"].append(stop_name)
+        state["teams_data"][team_id].setdefault("stop_timestamps", []).append((stop_name, sub_iso, act_iso))
         display_name = state["teams_data"][team_id]["display_name"]
-        
+
     if stop_name in state['active_stops']:
         state['active_stops'].remove(stop_name)
         new_stop = get_new_random_stop(state['active_stops'], state['history'])
@@ -954,30 +1306,39 @@ def execute_stop_catch(state, stop_name, team_id, is_late=False):
         state['history'].append(new_stop)
 
     desc = f"📍 {display_name} hat die Haltestelle '{stop_name}' erreicht."
-    if is_late: desc += "   (Nachtrag nach Spielende)"
-    
+    if auto_approved:
+        desc += " (GPS Auto-Freigabe)"
+    if is_late:
+        desc += "   (Nachtrag nach Spielende)"
+
     state["action_log"].insert(0, {
         "id": str(uuid.uuid4()), "type": "stop", "team": team_id, "team_name": display_name, "stop": stop_name,
-        "timestamp": time.time(), "desc": desc, "is_late": is_late
+        "timestamp": sub_iso, "actual_timestamp": act_iso, "desc": desc, "is_late": is_late
     })
     return True
 
 
-def execute_team_catch(state, hunter_id, prey_id, is_late=False):
+def execute_team_catch(state, hunter_id, prey_id, is_late=False, submitted_ts=None, actual_ts=None):
+    now_iso = datetime.now(timezone.utc).isoformat()
+    sub_iso = submitted_ts or now_iso
+    act_iso = actual_ts or sub_iso
+
     if hunter_id in state['teams_data'] and prey_id in state['teams_data']:
         state['teams_data'][hunter_id]['caught'].append(prey_id)
+        state['teams_data'][hunter_id].setdefault('catch_timestamps', []).append((prey_id, sub_iso, act_iso))
         state['teams_data'][prey_id]['caught_by'].append(hunter_id)
 
         hunter_name = state['teams_data'][hunter_id]['display_name']
         prey_name = state['teams_data'][prey_id]['display_name']
 
         desc = f"⚔️ {hunter_name} (Fänger) hat {prey_name} (Läufer) gefangen."
-        if is_late: desc += "   (Nachtrag nach Spielende)"
+        if is_late:
+            desc += "   (Nachtrag nach Spielende)"
 
         state["action_log"].insert(0, {
             "id": str(uuid.uuid4()), "type": "catch", "hunter": hunter_id, "prey": prey_id,
             "hunter_name": hunter_name, "prey_name": prey_name,
-            "timestamp": time.time(), "desc": desc, "is_late": is_late
+            "timestamp": sub_iso, "actual_timestamp": act_iso, "desc": desc, "is_late": is_late
         })
         return True
     return False
@@ -994,7 +1355,7 @@ def index():
     config = state["config"]
     leaderboard = []
     teams_list = []
-    
+
     for t_id, d in state["teams_data"].items():
         if d.get("deactivated", False):
             continue
@@ -1003,19 +1364,21 @@ def index():
         score = calculate_score(d, config)
 
         leaderboard.append({
-            "id": t_id, "display_name": d["display_name"], "score": score, 
+            "id": t_id, "display_name": d["display_name"], "score": score,
             "role": d.get("role", "keine"), "next_role": d.get("next_role", "")
         })
-        
+
     leaderboard.sort(key=lambda x: x["score"], reverse=True)
     teams_list.sort(key=lambda x: x["name"].lower())
+
+    public_log = [e for e in state.get("action_log", []) if not e.get("admin_only")]
 
     return render_template('index.html', teams=teams_list, leaderboard=leaderboard,
                            phase=phase, start_time=start_iso, end_time=end_iso,
                            mid_time=mid_iso, now_time=now_iso,
                            enable_swap=config.get("enable_mid_game_swap", True),
                            roles_swapped=state.get("roles_swapped", False),
-                           action_log=state.get("action_log", []))
+                           action_log=public_log)
 
 
 @app.route('/rules.html')
@@ -1039,7 +1402,8 @@ def team_dashboard(slug):
             team_data = d
             break
 
-    if not team_id: return "Team nicht gefunden", 404
+    if not team_id:
+        return "Team nicht gefunden", 404
 
     role = team_data.get("role", "keine")
     next_role = team_data.get("next_role", "")
@@ -1052,7 +1416,7 @@ def team_dashboard(slug):
     for t_id_iter, d in state["teams_data"].items():
         if d.get("deactivated", False):
             continue
-            
+
         t_role = d.get("role", "keine")
         if t_role == "läufer" and t_id_iter != team_id:
             laeufer_teams.append({"id": t_id_iter, "name": d["display_name"]})
@@ -1062,14 +1426,18 @@ def team_dashboard(slug):
         score = calculate_score(d, config)
 
         leaderboard.append({
-            "id": t_id_iter, "display_name": d["display_name"], "score": score, 
+            "id": t_id_iter, "display_name": d["display_name"], "score": score,
             "role": t_role, "next_role": d.get("next_role", "")
         })
 
     leaderboard.sort(key=lambda x: x["score"], reverse=True)
 
-    team_log = [entry for entry in state["action_log"] if
-                entry.get("team") == team_id or entry.get("hunter") == team_id or entry.get("prey") == team_id or entry.get("type") == "system"]
+    team_log = [
+        entry for entry in state["action_log"]
+        if not entry.get("admin_only") and (
+            entry.get("team") == team_id or entry.get("hunter") == team_id or entry.get("prey") == team_id or entry.get("type") == "system"
+        )
+    ]
 
     host_ip = request.host.split(':')[0]
 
@@ -1083,36 +1451,132 @@ def team_dashboard(slug):
                            is_deactivated=is_deactivated, host_ip=host_ip)
 
 
+@app.route('/api/team_locations')
+def api_team_locations():
+    """
+    Liefert die für das anfragende Team sichtbaren Live-Standorte sowie den GPS-Warnstatus:
+    - Eigenes Team: Immer sichtbar (solange Karte aktiv).
+    - Fänger: Sehen zusätzlich ab 5 Minuten vor Spielstart (pre_game, game, post_game) die Standorte aller Läufer.
+      (Bei Rollentausch wird die aktuelle Rolle aus der DB geprüft, sodass ehemalige Fänger sofort keine Läufer mehr sehen).
+    - GPS-Warnung: Wenn das Team (Läufer oder Fänger) seit > 2 Minuten keinen Standort mehr gesendet hat.
+    """
+    team_slug = request.args.get('slug')
+    if not team_slug:
+        return jsonify({'success': False, 'error': 'Slug fehlt'}), 400
+
+    with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
+        conn.row_factory = sqlite3.Row
+        state = get_state(conn)
+        phase, start_iso, _, _, now_iso = update_game_time_state(conn, state)
+
+        my_team_id = None
+        my_team_data = None
+        for t_id, d in state["teams_data"].items():
+            if d.get("slug") == team_slug:
+                my_team_id = t_id
+                my_team_data = d
+                break
+
+        if not my_team_id:
+            return jsonify({'success': False, 'error': 'Team nicht gefunden'}), 404
+
+        my_role = my_team_data.get("role", "keine")
+
+        c = conn.cursor()
+        c.execute("SELECT team_id, lat, lon, updated_at FROM team_locations")
+        all_locs = {r["team_id"]: r for r in c.fetchall()}
+
+        visible_locations = []
+        # Ab 5 Min vor Spielbeginn (pre_game, game, post_game) sehen Fänger die Läufer
+        catcher_can_see_runners = (my_role == "fänger" and phase in ("pre_game", "game", "post_game"))
+
+        for t_id, loc_row in all_locs.items():
+            t_data = state["teams_data"].get(t_id)
+            if not t_data or t_data.get("deactivated", False):
+                continue
+
+            t_role = t_data.get("role", "keine")
+            is_self = (t_id == my_team_id)
+
+            if is_self or (catcher_can_see_runners and t_role == "läufer"):
+                dt = parse_iso_utc(loc_row["updated_at"])
+                ts_epoch = dt.timestamp() if dt else time.time()
+                visible_locations.append({
+                    "id": t_id,
+                    "name": t_data["display_name"],
+                    "role": t_role,
+                    "lat": loc_row["lat"],
+                    "lon": loc_row["lon"],
+                    "updated_at": ts_epoch,
+                    "is_self": is_self
+                })
+
+        # Prüfung auf > 2 Minuten keinen Standort (für Läufer und Fänger im Spiel / Pre-Game)
+        gps_warning = False
+        missing_minutes = 0
+        now_utc = datetime.now(timezone.utc)
+
+        if phase in ("pre_game", "game") and my_role in ("läufer", "fänger") and not my_team_data.get("deactivated", False):
+            my_loc = all_locs.get(my_team_id)
+            if my_loc and my_loc["updated_at"]:
+                last_dt = parse_iso_utc(my_loc["updated_at"])
+                if last_dt:
+                    diff_sec = (now_utc - last_dt).total_seconds()
+                    if diff_sec >= 120:
+                        gps_warning = True
+                        missing_minutes = max(2, int(diff_sec // 60))
+            else:
+                # Noch gar kein Standort gesendet seit Pre-Game Beginn
+                start_dt = parse_iso_utc(start_iso)
+                pre_start_dt = (start_dt - timedelta(minutes=5)) if start_dt else None
+                if pre_start_dt:
+                    diff_sec = (now_utc - pre_start_dt).total_seconds()
+                    if diff_sec >= 120:
+                        gps_warning = True
+                        missing_minutes = max(2, int(diff_sec // 60))
+
+    return jsonify({
+        "success": True,
+        "role": my_role,
+        "phase": phase,
+        "locations": visible_locations,
+        "gps_warning": gps_warning,
+        "missing_minutes": missing_minutes
+    })
+
+
 @app.route('/api/login_team', methods=['POST'])
 def login_team():
     data = request.json
     team_id = data.get('team_id')
     pin = data.get('pin')
-    
+
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='DEFERRED') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
-        
+
     team_data = state["teams_data"].get(team_id)
 
     if team_data and str(team_data.get("pin")) == str(pin).strip():
         return jsonify({'success': True, 'slug': team_data["slug"]})
-        
+
     return jsonify({'success': False, 'error': 'Falscher PIN oder Team nicht gefunden!'})
 
 
 @app.route('/api/login_admin', methods=['POST'])
 def login_admin():
     data = request.json
-    if data.get('password') == ADMIN_PASSWORD:
+    pw = str(data.get('password', '')).strip()
+    if pw == ADMIN_PASSWORD:
         return jsonify({'success': True, 'redirect_url': f"/adminconsole-{ADMIN_SLUG}"})
     return jsonify({'success': False, 'error': 'Falsches Admin-Passwort!'})
 
 
 @app.route('/adminconsole-<admin_slug>')
 def admin(admin_slug):
-    if admin_slug != ADMIN_SLUG: return "Zugriff verweigert", 403
-    
+    if not is_valid_admin_slug(admin_slug):
+        return "Zugriff verweigert", 403
+
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
@@ -1123,7 +1587,7 @@ def admin(admin_slug):
     team_urls = {}
     teams_list = []
     base_url = request.host_url.rstrip('/')
-    
+
     team_names_map = {t_id: d["display_name"] for t_id, d in state["teams_data"].items()}
 
     for t_id, data in state["teams_data"].items():
@@ -1139,14 +1603,14 @@ def admin(admin_slug):
             "deactivated": data.get("deactivated", False),
             "manual_points": data.get("manual_points", 0)
         })
-        
+
     leaderboard.sort(key=lambda x: x["score"], reverse=True)
     teams_list.sort(key=lambda x: x["name"].lower())
 
     return render_template('admin.html', active_stops=state['active_stops'], teams=teams_list,
-                           leaderboard=leaderboard, admin_url=admin_slug, team_urls=team_urls,
+                           leaderboard=leaderboard, admin_url=ADMIN_SLUG, team_urls=team_urls,
                            pending_requests=state["pending_requests"], action_log=state["action_log"],
-                           phase=phase, start_time=start_iso, end_time=end_iso, mid_time=mid_iso, 
+                           phase=phase, start_time=start_iso, end_time=end_iso, mid_time=mid_iso,
                            now_time=now_iso, team_names_map=team_names_map,
                            enable_swap=config.get("enable_mid_game_swap", True),
                            roles_swapped=state.get("roles_swapped", False))
@@ -1154,31 +1618,34 @@ def admin(admin_slug):
 
 @app.route('/api/admin_data/<admin_slug>')
 def api_admin_data(admin_slug):
-    if admin_slug != ADMIN_SLUG: return jsonify({'success': False, 'error': 'Zugriff verweigert'}), 403
-    
+    if not is_valid_admin_slug(admin_slug):
+        return jsonify({'success': False, 'error': 'Zugriff verweigert'}), 403
+
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
         phase, start_iso, end_iso, mid_iso, now_iso = update_game_time_state(conn, state)
-        
+
         c = conn.cursor()
         c.execute("SELECT team_id, lat, lon, updated_at FROM team_locations")
         locations = c.fetchall()
-        
+
         team_locs = []
         for loc in locations:
             t_id = loc['team_id']
             team_data = state["teams_data"].get(t_id)
             if team_data and not team_data.get("deactivated", False):
+                dt = parse_iso_utc(loc['updated_at'])
+                ts_epoch = dt.timestamp() if dt else time.time()
                 team_locs.append({
                     "id": t_id,
                     "name": team_data["display_name"],
                     "role": team_data.get("role", "keine"),
                     "lat": loc['lat'],
                     "lon": loc['lon'],
-                    "updated_at": loc['updated_at']
+                    "updated_at": ts_epoch
                 })
-        
+
     return jsonify({
         'success': True,
         'pending_requests': state.get("pending_requests", []),
@@ -1192,8 +1659,9 @@ def api_admin_data(admin_slug):
 
 @app.route('/adminconsole-<admin_slug>/settings', methods=['GET', 'POST'])
 def admin_settings(admin_slug):
-    if admin_slug != ADMIN_SLUG: return "Zugriff verweigert", 403
-    
+    if not is_valid_admin_slug(admin_slug):
+        return "Zugriff verweigert", 403
+
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
@@ -1201,7 +1669,7 @@ def admin_settings(admin_slug):
 
         if request.method == 'GET':
             sorted_teams = sorted(state["teams_data"].items(), key=lambda x: int(x[0].replace("Team ", "")) if "Team " in x[0] else 999)
-            return render_template('settings.html', config=config, sorted_teams=sorted_teams, admin_url=admin_slug)
+            return render_template('settings.html', config=config, sorted_teams=sorted_teams, admin_url=ADMIN_SLUG)
 
         data = request.json
         old_start = config.get("start_time")
@@ -1217,20 +1685,23 @@ def admin_settings(admin_slug):
         config["enable_mid_game_swap"] = data.get("enable_mid_game_swap", True)
         config["shuffle_stops_on_swap"] = data.get("shuffle_stops_on_swap", True)
 
+        config["auto_approve_stops"] = bool(data.get("auto_approve_stops", config.get("auto_approve_stops", False)))
+        config["stop_radius_meters"] = float(data.get("stop_radius_meters", config.get("stop_radius_meters", 100)))
+
         if old_start != config["start_time"] or old_end != config["end_time"] or old_swap != config["enable_mid_game_swap"]:
             state["roles_swapped"] = False
 
         team_list = data.get("teams_list", [])
         old_teams_data = state.get("teams_data", {})
         new_teams_data = {}
-        
+
         for t in team_list:
             team_id = str(t["team_id"]).strip()
             display_name = str(t["new_name"]).strip() or team_id
             role = t["role"]
             pin = str(t["pin"]).strip()
             active = bool(t["active"])
-            
+
             if team_id and team_id in old_teams_data:
                 team_data = old_teams_data[team_id]
                 team_data["display_name"] = display_name
@@ -1242,19 +1713,19 @@ def admin_settings(admin_slug):
             else:
                 new_teams_data[team_id] = {
                     "display_name": display_name,
-                    "stops": [], "caught": [], "caught_by": [], "pin": pin,
-                    "role": role, "slug": generate_slug(team_id, pin), 
+                    "stops": [], "stop_timestamps": [], "caught": [], "catch_timestamps": [], "caught_by": [], "pin": pin,
+                    "role": role, "slug": generate_slug(team_id, pin),
                     "deactivated": not active,
                     "manual_points": 0
                 }
-                
+
         calculate_next_roles(new_teams_data)
         state["teams_data"] = new_teams_data
-        
+
         active_has_keine = any(d["role"] == "keine" for d in new_teams_data.values() if not d["deactivated"])
         if not active_has_keine and not state.get("roles_assigned"):
             state["roles_assigned"] = True
-        
+
         config["num_teams"] = len(new_teams_data)
         config["points_stop_reached"] = int(data.get("points_stop_reached", config["points_stop_reached"]))
         config["points_was_caught"] = int(data.get("points_was_caught", config["points_was_caught"]))
@@ -1265,7 +1736,8 @@ def admin_settings(admin_slug):
         if current_active_count < target:
             needed = target - current_active_count
             available = list(set(ALL_STOPS) - set(state["active_stops"]) - set(state["history"]))
-            if not available: available = list(set(ALL_STOPS) - set(state["active_stops"]))
+            if not available:
+                available = list(set(ALL_STOPS) - set(state["active_stops"]))
             if available:
                 added = random.sample(available, min(needed, len(available)))
                 state["active_stops"].extend(added)
@@ -1275,14 +1747,17 @@ def admin_settings(admin_slug):
 
         save_state(conn, state)
         trigger_traccar_sync_async(state["teams_data"])
-        
-    return jsonify({'success': True, 'new_admin_url': admin_slug})
+
+    return jsonify({'success': True, 'new_admin_url': ADMIN_SLUG})
 
 
 @app.route('/adminconsole-<admin_slug>/reset', methods=['POST'])
 def reset_game(admin_slug):
-    if admin_slug != ADMIN_SLUG: return jsonify({'success': False, 'error': 'Verboten'}), 403
-    
+    if not is_valid_admin_slug(admin_slug):
+        return jsonify({'success': False, 'error': 'Verboten'}), 403
+
+    gps_inactivity_notified_stage.clear()
+
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
@@ -1300,24 +1775,33 @@ def reset_game(admin_slug):
         teams_ids = list(state["teams_data"].keys())
         for t_id in teams_ids:
             state["teams_data"][t_id]["stops"] = []
+            state["teams_data"][t_id]["stop_timestamps"] = []
             state["teams_data"][t_id]["caught"] = []
+            state["teams_data"][t_id]["catch_timestamps"] = []
             state["teams_data"][t_id]["caught_by"] = []
             state["teams_data"][t_id]["role"] = "keine"
             state["teams_data"][t_id]["manual_points"] = 0
-            
+
         calculate_next_roles(state["teams_data"])
         state["roles_assigned"] = False
 
+        c = conn.cursor()
+        c.execute("DELETE FROM team_locations")
+        c.execute("DELETE FROM location_history")
+        c.execute("DELETE FROM team_stops")
+        c.execute("DELETE FROM team_catches")
+
         save_state(conn, state)
         trigger_traccar_sync_async(state["teams_data"])
-        
+
     return jsonify({'success': True})
 
 
 @app.route('/adminconsole-<admin_slug>/randomize_roles', methods=['POST'])
 def randomize_roles(admin_slug):
-    if admin_slug != ADMIN_SLUG: return jsonify({'success': False, 'error': 'Verboten'}), 403
-    
+    if not is_valid_admin_slug(admin_slug):
+        return jsonify({'success': False, 'error': 'Verboten'}), 403
+
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
@@ -1347,8 +1831,9 @@ def randomize_roles(admin_slug):
 
 @app.route('/adminconsole-<admin_slug>/shuffle_stops', methods=['POST'])
 def shuffle_stops(admin_slug):
-    if admin_slug != ADMIN_SLUG: return jsonify({'success': False, 'error': 'Verboten'}), 403
-    
+    if not is_valid_admin_slug(admin_slug):
+        return jsonify({'success': False, 'error': 'Verboten'}), 403
+
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
@@ -1358,13 +1843,13 @@ def shuffle_stops(admin_slug):
         new_active_stops = random.sample(ALL_STOPS, min(target, len(ALL_STOPS)))
         state["active_stops"] = new_active_stops
         state["history"] = new_active_stops.copy()
-        
+
         state["action_log"].insert(0, {
-            "id": str(uuid.uuid4()), "type": "system", 
-            "timestamp": time.time(), "desc": "🔀 Haltestellen wurden manuell neu gewürfelt und die Historie zurückgesetzt."
+            "id": str(uuid.uuid4()), "type": "system",
+            "timestamp": datetime.now(timezone.utc).isoformat(), "desc": "🔀 Haltestellen wurden manuell neu gewürfelt und die Historie zurückgesetzt."
         })
         save_state(conn, state)
-        
+
     return jsonify({'success': True})
 
 
@@ -1375,7 +1860,8 @@ def request_stop():
     team_slug = data.get('slug')
     stop_name = data.get('stop')
     msg_to_send = None
-    
+    response_msg = f'Anfrage für "{stop_name}" erfolgreich gesendet.'
+
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
@@ -1387,27 +1873,90 @@ def request_stop():
         is_late = (phase == "post_game")
 
         team_id = next((t_id for t_id, d in state["teams_data"].items() if d.get("slug") == team_slug), None)
-        if not team_id or stop_name not in state['active_stops']: return jsonify({'success': False}), 400
-        
+        if not team_id or stop_name not in state['active_stops']:
+            return jsonify({'success': False, 'error': 'Haltestelle nicht mehr aktiv oder Team ungültig.'}), 400
+
         if state["teams_data"][team_id].get("deactivated", False):
             return jsonify({'success': False, 'error': 'Dein Team ist deaktiviert.'}), 403
 
-        already_pending = next((r for r in state["pending_requests"] if
-                                r["type"] == "stop" and r["team"] == team_id and r["stop"] == stop_name), None)
+        if state["teams_data"][team_id].get("role") != "läufer":
+            return jsonify({'success': False, 'error': 'Nur Läufer können Haltestellen eintragen!'}), 403
 
-        if not already_pending:
-            display_name = state["teams_data"][team_id]["display_name"]
-            state["pending_requests"].append({
-                "id": str(uuid.uuid4()), "type": "stop", "team": team_id, "team_name": display_name, "stop": stop_name,
-                "timestamp": time.time(), "is_late": is_late
-            })
-            save_state(conn, state)
-            msg_to_send = f"📬 NEUE ANFRAGE: Team '{display_name}' möchte die Haltestelle '{stop_name}' eintragen lassen."
+        now_utc = datetime.now(timezone.utc)
+        now_iso = now_utc.isoformat()
+        display_name = state["teams_data"][team_id]["display_name"]
+        config = state["config"]
+
+        # Automatische GPS-Prüfung (letzte 5 Minuten + ggf. 1 Minute Nachprüfung)
+        if config.get("auto_approve_stops", False):
+            radius_m = float(config.get("stop_radius_meters", 100))
+            window_start = now_utc - timedelta(minutes=5)
+            min_dist, closest_iso = find_closest_stop_approach(conn, team_id, stop_name, window_start, now_utc)
+
+            if min_dist is not None and min_dist <= radius_m:
+                # Eventuell offene identische Anfrage entfernen
+                state["pending_requests"] = [
+                    r for r in state["pending_requests"]
+                    if not (r["type"] == "stop" and r["team"] == team_id and r["stop"] == stop_name)
+                ]
+                execute_stop_catch(
+                    state, stop_name, team_id,
+                    is_late=is_late,
+                    submitted_ts=now_iso,
+                    actual_ts=closest_iso or now_iso,
+                    auto_approved=True
+                )
+                save_state(conn, state)
+                msg_to_send = f"✅ AUTO-GPS-FREIGABE: Team '{display_name}' hat Haltestelle '{stop_name}' ({int(min_dist)}m Abstand) automatisch gutgeschrieben bekommen."
+                response_msg = f"✅ Haltestelle '{stop_name}' wurde per GPS automatisch bestätigt und gutgeschrieben!"
+            else:
+                already_pending = next((
+                    r for r in state["pending_requests"]
+                    if r["type"] == "stop" and r["team"] == team_id and r["stop"] == stop_name
+                ), None)
+                check_until_iso = (now_utc + timedelta(minutes=1)).isoformat()
+                if not already_pending:
+                    state["pending_requests"].append({
+                        "id": str(uuid.uuid4()),
+                        "type": "stop",
+                        "team": team_id,
+                        "team_name": display_name,
+                        "stop": stop_name,
+                        "timestamp": now_iso,
+                        "is_late": is_late,
+                        "gps_check_until": check_until_iso,
+                        "notified_admin": False
+                    })
+                    save_state(conn, state)
+                elif not already_pending.get("gps_check_until"):
+                    already_pending["gps_check_until"] = check_until_iso
+                    already_pending["timestamp"] = now_iso
+                    already_pending["is_late"] = is_late
+                    save_state(conn, state)
+                response_msg = (
+                    f"⏳ Anfrage für '{stop_name}' eingereicht. Noch kein GPS-Punkt im Radius ({int(radius_m)}m) gefunden – "
+                    f"wird für 1 Minute automatisch weitergeprüft, danach kann der Spielleiter manuell freigeben."
+                )
+        else:
+            already_pending = next((
+                r for r in state["pending_requests"]
+                if r["type"] == "stop" and r["team"] == team_id and r["stop"] == stop_name
+            ), None)
+
+            if not already_pending:
+                state["pending_requests"].append({
+                    "id": str(uuid.uuid4()), "type": "stop", "team": team_id, "team_name": display_name, "stop": stop_name,
+                    "timestamp": now_iso, "is_late": is_late, "notified_admin": True
+                })
+                save_state(conn, state)
+                msg_to_send = f"📬 NEUE ANFRAGE: Team '{display_name}' möchte die Haltestelle '{stop_name}' eintragen lassen."
+            else:
+                response_msg = f'Anfrage für "{stop_name}" liegt bereits zur Prüfung vor.'
 
     if msg_to_send:
         send_telegram_msg(msg_to_send)
 
-    return jsonify({'success': True})
+    return jsonify({'success': True, 'message': response_msg})
 
 
 @app.route('/api/report_catch', methods=['POST'])
@@ -1416,10 +1965,10 @@ def report_catch():
     reporter_slug = data.get('reporter_slug')
     hunter_id = data.get('hunter')
     prey_id = data.get('prey')
-    
+
     msg_to_send = None
     result = None
-    
+
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
@@ -1432,9 +1981,9 @@ def report_catch():
         is_late = (phase == "post_game")
 
         reporter_id = next((t_id for t_id, d in state["teams_data"].items() if d.get("slug") == reporter_slug), None)
-        if not reporter_id or not hunter_id or not prey_id: 
+        if not reporter_id or not hunter_id or not prey_id:
             return jsonify({'success': False, 'error': 'Ungültige Daten übermittelt.'}), 400
-            
+
         if hunter_id not in state["teams_data"] or prey_id not in state["teams_data"]:
             return jsonify({'success': False, 'error': 'Eines der übermittelten Teams existiert nicht.'}), 400
 
@@ -1446,8 +1995,12 @@ def report_catch():
 
         recent_catches = [log for log in state["action_log"] if
                           log["type"] == "catch" and log["hunter"] == hunter_id and log["prey"] == prey_id]
-        if recent_catches and (time.time() - recent_catches[0]["timestamp"]) < 300:
-            return jsonify({'success': True, 'message': 'Fang wurde bereits vor kurzem registriert!'})
+
+        now_utc = datetime.now(timezone.utc)
+        if recent_catches:
+            last_ts = parse_iso_utc(recent_catches[0]["timestamp"])
+            if last_ts and (now_utc - last_ts).total_seconds() < 300:
+                return jsonify({'success': True, 'message': 'Fang wurde bereits vor kurzem registriert!'})
 
         matching_req = next((r for r in state["pending_requests"] if
                              r["type"] == "catch" and r["hunter"] == hunter_id and r["prey"] == prey_id and r[
@@ -1455,9 +2008,18 @@ def report_catch():
 
         if matching_req:
             state["pending_requests"].remove(matching_req)
-            execute_team_catch(state, hunter_id, prey_id, is_late=is_late)
+            sub_ts = matching_req.get("timestamp") or now_utc.isoformat()
+            closest_catch_iso = find_closest_teams_approach(conn, hunter_id, prey_id, ref_dt=now_utc)
+            actual_ts = closest_catch_iso or sub_ts
+
+            execute_team_catch(
+                state, hunter_id, prey_id,
+                is_late=is_late,
+                submitted_ts=sub_ts,
+                actual_ts=actual_ts
+            )
             save_state(conn, state)
-            
+
             h_name = state['teams_data'][hunter_id]['display_name']
             p_name = state['teams_data'][prey_id]['display_name']
             msg_to_send = f"✅ AUTO-APPROVE: Beidseitig bestätigt! '{h_name}' hat '{p_name}' gefangen."
@@ -1470,15 +2032,15 @@ def report_catch():
                 r_name = state['teams_data'][reporter_id]['display_name']
                 h_name = state['teams_data'][hunter_id]['display_name']
                 p_name = state['teams_data'][prey_id]['display_name']
-                
+
                 state["pending_requests"].append({
-                    "id": str(uuid.uuid4()), "type": "catch", "reporter": reporter_id, "reporter_name": r_name, 
-                    "hunter": hunter_id, "hunter_name": h_name, "prey": prey_id, "prey_name": p_name, 
-                    "timestamp": time.time(), "is_late": is_late
+                    "id": str(uuid.uuid4()), "type": "catch", "reporter": reporter_id, "reporter_name": r_name,
+                    "hunter": hunter_id, "hunter_name": h_name, "prey": prey_id, "prey_name": p_name,
+                    "timestamp": now_utc.isoformat(), "is_late": is_late
                 })
                 save_state(conn, state)
                 msg_to_send = f"📬 NEUE FANG-ANFRAGE: '{r_name}' meldet, dass '{h_name}' das Team '{p_name}' gefangen hat."
-            
+
             result = {'success': True, 'message': 'Anfrage gesendet. Warte auf Bestätigung der Gegenseite oder des Admins.'}
 
     if msg_to_send:
@@ -1493,27 +2055,45 @@ def resolve_request():
     data = request.json
     req_id = data.get('id')
     action = data.get('action')
-    
+
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
 
         req = next((r for r in state["pending_requests"] if r["id"] == req_id), None)
-        if not req: return jsonify({'success': False, 'error': 'Anfrage nicht gefunden.'}), 404
+        if not req:
+            return jsonify({'success': False, 'error': 'Anfrage nicht gefunden.'}), 404
 
         state["pending_requests"].remove(req)
         is_late = req.get("is_late", False)
+        sub_ts = req.get("timestamp") or datetime.now(timezone.utc).isoformat()
 
         if action == 'approve':
             if req["type"] == "stop":
-                execute_stop_catch(state, req["stop"], req["team"], is_late=is_late)
+                # Bei manueller Genehmigung durch den Spielleiter wird die Zeit hinterlegt,
+                # in der das Erreichen durch das Team eingetragen wurde (sub_ts).
+                execute_stop_catch(
+                    state, req["stop"], req["team"],
+                    is_late=is_late,
+                    submitted_ts=sub_ts,
+                    actual_ts=sub_ts,
+                    auto_approved=False
+                )
             elif req["type"] == "catch":
                 state["pending_requests"] = [r for r in state["pending_requests"] if not (
                             r["type"] == "catch" and r["hunter"] == req["hunter"] and r["prey"] == req["prey"])]
-                execute_team_catch(state, req["hunter"], req["prey"], is_late=is_late)
+                ref_dt = parse_iso_utc(sub_ts) or datetime.now(timezone.utc)
+                closest_catch_iso = find_closest_teams_approach(conn, req["hunter"], req["prey"], ref_dt=ref_dt)
+                actual_ts = closest_catch_iso or sub_ts
+                execute_team_catch(
+                    state, req["hunter"], req["prey"],
+                    is_late=is_late,
+                    submitted_ts=sub_ts,
+                    actual_ts=actual_ts
+                )
 
         save_state(conn, state)
-        
+
     return jsonify({'success': True})
 
 
@@ -1521,33 +2101,51 @@ def resolve_request():
 def undo_action():
     data = request.json
     action_id = data.get('id')
-    
+
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
         action = next((a for a in state["action_log"] if a["id"] == action_id), None)
-        if not action: return jsonify({'success': False, 'error': 'Aktion im Log nicht gefunden.'}), 404
+        if not action:
+            return jsonify({'success': False, 'error': 'Aktion im Log nicht gefunden.'}), 404
 
+        c = conn.cursor()
         if action["type"] == "stop":
             team_id = action.get("team")
             stop = action["stop"]
+            sub_ts = action.get("timestamp")
             if team_id and team_id in state["teams_data"] and stop in state["teams_data"][team_id]["stops"]:
                 state["teams_data"][team_id]["stops"].remove(stop)
-            
+                ts_list = state["teams_data"][team_id].get("stop_timestamps", [])
+                for idx, entry in enumerate(ts_list):
+                    if entry[0] == stop and (sub_ts is None or entry[1] == sub_ts):
+                        ts_list.pop(idx)
+                        break
+                if sub_ts:
+                    c.execute("DELETE FROM team_stops WHERE rowid IN (SELECT rowid FROM team_stops WHERE team_id = ? AND stop_name = ? AND submitted_at = ? LIMIT 1)", (team_id, stop, sub_ts))
+
             if stop not in state["active_stops"]:
                 state["active_stops"].append(stop)
-                
+
         elif action["type"] == "catch":
             hunter_id = action.get("hunter")
             prey_id = action.get("prey")
+            sub_ts = action.get("timestamp")
             if hunter_id and hunter_id in state["teams_data"] and prey_id in state["teams_data"][hunter_id]["caught"]:
                 state["teams_data"][hunter_id]["caught"].remove(prey_id)
+                ts_list = state["teams_data"][hunter_id].get("catch_timestamps", [])
+                for idx, entry in enumerate(ts_list):
+                    if entry[0] == prey_id and (sub_ts is None or entry[1] == sub_ts):
+                        ts_list.pop(idx)
+                        break
+                if sub_ts:
+                    c.execute("DELETE FROM team_catches WHERE rowid IN (SELECT rowid FROM team_catches WHERE hunter_id = ? AND prey_id = ? AND submitted_at = ? LIMIT 1)", (hunter_id, prey_id, sub_ts))
             if prey_id and prey_id in state["teams_data"] and hunter_id in state["teams_data"][prey_id]["caught_by"]:
                 state["teams_data"][prey_id]["caught_by"].remove(hunter_id)
 
         state["action_log"].remove(action)
         save_state(conn, state)
-        
+
     return jsonify({'success': True})
 
 
@@ -1556,15 +2154,16 @@ def toggle():
     data = request.json
     stop_name = data.get('name')
     team_id = data.get('team_id')
-    
+
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
         if stop_name in state['active_stops']:
-            if execute_stop_catch(state, stop_name, team_id):
+            now_iso = datetime.now(timezone.utc).isoformat()
+            if execute_stop_catch(state, stop_name, team_id, submitted_ts=now_iso, actual_ts=now_iso):
                 save_state(conn, state)
                 return jsonify({'success': True})
-                
+
     return jsonify({'success': False}), 400
 
 
@@ -1573,17 +2172,22 @@ def catch_team():
     data = request.json
     hunter_id = data.get('hunter')
     prey_id = data.get('prey')
-    
+
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
         if hunter_id and prey_id:
-            if hunter_id == prey_id: return jsonify({'success': False, 'error': 'Ein Team kann sich nicht selbst fangen!'}), 400
-            if execute_team_catch(state, hunter_id, prey_id):
+            if hunter_id == prey_id:
+                return jsonify({'success': False, 'error': 'Ein Team kann sich nicht selbst fangen!'}), 400
+            now_utc = datetime.now(timezone.utc)
+            now_iso = now_utc.isoformat()
+            closest_catch_iso = find_closest_teams_approach(conn, hunter_id, prey_id, ref_dt=now_utc)
+            actual_ts = closest_catch_iso or now_iso
+            if execute_team_catch(state, hunter_id, prey_id, submitted_ts=now_iso, actual_ts=actual_ts):
                 save_state(conn, state)
                 return jsonify({'success': True})
             return jsonify({'success': False, 'error': 'Fehler bei der Zuweisung.'}), 400
-            
+
     return jsonify({'success': False, 'error': 'Ungültige Teams übergeben.'}), 400
 
 
@@ -1592,7 +2196,7 @@ def add_manual_points():
     data = request.json
     team_id = data.get('team_id')
     points_str = data.get('points', 0)
-    
+
     try:
         points = int(points_str)
     except ValueError:
@@ -1604,51 +2208,52 @@ def add_manual_points():
         if team_id in state["teams_data"]:
             current = state["teams_data"][team_id].get("manual_points", 0)
             state["teams_data"][team_id]["manual_points"] = current + points
-            
+
             display_name = state["teams_data"][team_id]["display_name"]
             desc = f"🔧 Manuelle Punktekorrektur für {display_name}: {points:+} Punkte."
-            
+
+            now_iso = datetime.now(timezone.utc).isoformat()
             state["action_log"].insert(0, {
-                "id": str(uuid.uuid4()), "type": "system", 
-                "timestamp": time.time(), "desc": desc
+                "id": str(uuid.uuid4()), "type": "system",
+                "timestamp": now_iso, "actual_timestamp": now_iso, "desc": desc
             })
             save_state(conn, state)
             return jsonify({'success': True})
-            
+
     return jsonify({'success': False, 'error': 'Team nicht gefunden.'}), 400
 
 
 @app.route('/api/stops')
 def api_stops():
     team_slug = request.args.get('slug')
-    
-    with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn: 
+
+    with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
         update_game_time_state(conn, state)
-        
+
         if not team_slug:
             return jsonify({'error': 'Slug fehlt'}), 400
-            
+
         team_data = next((d for d in state["teams_data"].values() if d.get("slug") == team_slug), None)
-        
+
         if not team_data:
             return jsonify({'error': 'Team nicht gefunden'}), 404
-            
+
         if team_data.get("role") != "läufer":
             return jsonify({'error': 'Nicht berechtigt'}), 403
-            
+
         result = []
         for name in state['active_stops']:
             if name in stops_data:
                 result.append({
-                    'name': name, 
-                    'lat': stops_data[name]['lat'], 
-                    'lon': stops_data[name]['lon'], 
-                    'factor': stops_data[name].get('factor', 1), 
+                    'name': name,
+                    'lat': stops_data[name]['lat'],
+                    'lon': stops_data[name]['lon'],
+                    'factor': stops_data[name].get('factor', 1),
                     'reached': False
                 })
-                    
+
         return jsonify(result)
 
 
@@ -1666,7 +2271,7 @@ def api_ticker_data():
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
         config = state["config"]
-        
+
         leaderboard = []
         for t_id, d in state["teams_data"].items():
             if d.get("deactivated", False):
@@ -1675,15 +2280,16 @@ def api_ticker_data():
             score = calculate_score(d, config)
 
             leaderboard.append({
-                "id": t_id, "display_name": d["display_name"], "score": score, 
+                "id": t_id, "display_name": d["display_name"], "score": score,
                 "role": d.get("role", "keine"), "next_role": d.get("next_role", "")
             })
-            
+
         leaderboard.sort(key=lambda x: x["score"], reverse=True)
+        public_log = [e for e in state.get("action_log", []) if not e.get("admin_only")]
 
         return jsonify({
             'success': True,
-            'action_log': state.get("action_log", []),
+            'action_log': public_log,
             'leaderboard': leaderboard
         })
 
@@ -1691,83 +2297,279 @@ def api_ticker_data():
 # --- TRACCAR WEBHOOK ROUTE ---
 @app.route('/api/traccar', methods=['GET', 'POST'])
 def traccar_webhook():
-    identifier = request.args.get('id') or request.args.get('deviceid') or request.form.get('id')
-    lat = request.args.get('lat') or request.args.get('latitude') or request.form.get('lat')
-    lon = request.args.get('lon') or request.args.get('longitude') or request.form.get('lon')
+    payload = request.get_json(silent=True) or {}
 
-    if request.is_json:
-        payload = request.get_json(silent=True) or {}
-        if not identifier:
-            identifier = payload.get('id') or payload.get('uniqueId') or (payload.get('device') or {}).get('uniqueId')
+    identifier = (
+        request.args.get('id')
+        or request.args.get('deviceid')
+        or request.args.get('deviceId')
+        or request.args.get('uniqueId')
+        or request.form.get('id')
+        or request.form.get('deviceId')
+        or request.form.get('uniqueId')
+        or payload.get('uniqueId')
+        or payload.get('deviceId')
+        or payload.get('id')
+    )
+
+    lat = (
+        request.args.get('lat')
+        or request.args.get('latitude')
+        or request.form.get('lat')
+        or request.form.get('latitude')
+    )
+
+    lon = (
+        request.args.get('lon')
+        or request.args.get('longitude')
+        or request.form.get('lon')
+        or request.form.get('longitude')
+    )
+
+    raw_ts = (
+        request.args.get('timestamp')
+        or request.args.get('fixTime')
+        or request.form.get('timestamp')
+        or request.form.get('fixTime')
+        or payload.get('fixTime')
+        or payload.get('deviceTime')
+        or payload.get('serverTime')
+        or payload.get('timestamp')
+    )
+
+    if lat is None:
+        lat = payload.get('latitude')
         if lat is None:
-            lat = payload.get('lat') or payload.get('latitude') or (payload.get('position') or {}).get('latitude')
-        if lon is None:
-            lon = payload.get('lon') or payload.get('longitude') or (payload.get('position') or {}).get('longitude')
+            lat = payload.get('lat')
 
-    if not identifier or lat is None or lon is None:
-        return jsonify({'success': False, 'error': 'Fehlende Parameter (id, lat, lon)'}), 400
+    if lon is None:
+        lon = payload.get('longitude')
+        if lon is None:
+            lon = payload.get('lon')
+
+    device = payload.get('device')
+    position = payload.get('position')
+
+    if isinstance(device, dict) and not identifier:
+        identifier = (
+            device.get('uniqueId')
+            or device.get('id')
+            or device.get('deviceId')
+        )
+
+    if isinstance(position, dict):
+        if lat is None:
+            lat = position.get('latitude')
+        if lon is None:
+            lon = position.get('longitude')
+        if not raw_ts:
+            raw_ts = (
+                position.get('fixTime')
+                or position.get('deviceTime')
+                or position.get('serverTime')
+            )
+
+    if identifier is None or lat is None or lon is None:
+        app.logger.warning(
+            "Traccar-Webhook: Pflichtfelder fehlen. JSON-Felder: %s",
+            list(payload.keys()) if isinstance(payload, dict) else []
+        )
+        return jsonify({
+            'success': False,
+            'error': 'Fehlende Parameter',
+            'received': {
+                'identifier': identifier is not None,
+                'latitude': lat is not None,
+                'longitude': lon is not None
+            }
+        }), 400
 
     try:
         lat = float(lat)
         lon = float(lon)
+
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise ValueError("Koordinaten außerhalb des gültigen Bereichs")
+
     except (ValueError, TypeError):
-        return jsonify({'success': False, 'error': 'Ungültige Koordinaten'}), 400
+        return jsonify({
+            'success': False,
+            'error': 'Ungültige Koordinaten'
+        }), 400
 
     if lat == 0.0 and lon == 0.0:
-        return jsonify({'success': True, 'ignored': 'GPS 0.0/0.0 ignoriert'}), 200
+        return jsonify({
+            'success': True,
+            'ignored': 'GPS 0.0/0.0 ignoriert'
+        }), 200
 
-    timestamp = time.time()
+    packet_time = time.time()
+
+    if raw_ts is not None and str(raw_ts).strip():
+        try:
+            ts_string = str(raw_ts).strip()
+
+            if ts_string.replace('.', '', 1).isdigit():
+                ts_value = float(ts_string)
+                packet_time = (
+                    ts_value / 1000.0
+                    if ts_value > 10000000000
+                    else ts_value
+                )
+            else:
+                dt = datetime.fromisoformat(
+                    ts_string.replace('Z', '+00:00')
+                )
+
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+
+                packet_time = dt.timestamp()
+
+        except (ValueError, TypeError, OverflowError):
+            app.logger.warning(
+                "Traccar-Webhook: Zeitstempel nicht lesbar: %r",
+                raw_ts
+            )
+
+    # Zukunftspakete / vorgehende Smartphone-Uhrzeit deckeln
+    packet_time = min(packet_time, time.time() + 5)
+
     clean_id = str(identifier).strip()
+
+    if not clean_id:
+        return jsonify({
+            'success': False,
+            'error': 'Leere Gerätekennung'
+        }), 400
+
     time_str = datetime.now().strftime("%H:%M:%S")
 
-    # Spezialbehandlung für den Koblenz End-to-End Debug-Testuser
     if clean_id.startswith("debug-koblenz-"):
         debug_test_events[clean_id] = {
             "lat": lat,
             "lon": lon,
-            "timestamp": timestamp
+            "timestamp": packet_time
         }
-        recent_traccar_webhooks.appendleft({
-            "time_str": time_str,
-            "identifier": clean_id,
-            "lat": lat,
-            "lon": lon,
-            "matched": True,
-            "status": "E2E-TEST EMPFANGEN (Koblenz)"
-        })
-        print(f"🧪 Debug-Loopback empfangen: {clean_id} -> {lat:.5f}, {lon:.5f}")
-        return jsonify({'success': True, 'debug_test': True}), 200
 
-    with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
-        c = conn.cursor()
+        return jsonify({
+            'success': True,
+            'debug_test': True
+        }), 200
 
-        c.execute(
-            "SELECT id, display_name FROM teams WHERE slug = ? OR id = ? OR display_name = ?",
-            (clean_id, clean_id, clean_id)
+    try:
+        with sqlite3.connect(
+            DB_FILE,
+            timeout=10,
+            isolation_level='IMMEDIATE'
+        ) as conn:
+            c = conn.cursor()
+
+            c.execute("""
+                SELECT id, display_name
+                FROM teams
+                WHERE slug = ?
+                   OR CAST(id AS TEXT) = ?
+                   OR display_name = ?
+                LIMIT 1
+            """, (clean_id, clean_id, clean_id))
+
+            team_row = c.fetchone()
+
+            if not team_row:
+                app.logger.warning(
+                    "Traccar-Webhook: Unbekannte Kennung %r",
+                    clean_id
+                )
+
+                return jsonify({
+                    'success': True,
+                    'ignored': f"Unbekannte Kennung '{clean_id}'"
+                }), 200
+
+            resolved_team_id, resolved_name = team_row
+
+            packet_time_iso = datetime.fromtimestamp(packet_time, tz=timezone.utc).isoformat()
+
+            # Nur in location_history schreiben, wenn der letzte Eintrag mehr als 1 Sekunde her ist
+            c.execute("""
+                SELECT timestamp
+                FROM location_history
+                WHERE team_id = ?
+                ORDER BY timestamp DESC
+                LIMIT 1
+            """, (resolved_team_id,))
+            last_hist = c.fetchone()
+
+            save_history = False
+            if last_hist is None or last_hist[0] is None:
+                save_history = True
+            else:
+                last_hist_dt = parse_iso_utc(last_hist[0])
+                if last_hist_dt is None or (packet_time - last_hist_dt.timestamp()) > 1:
+                    save_history = True
+
+            if save_history:
+                c.execute("""
+                    INSERT INTO location_history
+                        (team_id, lat, lon, timestamp)
+                    VALUES (?, ?, ?, ?)
+                """, (
+                    resolved_team_id,
+                    lat,
+                    lon,
+                    packet_time_iso
+                ))
+
+            c.execute("""
+                SELECT updated_at
+                FROM team_locations
+                WHERE team_id = ?
+            """, (resolved_team_id,))
+
+            existing_loc = c.fetchone()
+
+            update_live = False
+            if existing_loc is None or existing_loc[0] is None:
+                update_live = True
+            else:
+                existing_dt = parse_iso_utc(existing_loc[0])
+                if existing_dt is None or datetime.fromtimestamp(packet_time, tz=timezone.utc) >= existing_dt:
+                    update_live = True
+
+            if update_live:
+                c.execute("""
+                    INSERT INTO team_locations
+                        (team_id, lat, lon, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(team_id) DO UPDATE SET
+                        lat = excluded.lat,
+                        lon = excluded.lon,
+                        updated_at = excluded.updated_at
+                    WHERE team_locations.updated_at IS NULL
+                       OR excluded.updated_at >= team_locations.updated_at
+                """, (
+                    resolved_team_id,
+                    lat,
+                    lon,
+                    packet_time_iso
+                ))
+
+            # Sobald ein Standort eintrifft, GPS-Ausfall-Stufe für dieses Team zurücksetzen
+            gps_inactivity_notified_stage[resolved_team_id] = 0
+
+            conn.commit()
+
+    except sqlite3.Error:
+        app.logger.exception(
+            "Traccar-Webhook: Datenbankfehler für %r",
+            clean_id
         )
-        team_row = c.fetchone()
 
-        if not team_row:
-            recent_traccar_webhooks.appendleft({
-                "time_str": time_str,
-                "identifier": clean_id,
-                "lat": lat,
-                "lon": lon,
-                "matched": False,
-                "status": "Unbekanntes Team"
-            })
-            print(f"⚠️ Traccar Webhook: Unbekannte Kennung '{clean_id}' empfangen.")
-            return jsonify({'success': False, 'error': f"Kein Team für Kennung '{clean_id}' gefunden"}), 404
-
-        resolved_team_id, resolved_name = team_row[0], team_row[1]
-
-        c.execute('''INSERT OR REPLACE INTO team_locations (team_id, lat, lon, updated_at) 
-                     VALUES (?, ?, ?, ?)''', (resolved_team_id, lat, lon, timestamp))
-
-        c.execute('''INSERT INTO location_history (team_id, lat, lon, timestamp)
-                     VALUES (?, ?, ?, ?)''', (resolved_team_id, lat, lon, timestamp))
-
-        conn.commit()
+        return jsonify({
+            'success': False,
+            'error': 'Datenbankfehler'
+        }), 500
 
     recent_traccar_webhooks.appendleft({
         "time_str": time_str,
@@ -1777,21 +2579,31 @@ def traccar_webhook():
         "matched": True,
         "status": f"OK ({resolved_name})"
     })
-    print(f"📡 GPS-Update: {resolved_name} ({resolved_team_id}) -> {lat:.5f}, {lon:.5f}")
-    return jsonify({'success': True, 'team_id': resolved_team_id}), 200
+
+    app.logger.info(f'{resolved_team_id} ({resolved_name}): {lat}, {lon} um {packet_time} ')
+
+    return jsonify({
+        'success': True,
+        'team_id': resolved_team_id,
+        'team_name': resolved_name,
+        'history_saved': save_history,
+        'live_updated': update_live,
+        'timestamp': packet_time
+    }), 200
 
 
-# --- TRACCAR DEBUG DASHBOARD & E2E-TEST ROUTEN ---
+# --- TRACCAR DEBUG DASHBOARD & E2E-TEST ROUTEN (MIT -{adminpin} UND _{adminpin} UNTERSTÜTZUNG) ---
+@app.route('/traccar_debug-<admin_slug>')
 @app.route('/traccar_debug_<admin_slug>')
 def traccar_debug_page(admin_slug):
-    if admin_slug != ADMIN_SLUG:
+    if not is_valid_admin_slug(admin_slug):
         return "Zugriff verweigert", 403
-    return render_template('traccar_debug.html', admin_url=admin_slug)
+    return render_template('traccar_debug.html', admin_url=ADMIN_SLUG)
 
 
 @app.route('/api/traccar_debug/<admin_slug>/status')
 def traccar_debug_status(admin_slug):
-    if admin_slug != ADMIN_SLUG:
+    if not is_valid_admin_slug(admin_slug):
         return jsonify({'success': False, 'error': 'Zugriff verweigert'}), 403
 
     api_online = False
@@ -1799,19 +2611,46 @@ def traccar_debug_status(admin_slug):
     devices = []
 
     try:
-        if ensure_traccar_credentials():
-            resp = traccar_session.get(TRACCAR_API_URL, timeout=4)
-            if resp.status_code == 200:
-                api_online = True
-                devices = resp.json()
+        with traccar_lock:
+            if ensure_traccar_credentials():
+                resp = traccar_session.get(TRACCAR_API_URL, timeout=4)
+                if resp.status_code == 200:
+                    api_online = True
+                    devices = resp.json()
+                else:
+                    api_error = f"HTTP {resp.status_code} auf /api/devices"
             else:
-                api_error = f"HTTP {resp.status_code} auf /api/devices"
-        else:
-            api_error = traccar_last_error or "Auth fehlgeschlagen / Offline"
+                api_error = traccar_last_error or "Auth fehlgeschlagen / Offline"
     except Exception as e:
         api_error = str(e)
 
     osmand_open = is_port_in_use(5055)
+
+    global traccar_process
+    proc_running = (traccar_process is not None and traccar_process.poll() is None)
+    proc_pid = traccar_process.pid if proc_running else None
+
+    java_bin = get_java_executable()
+    java_installed = bool(java_bin)
+
+    jar_exists = os.path.isfile(TRACCAR_JAR_PATH)
+    xml_exists = os.path.isfile(TRACCAR_XML_PATH)
+    traccar_db_exists = os.path.isfile(os.path.join(TRACCAR_DATA_DIR, "database.mv.db"))
+
+    game_db_size = os.path.getsize(DB_FILE) if os.path.exists(DB_FILE) else 0
+    game_db_size_kb = round(game_db_size / 1024, 2)
+    active_threads = threading.active_count()
+    python_version = sys.version.split()[0]
+
+    try:
+        with sqlite3.connect(DB_FILE, timeout=10) as conn:
+            conn.row_factory = sqlite3.Row
+            state = get_state(conn)
+            phase, _, _, _, _ = update_game_time_state(conn, state)
+            num_teams = len(state.get("teams_data", {}))
+    except Exception:
+        phase = "Fehler beim Lesen"
+        num_teams = 0
 
     return jsonify({
         "api_online": api_online,
@@ -1819,13 +2658,24 @@ def traccar_debug_status(admin_slug):
         "osmand_port_open": osmand_open,
         "traccar_user": TRACCAR_USER,
         "devices": devices,
-        "recent_webhooks": list(recent_traccar_webhooks)
+        "recent_webhooks": list(recent_traccar_webhooks),
+        "process_running": proc_running,
+        "process_pid": proc_pid,
+        "java_installed": java_installed,
+        "jar_exists": jar_exists,
+        "xml_exists": xml_exists,
+        "db_exists": traccar_db_exists,
+        "game_db_size_kb": game_db_size_kb,
+        "active_threads": active_threads,
+        "python_version": python_version,
+        "game_phase": phase,
+        "num_teams": num_teams
     })
 
 
 @app.route('/api/traccar_debug/<admin_slug>/sync', methods=['POST'])
 def traccar_debug_sync(admin_slug):
-    if admin_slug != ADMIN_SLUG:
+    if not is_valid_admin_slug(admin_slug):
         return jsonify({'success': False, 'error': 'Zugriff verweigert'}), 403
     ok = sync_traccar_devices()
     return jsonify({'success': ok, 'error': traccar_last_error})
@@ -1833,8 +2683,7 @@ def traccar_debug_sync(admin_slug):
 
 @app.route('/api/traccar_debug/<admin_slug>/hard_reset', methods=['POST'])
 def traccar_debug_hard_reset(admin_slug):
-    """Setzt den lokalen Java-Traccar-Prozess + H2-Datenbank per Klick sauber zurück."""
-    if admin_slug != ADMIN_SLUG:
+    if not is_valid_admin_slug(admin_slug):
         return jsonify({'success': False, 'error': 'Zugriff verweigert'}), 403
 
     ok = reset_traccar_process_and_db()
@@ -1852,7 +2701,7 @@ def traccar_debug_hard_reset(admin_slug):
 
 @app.route('/api/traccar_debug/<admin_slug>/test', methods=['POST'])
 def traccar_debug_e2e_test(admin_slug):
-    if admin_slug != ADMIN_SLUG:
+    if not is_valid_admin_slug(admin_slug):
         return jsonify({'success': False, 'error': 'Zugriff verweigert'}), 403
 
     steps = []
@@ -1861,26 +2710,28 @@ def traccar_debug_e2e_test(admin_slug):
     target_lon = round(7.6061 + random.uniform(-0.0005, 0.0005), 6)
     created_device_id = None
 
-    if not ensure_traccar_credentials():
+    with traccar_lock:
+        if not ensure_traccar_credentials():
+            steps.append({
+                "step": "1. Traccar API Login",
+                "ok": False,
+                "detail": f"Login als '{TRACCAR_USER}' fehlgeschlagen ({traccar_last_error})."
+            })
+            return jsonify({"success": False, "steps": steps})
+
         steps.append({
             "step": "1. Traccar API Login",
-            "ok": False,
-            "detail": f"Login als '{TRACCAR_USER}' fehlgeschlagen ({traccar_last_error})."
+            "ok": True,
+            "detail": f"Erfolgreich als '{TRACCAR_USER}' am lokalen Java-Traccar authentifiziert."
         })
-        return jsonify({"success": False, "steps": steps})
-
-    steps.append({
-        "step": "1. Traccar API Login",
-        "ok": True,
-        "detail": f"Erfolgreich als '{TRACCAR_USER}' am lokalen Java-Traccar authentifiziert."
-    })
 
     try:
-        create_resp = traccar_session.post(
-            TRACCAR_API_URL,
-            json={"name": "Koblenz Debug Testuser", "uniqueId": test_unique_id},
-            timeout=5
-        )
+        with traccar_lock:
+            create_resp = traccar_session.post(
+                TRACCAR_API_URL,
+                json={"name": "Koblenz Debug Testuser", "uniqueId": test_unique_id},
+                timeout=5
+            )
         if create_resp.status_code not in (200, 201):
             steps.append({
                 "step": "2. Test-Gerät in Traccar erstellen",
@@ -1950,7 +2801,8 @@ def traccar_debug_e2e_test(admin_slug):
     finally:
         if created_device_id is not None:
             try:
-                del_resp = traccar_session.delete(f"{TRACCAR_API_URL}/{created_device_id}", timeout=5)
+                with traccar_lock:
+                    del_resp = traccar_session.delete(f"{TRACCAR_API_URL}/{created_device_id}", timeout=5)
                 steps.append({
                     "step": "5. Test-Gerät aufräumen",
                     "ok": del_resp.status_code in (200, 204),
@@ -1969,7 +2821,8 @@ def traccar_debug_e2e_test(admin_slug):
 
 if __name__ == '__main__':
     print(f"🔑 Admin-Konsole: http://127.0.0.1:5000/adminconsole-{ADMIN_SLUG}")
-    print(f"🛰️ Traccar-Debug: http://127.0.0.1:5000/traccar_debug_{ADMIN_SLUG}")
+    print(f"🛰️ Traccar-Debug: http://127.0.0.1:5000/traccar_debug-{ADMIN_SLUG}")
     threading.Thread(target=traccar_background_worker, daemon=True).start()
+    threading.Thread(target=game_rules_background_worker, daemon=True).start()
 
     app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)
