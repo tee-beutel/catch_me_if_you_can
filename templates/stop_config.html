@@ -395,6 +395,10 @@
                     <span class="legend-dot" style="background: #026770; border: 1px solid var(--vcd-green);">🔍</span>
                     <span>GTFS-Suchtreffer</span>
                 </div>
+                <div class="legend-row">
+                    <span class="legend-dot" style="background: #4E8293; border: 1px dashed white;">🔄</span>
+                    <span>Alternativ-Haltestelle</span>
+                </div>
             </div>
         </div>
 
@@ -482,10 +486,62 @@
                     <div id="gtfs-status-message" class="help-text" style="display: none; padding: 6px 0; font-weight: 500;"></div>
                 </div>
 
-                <div style="display: flex; gap: 10px; margin-top: 12px;">
-                    <button id="btn-apply-stop" class="btn btn-green" style="flex: 2;">✓ Übernehmen</button>
-                    <button id="btn-clear-form" class="btn btn-secondary" style="flex: 1;">Leeren</button>
+                <!-- Ausklappbarer Bereich: Alternativ-Haltestelle -->
+                <div style="margin-top: 14px;">
+                    <button type="button" id="btn-toggle-alt" class="btn" style="width: 100%; background: #eef2f5; color: #334155; border: 1px solid #cbd5e1; justify-content: space-between; padding: 8px 12px; font-size: 13px;">
+                        <span>🔄 Alternativ-Haltestelle</span>
+                        <span id="alt-toggle-icon">▼</span>
+                    </button>
+
+                    <div id="alt-section" style="display: none; background: #f8fafc; border: 1px solid #cbd5e1; border-top: none; border-radius: 0 0 4px 4px; padding: 14px; margin-bottom: 10px;">
+                        <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                            <input type="checkbox" id="input-alt-enabled" style="width: 18px; height: 18px; cursor: pointer;">
+                            <label for="input-alt-enabled" style="margin: 0; font-weight: 700; cursor: pointer; color: #026770;">Alternative aktivieren</label>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="input-alt-name">Name der Alternative:</label>
+                            <input type="text" id="input-alt-name" placeholder="z. B. Hintereingang">
+                            <div class="help-text">Wird automatisch mit dem Stadtteil der Haupthaltestelle verknüpft (Format: Stadtteil, Alt-Name).</div>
+                        </div>
+
+                        <div class="key-preview-box" style="margin: 6px 0 12px 0; background: #fff8f0; border-left-color: var(--vcd-orange);">
+                            <span>Finaler Alt-Key: </span>
+                            <code id="preview-alt-key">—</code>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="input-alt-factor">Wertigkeit (Faktor, Standard: 1):</label>
+                            <input type="number" id="input-alt-factor" step="0.5" value="1.0" min="0.0" style="width: 110px;">
+                        </div>
+
+                        <div class="row" style="margin-top: 10px;">
+                            <div class="form-group">
+                                <label for="input-alt-lat">Latitude (Alt):</label>
+                                <input type="number" id="input-alt-lat" step="any" placeholder="z. B. 52.2690">
+                            </div>
+                            <div class="form-group">
+                                <label for="input-alt-lon">Longitude (Alt):</label>
+                                <input type="number" id="input-alt-lon" step="any" placeholder="z. B. 10.5270">
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 10px;">
+                            <button type="button" id="btn-search-gtfs-alt" class="btn btn-petrol" style="width: 100%; font-size: 12px; padding: 8px 12px;">
+                                🔍 In GTFS suchen (Alt)
+                            </button>
+                            <div id="gtfs-status-message-alt" class="help-text" style="display: none; padding: 6px 0; font-weight: 500;"></div>
+                            <div class="help-text">Sucht in den GTFS-Daten nach der Alternativ-Haltestelle. Koordinatenklicks auf der Karte werden automatisch der Alternative zugeordnet, solange dieses Fenster offen ist.</div>
+                        </div>
+
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-top: 12px;">
+                        <button id="btn-apply-stop" class="btn btn-green" style="flex: 2;">✓ Übernehmen</button>
+                        <button id="btn-clear-form" class="btn btn-secondary" style="flex: 1;">Leeren</button>
+                    </div>
                 </div>
+
+
             </div>
 
             <!-- Sektion 3: Globaler Speicher-Button -->
@@ -562,19 +618,31 @@
             iconAnchor: [9, 9]
         });
 
+        // Hilfsfunktion: Überprüft, ob das Alternativ-Fenster gerade offen ist
+        function isAltTarget() {
+            return document.getElementById('alt-section').style.display !== 'none';
+        }
+
         // --- KARTEN-KLICK: TEMPORÄREN PIN SETZEN & KOORDINATEN ÜBERNEHMEN ---
         map.on('click', function(e) {
             const lat = parseFloat(e.latlng.lat.toFixed(6));
             const lon = parseFloat(e.latlng.lng.toFixed(6));
 
-            document.getElementById('input-lat').value = lat;
-            document.getElementById('input-lon').value = lon;
+            // Zuweisung dynamisch nach Fenster-Status (offen = Alt, zu = Haupt)
+            if (isAltTarget()) {
+                document.getElementById('input-alt-lat').value = lat;
+                document.getElementById('input-alt-lon').value = lon;
+                showToast(`Koordinaten für Alternative übernommen: ${lat}, ${lon}`);
+            } else {
+                document.getElementById('input-lat').value = lat;
+                document.getElementById('input-lon').value = lon;
+                showToast(`Koordinaten übernommen: ${lat}, ${lon}`);
+            }
 
             if (tempClickMarker) {
                 map.removeLayer(tempClickMarker);
             }
             tempClickMarker = L.marker([lat, lon], { icon: tempPinIcon }).addTo(map);
-            showToast(`Koordinaten übernommen: ${lat}, ${lon}`);
         });
 
         // --- FORMULAR & LIVE-PREVIEW HANDLING ---
@@ -586,6 +654,55 @@
         const inputLon = document.getElementById('input-lon');
         const previewKeyEl = document.getElementById('preview-key');
         const factorBadgeEl = document.getElementById('factor-preview-badge');
+
+        // Alternative Haltestelle UI-Elemente
+        const btnToggleAlt = document.getElementById('btn-toggle-alt');
+        const altSection = document.getElementById('alt-section');
+        const altToggleIcon = document.getElementById('alt-toggle-icon');
+        const inputAltEnabled = document.getElementById('input-alt-enabled');
+        const inputAltName = document.getElementById('input-alt-name');
+        const inputAltFactor = document.getElementById('input-alt-factor');
+        const inputAltLat = document.getElementById('input-alt-lat');
+        const inputAltLon = document.getElementById('input-alt-lon');
+        const previewAltKeyEl = document.getElementById('preview-alt-key');
+
+        function setAltSectionOpen(open) {
+            altSection.style.display = open ? 'block' : 'none';
+            altToggleIcon.textContent = open ? '▲' : '▼';
+            
+            if (open) {
+                inputAltEnabled.checked = true;
+                // Wertigkeit von Haupthaltestelle übernehmen
+                if (!inputAltFactor.value || inputAltFactor.value === "1.0") {
+                    inputAltFactor.value = inputFactor.value;
+                }
+            }
+        }
+
+        btnToggleAlt.addEventListener('click', function() {
+            const isOpen = altSection.style.display !== 'none';
+            setAltSectionOpen(!isOpen);
+        });
+
+        inputAltEnabled.addEventListener('change', function() {
+            if (inputAltEnabled.checked) {
+                setAltSectionOpen(true);
+            }
+        });
+
+        function updateAltKeyPreview() {
+            const stadtteil = inputStadtteil.value.trim();
+            const altName = inputAltName.value.trim();
+            let key = "—";
+            if (stadtteil && altName) {
+                key = `${stadtteil}, ${altName}`;
+            } else if (stadtteil) {
+                key = `${stadtteil}, ...`;
+            } else if (altName) {
+                key = altName;
+            }
+            previewAltKeyEl.textContent = key;
+        }
 
         function updateKeyPreview() {
             const stadtteil = inputStadtteil.value.trim();
@@ -619,9 +736,13 @@
             }
         }
 
-        inputStadtteil.addEventListener('input', updateKeyPreview);
+        inputStadtteil.addEventListener('input', function() {
+            updateKeyPreview();
+            updateAltKeyPreview();
+        });
         inputName.addEventListener('input', updateKeyPreview);
         inputFactor.addEventListener('input', updateFactorBadge);
+        inputAltName.addEventListener('input', updateAltKeyPreview);
 
         function clearForm() {
             currentEditKey = null;
@@ -633,10 +754,28 @@
             inputLon.value = "";
             updateKeyPreview();
             updateFactorBadge();
+
+            // Alternative Felder zurücksetzen
+            setAltSectionOpen(false);
+            inputAltEnabled.checked = false;
+            inputAltName.value = "";
+            inputAltFactor.value = "1.0";
+            inputAltLat.value = "";
+            inputAltLon.value = "";
+            updateAltKeyPreview();
+
+            // Statusmeldungen zurücksetzen
+            document.getElementById('gtfs-status-message').style.display = 'none';
+            document.getElementById('gtfs-status-message-alt').style.display = 'none';
+
             if (tempClickMarker) {
                 map.removeLayer(tempClickMarker);
                 tempClickMarker = null;
             }
+            
+            // GTFS Marker löschen
+            gtfsSearchLayerGroup.clearLayers();
+            
             document.querySelectorAll('.stop-item').forEach(el => el.classList.remove('selected'));
         }
 
@@ -662,6 +801,37 @@
 
             updateKeyPreview();
             updateFactorBadge();
+
+            // Lade-Logik für Alternative
+            if (data.alternative && typeof data.alternative === 'object') {
+                setAltSectionOpen(true);
+                inputAltEnabled.checked = true;
+
+                let altRawName = data.alternative.name || "";
+                if (stadtteil && altRawName.startsWith(stadtteil + ",")) {
+                    inputAltName.value = altRawName.substring(stadtteil.length + 1).trim();
+                } else if (altRawName.includes(',')) {
+                    inputAltName.value = altRawName.split(',').slice(1).join(',').trim();
+                } else {
+                    inputAltName.value = altRawName;
+                }
+
+                inputAltFactor.value = data.alternative.factor !== undefined ? data.alternative.factor : 1.0;
+                inputAltLat.value = data.alternative.lat !== undefined ? data.alternative.lat : "";
+                inputAltLon.value = data.alternative.lon !== undefined ? data.alternative.lon : "";
+            } else {
+                setAltSectionOpen(false);
+                inputAltEnabled.checked = false;
+                inputAltName.value = "";
+                inputAltFactor.value = "1.0";
+                inputAltLat.value = "";
+                inputAltLon.value = "";
+            }
+            updateAltKeyPreview();
+
+            // Statusmeldungen zurücksetzen
+            document.getElementById('gtfs-status-message').style.display = 'none';
+            document.getElementById('gtfs-status-message-alt').style.display = 'none';
 
             // Zentriere Karte auf Haltestelle
             map.flyTo([data.lat, data.lon], 16, { animate: true, duration: 0.8 });
@@ -727,6 +897,50 @@
                     });
 
                     stopsLayerGroup.addLayer(marker);
+
+                    // Alternative auf der Karte darstellen
+                    if (stop.alternative && !isNaN(parseFloat(stop.alternative.lat)) && !isNaN(parseFloat(stop.alternative.lon))) {
+                        const altLat = parseFloat(stop.alternative.lat);
+                        const altLon = parseFloat(stop.alternative.lon);
+                        let parsedAltFactor = parseFloat(stop.alternative.factor);
+                        const altFactor = isNaN(parsedAltFactor) ? 1.0 : parsedAltFactor;
+
+                        bounds.push([altLat, altLon]);
+
+                        const altIcon = L.divIcon({
+                            className: 'custom-vcd-marker-alt',
+                            html: `<div class="vcd-pin" style="background-color: #4E8293; border: 2px dashed white; width: 24px; height: 24px; font-size: 11px;" title="Alternative zu ${key}">🔄</div>`,
+                            iconSize: [24, 24],
+                            iconAnchor: [12, 12],
+                            popupAnchor: [0, -12]
+                        });
+
+                        const altMarker = L.marker([altLat, altLon], { icon: altIcon });
+                        altMarker.bindPopup(`
+                            <div style="font-family: 'Roboto', sans-serif;">
+                                <span style="font-size: 0.8em; color: #4E8293; font-weight: bold;">ALTERNATIV-HALTESTELLE</span><br>
+                                <b style="color: #049EAB; font-size: 1.05em;">${stop.alternative.name || 'Alternative'}</b><br>
+                                Hauptziel: <b>${key}</b><br>
+                                Faktor: <b>${altFactor}</b><br>
+                                Lat: ${altLat.toFixed(5)}, Lon: ${altLon.toFixed(5)}<br>
+                                <button onclick="window.editStopFromPopup('${encodeURIComponent(key)}')" class="btn btn-petrol" style="padding: 4px 8px; font-size: 11px; margin-top: 6px; width: 100%;">
+                                    Haupthaltestelle bearbeiten
+                                </button>
+                            </div>
+                        `);
+                        altMarker.on('click', () => {
+                            populateFormForStop(key, stop);
+                        });
+                        stopsLayerGroup.addLayer(altMarker);
+
+                        const connectLine = L.polyline([[lat, lon], [altLat, altLon]], {
+                            color: '#4E8293',
+                            weight: 2,
+                            dashArray: '4, 4',
+                            opacity: 0.7
+                        });
+                        stopsLayerGroup.addLayer(connectLine);
+                    }
                 }
 
                 // Zeile in Sidebar-Liste
@@ -740,9 +954,15 @@
                     if (factor > 1) { badgeClass = 'badge-orange'; badgeSymbol = '⭐'; }
                     else if (factor < 1) { badgeClass = 'badge-gray'; badgeSymbol = '⚠️'; }
 
+                    let altBadge = '';
+                    if (stop.alternative) {
+                        altBadge = `<span class="badge-factor" style="background-color: #4E8293; padding: 2px 5px;" title="Alternative: ${stop.alternative.name || ''}">🔄 Alt</span>`;
+                    }
+
                     item.innerHTML = `
                         <div class="stop-item-title" title="${key}">
                             <span class="badge-factor ${badgeClass}" style="padding: 2px 5px;">${badgeSymbol} ${factor}</span>
+                            ${altBadge}
                             <span>${key}</span>
                         </div>
                         <button class="btn-delete-stop" title="Haltestelle löschen" onclick="event.stopPropagation(); window.deleteStop('${encodeURIComponent(key)}');">✕</button>
@@ -812,11 +1032,39 @@
                 delete stopsData[currentEditKey];
             }
 
-            stopsData[finalKey] = {
+            const newStopObj = {
                 lat: lat,
                 lon: lon,
                 factor: factor
             };
+
+            // Prüfe Alternativ-Haltestelle
+            const altEnabled = inputAltEnabled.checked;
+            const altName = inputAltName.value.trim();
+            const altLat = parseFloat(inputAltLat.value);
+            const altLon = parseFloat(inputAltLon.value);
+            let parsedAltFactor = parseFloat(inputAltFactor.value);
+            const altFactor = isNaN(parsedAltFactor) ? 1.0 : parsedAltFactor;
+
+            if (altEnabled) {
+                if (!altName) {
+                    alert("Bitte einen Namen für die Alternativ-Haltestelle eingeben!");
+                    return;
+                }
+                if (isNaN(altLat) || isNaN(altLon)) {
+                    alert("Bitte gültige Koordinaten für die Alternativ-Haltestelle angeben oder per Klick wählen!");
+                    return;
+                }
+                const altFullName = stadtteil ? `${stadtteil}, ${altName}` : altName;
+                newStopObj.alternative = {
+                    name: altFullName,
+                    lat: altLat,
+                    lon: altLon,
+                    factor: altFactor
+                };
+            }
+
+            stopsData[finalKey] = newStopObj;
 
             currentEditKey = finalKey;
             unsavedChanges = true;
@@ -940,23 +1188,36 @@
 
         // --- GTFS SUCHE (/api/search_gtfs) ---
         const btnSearchGtfs = document.getElementById('btn-search-gtfs');
+        const btnSearchGtfsAlt = document.getElementById('btn-search-gtfs-alt');
         const gtfsStatusMsg = document.getElementById('gtfs-status-message');
+        const gtfsStatusMsgAlt = document.getElementById('gtfs-status-message-alt');
 
-        btnSearchGtfs.addEventListener('click', async function() {
+        async function performGtfsSearch(isAlt) {
             const stadt = inputStadt.value.trim();
             const stadtteil = inputStadtteil.value.trim();
-            const name = inputName.value.trim();
+            const name = isAlt ? inputAltName.value.trim() : inputName.value.trim();
 
             if (!name && !stadt && !stadtteil) {
                 alert("Bitte mindestens einen Haltestellennamen oder eine Stadt für die GTFS-Suche eingeben!");
                 return;
             }
 
-            btnSearchGtfs.disabled = true;
-            btnSearchGtfs.textContent = "⏳ Suche in GTFS...";
-            gtfsStatusMsg.style.display = "block";
-            gtfsStatusMsg.style.color = "#049EAB";
-            gtfsStatusMsg.textContent = "Durchsuche GTFS stops.txt...";
+            const activeBtn = isAlt ? btnSearchGtfsAlt : btnSearchGtfs;
+            const activeStatusMsg = isAlt ? gtfsStatusMsgAlt : gtfsStatusMsg;
+            const originalText = activeBtn.textContent;
+            
+            // Verstecke die andere Statusmeldung
+            if (isAlt) {
+                gtfsStatusMsg.style.display = "none";
+            } else {
+                gtfsStatusMsgAlt.style.display = "none";
+            }
+            
+            activeBtn.disabled = true;
+            activeBtn.textContent = "⏳ Suche in GTFS...";
+            activeStatusMsg.style.display = "block";
+            activeStatusMsg.style.color = "#049EAB";
+            activeStatusMsg.textContent = `Durchsuche GTFS stops.txt nach ${stadt}, ${stadtteil}, ${name}...`;
 
             gtfsSearchLayerGroup.clearLayers();
 
@@ -970,21 +1231,21 @@
                 const data = await res.json();
 
                 if (!res.ok) {
-                    gtfsStatusMsg.style.color = "#EB6502";
-                    gtfsStatusMsg.textContent = data.error || "Fehler bei der GTFS-Suche.";
+                    activeStatusMsg.style.color = "#EB6502";
+                    activeStatusMsg.textContent = data.error || "Fehler bei der GTFS-Suche.";
                     alert(data.error || "GTFS-Datei nicht gefunden oder Fehler bei der Suche.");
                     return;
                 }
 
                 if (!Array.isArray(data) || data.length === 0) {
-                    gtfsStatusMsg.style.color = "#666";
-                    gtfsStatusMsg.textContent = "Keine Treffer in stops.txt gefunden.";
+                    activeStatusMsg.style.color = "#666";
+                    activeStatusMsg.textContent = "Keine Treffer in stops.txt gefunden.";
                     showToast("Keine passenden GTFS-Treffer gefunden.");
                     return;
                 }
 
-                gtfsStatusMsg.style.color = "#026770";
-                gtfsStatusMsg.textContent = `${data.length} Treffer auf der Karte visualisiert. Klicke auf einen Marker!`;
+                activeStatusMsg.style.color = "#026770";
+                activeStatusMsg.textContent = `${data.length} Treffer auf der Karte visualisiert. Klicke auf einen Marker!`;
 
                 const searchBounds = [];
                 data.forEach(item => {
@@ -1018,42 +1279,60 @@
                 showToast(`${data.length} GTFS-Treffer auf der Karte eingezeichnet.`);
 
             } catch (err) {
-                gtfsStatusMsg.style.color = "#EB6502";
-                gtfsStatusMsg.textContent = "Netzwerkfehler bei der GTFS-Suche.";
+                activeStatusMsg.style.color = "#EB6502";
+                activeStatusMsg.textContent = "Netzwerkfehler bei der GTFS-Suche.";
                 console.error(err);
             } finally {
-                btnSearchGtfs.disabled = false;
-                btnSearchGtfs.textContent = "🔍 In GTFS suchen";
+                activeBtn.disabled = false;
+                activeBtn.textContent = originalText;
             }
-        });
+        }
+
+        btnSearchGtfs.addEventListener('click', () => performGtfsSearch(false));
+        btnSearchGtfsAlt.addEventListener('click', () => performGtfsSearch(true));
 
         window.applyGtfsCoords = function(lat, lon, encodedName) {
             const rawName = decodeURIComponent(encodedName);
-            inputLat.value = lat;
-            inputLon.value = lon;
-
-            // Falls Haltestellenname noch leer ist, schlage den Namen vor
-            if (!inputName.value.trim()) {
-                if (rawName.includes(',')) {
-                    const parts = rawName.split(',');
-                    if (!inputStadtteil.value.trim() && parts.length > 1) {
-                        inputStadtteil.value = parts[0].trim();
-                        inputName.value = parts.slice(1).join(',').trim();
-                    } else {
-                        inputName.value = parts.slice(1).join(',').trim();
+            
+            // Wenn das Fenster für die Alternative offen ist, Koordinaten dorthin übertragen
+            if (isAltTarget()) {
+                inputAltLat.value = lat;
+                inputAltLon.value = lon;
+                if (!inputAltName.value.trim()) {
+                    let suggestedAltName = rawName;
+                    if (suggestedAltName.includes(',')) {
+                        suggestedAltName = suggestedAltName.split(',').slice(1).join(',').trim();
                     }
-                } else {
-                    inputName.value = rawName;
+                    inputAltName.value = suggestedAltName;
+                    updateAltKeyPreview();
                 }
-                updateKeyPreview();
+                showToast(`GTFS-Koordinaten für Alternative übernommen: ${lat}, ${lon}`);
+            } else {
+                inputLat.value = lat;
+                inputLon.value = lon;
+
+                // Falls Haltestellenname noch leer ist, schlage den Namen vor
+                if (!inputName.value.trim()) {
+                    if (rawName.includes(',')) {
+                        const parts = rawName.split(',');
+                        if (!inputStadtteil.value.trim() && parts.length > 1) {
+                            inputStadtteil.value = parts[0].trim();
+                            inputName.value = parts.slice(1).join(',').trim();
+                        } else {
+                            inputName.value = parts.slice(1).join(',').trim();
+                        }
+                    } else {
+                        inputName.value = rawName;
+                    }
+                    updateKeyPreview();
+                }
+                showToast(`GTFS-Koordinaten für "${rawName}" übernommen.`);
             }
 
             if (tempClickMarker) {
                 map.removeLayer(tempClickMarker);
             }
             tempClickMarker = L.marker([lat, lon], { icon: tempPinIcon }).addTo(map);
-
-            showToast(`GTFS-Koordinaten für "${rawName}" übernommen.`);
         };
 
         // --- GLOBALER BUTTON: AUF SERVER SPEICHERN ---
@@ -1121,6 +1400,7 @@
             loadAvailableDatasets();
             updateKeyPreview();
             updateFactorBadge();
+            updateAltKeyPreview();
         });
     </script>
 </body>

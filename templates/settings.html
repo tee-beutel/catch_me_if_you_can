@@ -176,6 +176,14 @@
             </div>
         </div>
 
+        <div class="form-group" style="margin-top: -5px; margin-bottom: 20px;">
+            <label class="checkbox-label">
+                <input type="checkbox" id="auto_calculate_stops" {% if config.get('auto_calculate_stops', True) %}checked{% endif %}>
+                <b>Automatische Berechnung ein-/ausschalten</b>
+            </label>
+            <div class="help-text" style="margin-left: 25px;">Passt die aktiven Haltestellen und das Historien-Limit dynamisch an die Teamanzahl an.</div>
+        </div>
+
         <div class="form-group" style="background: #e6f7f8; padding: 15px; border-left: 4px solid #049EAB; margin-top: 10px;">
             <label class="checkbox-label">
                 <input type="checkbox" id="auto_approve_stops" {% if config.get('auto_approve_stops', False) %}checked{% endif %}>
@@ -251,6 +259,12 @@
             <h3 style="margin-top: 0;">Haltestellen neu würfeln</h3>
             <p style="font-size: 0.9em; color: #444; margin-bottom: 15px;">Würfelt sofort neue aktive Haltestellen aus und leert die Haltestellen-Historie. Die Teampunktestände und Rollen bleiben unberührt.</p>
             <button class="btn btn-danger" onclick="shuffleStops()">Haltestellen durchwürfeln</button>
+            
+            <hr style="margin: 30px 0 20px 0; border: none; border-top: 1px solid #EB6502;">
+            
+            <h3 style="margin-top: 0;">Neue PINs für Teams auswürfeln</h3>
+            <p style="font-size: 0.9em; color: #444; margin-bottom: 15px;">Generiert für alle Teams neue 4-stellige Zufalls-PINs und aktualisiert deren Zugangs-URLs. (Änderungen sind direkt aktiv und gespeichert).</p>
+            <button class="btn btn-danger" onclick="randomizePins()">Neue PINs für Teams auswürfeln</button>
         </div>
     </div>
 
@@ -311,6 +325,7 @@
             
             const enableSwap = document.getElementById('enable_mid_game_swap').checked;
             const shuffleOnSwap = document.getElementById('shuffle_stops_on_swap').checked;
+            const autoCalculateStops = document.getElementById('auto_calculate_stops').checked;
 
             const autoApproveStops = document.getElementById('auto_approve_stops').checked;
             const stopRadiusMeters = parseFloat(document.getElementById('stop_radius_meters').value) || 100;
@@ -332,6 +347,7 @@
                 active_stops_dataset: activeDataset,
                 target_stops: targetStops,
                 max_history: maxHistory,
+                auto_calculate_stops: autoCalculateStops,
                 teams_list: teamsList,
                 points_stop_reached: pointsStopReached,
                 points_caught_team: pointsCaughtTeam,
@@ -352,7 +368,11 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    alert('Einstellungen erfolgreich gespeichert.');
+                    if (data.warning) {
+                        alert('Einstellungen erfolgreich gespeichert.\n\n' + data.warning);
+                    } else {
+                        alert('Einstellungen erfolgreich gespeichert.');
+                    }
                     window.location.href = '/adminconsole-' + data.new_admin_url;
                 } else {
                     alert(data.error || 'Fehler beim Speichern.');
@@ -408,6 +428,29 @@
             })
             .catch(err => alert('Netzwerkfehler beim Neuwürfeln!'));
         }
+
+        function randomizePins() {
+            if (!confirm('Sollen wirklich für alle Teams neue PINs ausgewürfelt werden?\n\nDie Änderungen sind sofort aktiv. Bisherige Team-PINs und Links werden dadurch überschrieben.')) {
+                return;
+            }
+
+            fetch('/adminconsole-{{ admin_url }}/randomize_pins', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Neue PINs wurden erfolgreich für alle Teams ausgewürfelt!');
+                    window.location.reload(); 
+                } else alert(data.error || 'Fehler beim Auswürfeln der PINs!');
+            })
+            .catch(err => alert('Netzwerkfehler beim Auswürfeln der PINs!'));
+        }
+        function toggleCalculatedFields() {
+            const auto = document.getElementById('auto_calculate_stops').checked;
+            document.getElementById('target_stops').disabled = auto;
+            document.getElementById('max_history').disabled = auto;
+        }
+        document.getElementById('auto_calculate_stops').addEventListener('change', toggleCalculatedFields);
+        window.addEventListener('DOMContentLoaded', toggleCalculatedFields);
     </script>
 </body>
 </html>

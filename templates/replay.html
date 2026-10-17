@@ -479,6 +479,8 @@
                     <button class="ctrl-btn speed-btn active" onclick="setSpeed(5)">5x</button>
                     <button class="ctrl-btn speed-btn" onclick="setSpeed(20)">20x</button>
                     <button class="ctrl-btn speed-btn" onclick="setSpeed(50)">50x</button>
+                    <button class="ctrl-btn speed-btn" onclick="setSpeed(100)">100x</button>
+                    <button class="ctrl-btn speed-btn" onclick="setSpeed(200)">200x</button>
                 </div>
             </div>
 
@@ -593,7 +595,7 @@
                         `;
 
                         const m = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupHtml);
-                        stopsLayerGroup.addLayer(m);
+                        // stopsLayerGroup.addLayer(m); // Haltestellen werden dynamisch via updateReplayView() gesteuert
                         stopMarkers[stop.name] = m;
                     });
                 })
@@ -923,6 +925,32 @@
                 }
             }
 
+            // --- HALTESTELLEN DYNAMISCH EIN-/AUSBLENDEN ---
+            if (replayData && replayData.stop_lifecycle) {
+                let activeAtCurrentTime = new Set();
+
+                // Ermittle, welche Haltestellen zu 'time' aktiv sind
+                replayData.stop_lifecycle.forEach(cycle => {
+                    if (time >= cycle.from && (cycle.until === null || time < cycle.until)) {
+                        activeAtCurrentTime.add(cycle.stop_name);
+                    }
+                });
+
+                // Marker aktualisieren
+                for (const stopName in stopMarkers) {
+                    const marker = stopMarkers[stopName];
+                    if (activeAtCurrentTime.has(stopName)) {
+                        if (!stopsLayerGroup.hasLayer(marker)) {
+                            stopsLayerGroup.addLayer(marker);
+                        }
+                    } else {
+                        if (stopsLayerGroup.hasLayer(marker)) {
+                            stopsLayerGroup.removeLayer(marker);
+                        }
+                    }
+                }
+            }
+
             // Events prüfen und auslösen
             checkAndTriggerEvents(time);
         }
@@ -955,6 +983,11 @@
         }
 
         function fireEventVisuals(ev) {
+            // Wenn ein Event vom Typ stop ist, aber keine gültige team-ID besitzt, kein Popup und kein Toast auslösen
+            if (ev.type === 'stop' && (!ev.team || ev.team === "")) {
+                return;
+            }
+
             // 1. Toast Notification erstellen
             showToast(ev);
 

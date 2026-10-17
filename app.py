@@ -82,16 +82,18 @@ DEFAULT_CONFIG = {
     "enable_mid_game_swap": True,
     "shuffle_stops_on_swap": True,
     "auto_approve_stops": False,
-    "stop_radius_meters": 75
+    "stop_radius_meters": 75,
+    "auto_calculate_stops": True
 }
 
 stops_data = {}
 ALL_STOPS = []
+ALTERNATIVE_PAIRS = {}
 current_active_dataset = None
 
 
 def load_active_stops_data(filename=None):
-    global stops_data, ALL_STOPS, current_active_dataset
+    global stops_data, ALL_STOPS, ALTERNATIVE_PAIRS, current_active_dataset
     if not filename:
         try:
             with sqlite3.connect(DB_FILE, timeout=10) as conn:
@@ -122,10 +124,32 @@ def load_active_stops_data(filename=None):
             loaded = {}
 
     stops_data.clear()
-    stops_data.update(loaded)
-
     ALL_STOPS.clear()
-    ALL_STOPS.extend(list(stops_data.keys()))
+    ALTERNATIVE_PAIRS.clear()
+
+    # In ALL_STOPS dürfen weiterhin nur die Haupt-Haltestellen landen (oberste Keys im JSON)
+    ALL_STOPS.extend(list(loaded.keys()))
+
+    for main_name, stop_info in loaded.items():
+        if not isinstance(stop_info, dict):
+            continue
+        stops_data[main_name] = {
+            "lat": stop_info.get("lat"),
+            "lon": stop_info.get("lon"),
+            "factor": stop_info.get("factor", 1) if stop_info.get("factor") is not None else 1
+        }
+        alt = stop_info.get("alternative")
+        if alt and isinstance(alt, dict) and alt.get("name"):
+            alt_name = alt["name"].strip()
+            if alt_name:
+                stops_data[alt_name] = {
+                    "lat": alt.get("lat"),
+                    "lon": alt.get("lon"),
+                    "factor": alt.get("factor", 1) if alt.get("factor") is not None else 1
+                }
+                ALTERNATIVE_PAIRS[main_name] = alt_name
+                ALTERNATIVE_PAIRS[alt_name] = main_name
+
     current_active_dataset = safe_filename
     return stops_data
 
@@ -267,6 +291,13 @@ def init_db():
 
         c.execute('''CREATE INDEX IF NOT EXISTS idx_location_history_team_timestamp
                      ON location_history (team_id, timestamp)''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS replay_stop_lifecycle (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        stop_name TEXT,
+                        active_from TEXT,
+                        active_until TEXT
+                    )''')
 
         # Sicherstellen, dass bestehende Datenbanken nahtlos um die neuen Zeitspalten erweitert werden
         ensure_column(c, "team_stops", "submitted_at", "TEXT")
@@ -1116,6 +1147,28 @@ def save_state(conn, state):
             1 if log.get('is_late') else 0, 1 if log.get('admin_only') else 0
         ))
 
+    # --- REPLAY STOP LIFECYCLE SYNC ---
+    now_iso = datetime.now(timezone.utc).isoformat()
+    current_active = set(state.get('active_stops', []))
+
+    # 1. Hole alle aktuell in der DB als "offen" markierten Haltestellen
+    c.execute("SELECT id, stop_name FROM replay_stop_lifecycle WHERE active_until IS NULL")
+    open_records = c.fetchall()
+
+    open_stops_in_db = set()
+    for record in open_records:
+        record_id, s_name = record[0], record[1]
+        open_stops_in_db.add(s_name)
+        # Wenn ein offener Stop nicht mehr im State aktiv ist -> schließen!
+        if s_name not in current_active:
+            c.execute("UPDATE replay_stop_lifecycle SET active_until = ? WHERE id = ?", (now_iso, record_id))
+
+    # 2. Öffne neue Lebenszyklen für Haltestellen, die aktiv sind, aber noch keinen offenen DB-Eintrag haben
+    for s_name in current_active:
+        if s_name not in open_stops_in_db:
+            c.execute("INSERT INTO replay_stop_lifecycle (stop_name, active_from) VALUES (?, ?)", (s_name, now_iso))
+    # ----------------------------------
+
     conn.commit()
 
 
@@ -1126,7 +1179,7 @@ def get_state(conn):
 
     if not rows:
         load_active_stops_data("Catch_Haltestellen.json")
-        initial_active = random.sample(ALL_STOPS, min(DEFAULT_CONFIG["target_stops"], len(ALL_STOPS))) if ALL_STOPS else []
+        initial_active = select_random_stops(DEFAULT_CONFIG["target_stops"])
         num_teams = DEFAULT_CONFIG["num_teams"]
         team_names = DEFAULT_CONFIG["team_names"]
 
@@ -1239,13 +1292,42 @@ def get_state(conn):
     return state
 
 
+def roll_stop_choice(base_stop):
+    if base_stop in ALTERNATIVE_PAIRS and random.random() < 0.5:
+        return ALTERNATIVE_PAIRS[base_stop]
+    return base_stop
+
+
 def get_new_random_stop(active_stops, history):
-    available = set(ALL_STOPS) - set(active_stops) - set(history)
+    if not ALL_STOPS:
+        return ""
+
+    blocked = set(active_stops or []) | set(history or [])
+    for stop in list(blocked):
+        if stop in ALTERNATIVE_PAIRS:
+            blocked.add(ALTERNATIVE_PAIRS[stop])
+
+    available = [s for s in ALL_STOPS if s not in blocked]
     if not available:
-        available = set(ALL_STOPS) - set(active_stops)
+        blocked_active = set(active_stops or [])
+        for stop in list(blocked_active):
+            if stop in ALTERNATIVE_PAIRS:
+                blocked_active.add(ALTERNATIVE_PAIRS[stop])
+        available = [s for s in ALL_STOPS if s not in blocked_active]
+
     if not available:
-        return random.choice(ALL_STOPS)
-    return random.choice(list(available))
+        base_stop = random.choice(ALL_STOPS)
+    else:
+        base_stop = random.choice(available)
+
+    return roll_stop_choice(base_stop)
+
+
+def select_random_stops(count):
+    if not ALL_STOPS:
+        return []
+    sample_size = min(count, len(ALL_STOPS))
+    return [roll_stop_choice(s) for s in random.sample(ALL_STOPS, sample_size)]
 
 
 # --- ZEIT- UND PHASENLOGIK ---
@@ -1349,7 +1431,7 @@ def update_game_time_state(conn, state):
             if config.get("shuffle_stops_on_swap", True):
                 target_stops = config.get("target_stops", 12)
                 state["history"] = []
-                new_active_stops = random.sample(ALL_STOPS, min(target_stops, len(ALL_STOPS)))
+                new_active_stops = select_random_stops(target_stops)
                 state["active_stops"] = new_active_stops
                 state["history"] = new_active_stops.copy()
                 desc = "🔄 HALBZEIT! Die Rollen wurden getauscht. Haltestellen sind neu gewürfelt und die Historie wurde gelöscht."
@@ -1385,7 +1467,8 @@ def execute_stop_catch(state, stop_name, team_id, is_late=False, submitted_ts=No
     sub_iso = submitted_ts or now_iso
     act_iso = actual_ts or sub_iso
 
-    display_name = "Unbekannt"
+    is_neutral = not team_id
+    display_name = None if is_neutral else "Unbekannt"
     if team_id and team_id in state["teams_data"]:
         state["teams_data"][team_id]["stops"].append(stop_name)
         state["teams_data"][team_id].setdefault("stop_timestamps", []).append((stop_name, sub_iso, act_iso))
@@ -1397,15 +1480,21 @@ def execute_stop_catch(state, stop_name, team_id, is_late=False, submitted_ts=No
         state['active_stops'].append(new_stop)
         state['history'].append(new_stop)
 
-    desc = f"📍 {display_name} hat die Haltestelle '{stop_name}' erreicht."
-    if auto_approved:
-        desc += " (GPS Auto-Freigabe)"
-    if is_late:
-        desc += "   (Nachtrag nach Spielende)"
+    if is_neutral:
+        desc = f"🔄 Haltestelle '{stop_name}' wurde vom System neutral ausgetauscht."
+        admin_only = True
+    else:
+        desc = f"📍 {display_name} hat die Haltestelle '{stop_name}' erreicht."
+        if auto_approved:
+            desc += " (GPS Auto-Freigabe)"
+        if is_late:
+            desc += "   (Nachtrag nach Spielende)"
+        admin_only = False
 
     state["action_log"].insert(0, {
-        "id": str(uuid.uuid4()), "type": "stop", "team": team_id, "team_name": display_name, "stop": stop_name,
-        "timestamp": sub_iso, "actual_timestamp": act_iso, "desc": desc, "is_late": is_late
+        "id": str(uuid.uuid4()), "type": "stop", "team": team_id if not is_neutral else None, "team_name": display_name, "stop": stop_name,
+        "timestamp": sub_iso, "actual_timestamp": act_iso, "desc": desc, "is_late": is_late,
+        "admin_only": admin_only
     })
     return True
 
@@ -1790,7 +1879,7 @@ def admin_settings(admin_slug):
 
             target = int(data.get("target_stops", config["target_stops"]))
             state["history"] = []
-            new_active = random.sample(ALL_STOPS, min(target, len(ALL_STOPS))) if ALL_STOPS else []
+            new_active = select_random_stops(target)
             state["active_stops"] = new_active
             state["history"] = new_active.copy()
 
@@ -1800,9 +1889,6 @@ def admin_settings(admin_slug):
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "desc": f"📁 Haltestellen-Datensatz geändert auf '{new_dataset}'. Haltestellen wurden neu ausgewürfelt."
             })
-
-        config["target_stops"] = int(data.get("target_stops", config["target_stops"]))
-        config["max_history"] = int(data.get("max_history", config["max_history"]))
 
         config["start_time"] = data.get("start_time", config.get("start_time"))
         config["end_time"] = data.get("end_time", config.get("end_time"))
@@ -1878,24 +1964,48 @@ def admin_settings(admin_slug):
         config["points_was_caught"] = int(data.get("points_was_caught", config["points_was_caught"]))
         config["points_caught_team"] = int(data.get("points_caught_team", config["points_caught_team"]))
 
+        config["auto_calculate_stops"] = data.get("auto_calculate_stops", True)
+        tot_hst = len(ALL_STOPS)
+
+        if config["auto_calculate_stops"] and tot_hst > 0:
+            teams_count = len(new_teams_data)
+
+            # Formel 1: Aktive Haltestellen
+            aktiv = math.ceil(min(tot_hst * 0.6, (tot_hst * 0.3) * max(math.sqrt(teams_count) / 2, 1)))
+            aktiv = max(2 * teams_count, aktiv)
+            aktiv = min(tot_hst - 6, aktiv)
+            config["target_stops"] = max(1, aktiv)
+
+            # Formel 2: Historien-Limit
+            history = math.ceil(min(config["target_stops"] * 1.75, tot_hst * 0.8))
+            history = max(config["target_stops"] + 3, history)
+            history = min(tot_hst - 3, history)
+            config["max_history"] = max(1, history)
+        else:
+            config["target_stops"] = int(data.get("target_stops", config["target_stops"]))
+            config["max_history"] = int(data.get("max_history", config["max_history"]))
+
+        # Warnung prüfen (Spielfeld zu klein)
+        warning_msg = None
+        if config["target_stops"] > tot_hst * 0.75:
+            warning_msg = f"Achtung: Die Anzahl der aktiven Haltestellen ({config['target_stops']}) überschreitet 75% der Gesamthaltestellen ({tot_hst}). Bitte wähle ein größeres Spielfeld!"
+
         current_active_count = len(state["active_stops"])
         target = config["target_stops"]
         if current_active_count < target:
             needed = target - current_active_count
-            available = list(set(ALL_STOPS) - set(state["active_stops"]) - set(state["history"]))
-            if not available:
-                available = list(set(ALL_STOPS) - set(state["active_stops"]))
-            if available:
-                added = random.sample(available, min(needed, len(available)))
-                state["active_stops"].extend(added)
-                state["history"].extend(added)
+            for _ in range(needed):
+                new_stop = get_new_random_stop(state["active_stops"], state["history"])
+                if new_stop and new_stop not in state["active_stops"]:
+                    state["active_stops"].append(new_stop)
+                    state["history"].append(new_stop)
         elif current_active_count > target:
             state["active_stops"] = state["active_stops"][:target]
 
         save_state(conn, state)
         trigger_traccar_sync_async(state["teams_data"])
 
-    return jsonify({'success': True, 'new_admin_url': ADMIN_SLUG})
+    return jsonify({'success': True, 'new_admin_url': ADMIN_SLUG, 'warning': warning_msg})
 
 
 @app.route('/adminconsole-<admin_slug>/reset', methods=['POST'])
@@ -1913,7 +2023,7 @@ def reset_game(admin_slug):
         config = state["config"]
         target = config.get("target_stops", 12)
 
-        initial_active = random.sample(ALL_STOPS, min(target, len(ALL_STOPS)))
+        initial_active = select_random_stops(target)
         state["active_stops"] = initial_active
         state["history"] = initial_active.copy()
 
@@ -1989,7 +2099,7 @@ def shuffle_stops(admin_slug):
         config = state["config"]
         target = config.get("target_stops", 12)
 
-        new_active_stops = random.sample(ALL_STOPS, min(target, len(ALL_STOPS)))
+        new_active_stops = select_random_stops(target)
         state["active_stops"] = new_active_stops
         state["history"] = new_active_stops.copy()
 
@@ -1998,6 +2108,40 @@ def shuffle_stops(admin_slug):
             "timestamp": datetime.now(timezone.utc).isoformat(), "desc": "🔀 Haltestellen wurden manuell neu gewürfelt und die Historie zurückgesetzt."
         })
         save_state(conn, state)
+
+    return jsonify({'success': True})
+
+
+@app.route('/adminconsole-<admin_slug>/randomize_pins', methods=['POST'])
+def randomize_pins(admin_slug):
+    if not is_valid_admin_slug(admin_slug):
+        return jsonify({'success': False, 'error': 'Verboten'}), 403
+
+    with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
+        conn.row_factory = sqlite3.Row
+        state = get_state(conn)
+        teams_data = state.get('teams_data', {})
+
+        used_pins = set()
+        for t_id, t_data in teams_data.items():
+            while True:
+                pin = f"{random.randint(1000, 9999)}"
+                if pin not in used_pins:
+                    used_pins.add(pin)
+                    break
+            t_data['pin'] = pin
+            t_data['slug'] = generate_slug(t_id, pin)
+
+        state['action_log'].insert(0, {
+            'id': str(uuid.uuid4()),
+            'type': 'system',
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'desc': '🔑 Neue Team-PINs wurden manuell ausgewürfelt.',
+            'admin_only': True
+        })
+
+        save_state(conn, state)
+        trigger_traccar_sync_async(state['teams_data'])
 
     return jsonify({'success': True})
 
@@ -2108,6 +2252,13 @@ def api_save_stop_dataset():
     return jsonify({"success": True, "filename": safe_filename, "count": len(stops)})
 
 
+# --- GLOBALE CACHE VARIABLE FÜR GTFS ---
+gtfs_cache = {
+    "data": None,
+    "timestamp": 0
+}
+gtfs_cache_lock = threading.Lock()
+
 @app.route('/api/search_gtfs', methods=['POST'])
 def api_search_gtfs():
     if not os.path.exists(GTFS_STOPS_FILE):
@@ -2124,6 +2275,50 @@ def api_search_gtfs():
     if not name and not stadt and not stadtteil:
         return jsonify([])
 
+    global gtfs_cache
+    current_time = time.time()
+
+    # Cache-Prüfung (120 Sekunden = 2 Minuten)
+    with gtfs_cache_lock:
+        if gtfs_cache["data"] is None or (current_time - gtfs_cache["timestamp"]) > 120:
+            try:
+                with open(GTFS_STOPS_FILE, 'r', encoding='utf-8-sig', errors='replace') as f:
+                    sample = f.read(4096)
+                    f.seek(0)
+                    delimiter = ';' if ';' in sample and sample.count(';') > sample.count(',') else ','
+                    reader = csv.DictReader(f, delimiter=delimiter)
+
+                    parsed_data = []
+                    for row in reader:
+                        s_name = row.get('stop_name') or row.get('STOP_NAME') or ''
+                        s_desc = row.get('stop_desc') or row.get('STOP_DESC') or ''
+                        s_lat = row.get('stop_lat') or row.get('STOP_LAT') or ''
+                        s_lon = row.get('stop_lon') or row.get('STOP_LON') or ''
+
+                        if not s_name or not s_lat or not s_lon:
+                            continue
+
+                        try:
+                            lat = float(str(s_lat).replace(',', '.'))
+                            lon = float(str(s_lon).replace(',', '.'))
+                        except ValueError:
+                            continue
+
+                        parsed_data.append({
+                            "name": s_name,
+                            "lat": lat,
+                            "lon": lon,
+                            "combined": f"{s_name} {s_desc}".lower()
+                        })
+                    
+                    gtfs_cache["data"] = parsed_data
+                    gtfs_cache["timestamp"] = current_time
+            except Exception as e:
+                return jsonify({"error": f"Fehler beim Lesen der GTFS-Datei: {str(e)}"}), 500
+
+        cached_stops = gtfs_cache["data"]
+
+    # Suche im (nun garantiert geladenen) Cache
     results = []
     seen = set()
 
@@ -2134,59 +2329,39 @@ def api_search_gtfs():
     tokens_both = [t for t in f"{q_stadt} {q_name}".split() if len(t) > 0]
     tokens_name = [t for t in q_name.split() if len(t) > 0]
 
-    try:
-        with open(GTFS_STOPS_FILE, 'r', encoding='utf-8-sig', errors='replace') as f:
-            sample = f.read(4096)
-            f.seek(0)
-            delimiter = ';' if ';' in sample and sample.count(';') > sample.count(',') else ','
-            reader = csv.DictReader(f, delimiter=delimiter)
+    candidates_both = []
+    candidates_name = []
 
-            candidates_both = []
-            candidates_name = []
+    for item in cached_stops:
+        s_name = item["name"]
+        lat = item["lat"]
+        lon = item["lon"]
+        combined = item["combined"]
 
-            for row in reader:
-                s_name = row.get('stop_name') or row.get('STOP_NAME') or ''
-                s_desc = row.get('stop_desc') or row.get('STOP_DESC') or ''
-                s_lat = row.get('stop_lat') or row.get('STOP_LAT') or ''
-                s_lon = row.get('stop_lon') or row.get('STOP_LON') or ''
+        if tokens_both and all(t in combined for t in tokens_both):
+            candidates_both.append((s_name, lat, lon, combined))
+        elif tokens_name and all(t in combined for t in tokens_name):
+            candidates_name.append((s_name, lat, lon, combined))
 
-                if not s_name or not s_lat or not s_lon:
-                    continue
+    chosen = candidates_both if candidates_both else candidates_name
 
-                try:
-                    lat = float(str(s_lat).replace(',', '.'))
-                    lon = float(str(s_lon).replace(',', '.'))
-                except ValueError:
-                    continue
+    if q_stadtteil:
+        chosen.sort(key=lambda c: 0 if q_stadtteil in c[3] else 1)
 
-                combined = f"{s_name} {s_desc}".lower()
+    for s_name, lat, lon, _ in chosen:
+        key = (s_name, round(lat, 5), round(lon, 5))
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append({
+            "name": s_name,
+            "lat": lat,
+            "lon": lon
+        })
+        if len(results) >= 100:
+            break
 
-                if tokens_both and all(t in combined for t in tokens_both):
-                    candidates_both.append((s_name, lat, lon, combined))
-                elif tokens_name and all(t in combined for t in tokens_name):
-                    candidates_name.append((s_name, lat, lon, combined))
-
-            chosen = candidates_both if candidates_both else candidates_name
-
-            if q_stadtteil:
-                chosen.sort(key=lambda c: 0 if q_stadtteil in c[3] else 1)
-
-            for s_name, lat, lon, _ in chosen:
-                key = (s_name, round(lat, 5), round(lon, 5))
-                if key in seen:
-                    continue
-                seen.add(key)
-                results.append({
-                    "name": s_name,
-                    "lat": lat,
-                    "lon": lon
-                })
-                if len(results) >= 100:
-                    break
-
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({"error": f"Fehler beim Lesen der GTFS-Datei: {str(e)}"}), 500
+    return jsonify(results)
 
 
 # --- PLAYER ACTIONS API ---
@@ -2727,6 +2902,8 @@ def api_replay_data():
         for row in c.fetchall():
             if row["admin_only"] and row["type"] not in ("role_change", "manual_points"):
                 continue
+            if row["type"] == "stop" and not row["team"]:
+                continue
 
             act_dt = parse_iso_utc(row["actual_timestamp"]) or parse_iso_utc(row["timestamp"])
             if not act_dt:
@@ -2779,13 +2956,27 @@ def api_replay_data():
                 "deactivated": bool(d.get("deactivated", False))
             }
 
+        # 4. Stop Lifecycle laden
+        c.execute("SELECT stop_name, active_from, active_until FROM replay_stop_lifecycle")
+        stop_lifecycle = []
+        for r in c.fetchall():
+            f_dt = parse_iso_utc(r["active_from"])
+            u_dt = parse_iso_utc(r["active_until"]) if r["active_until"] else None
+            if f_dt:
+                stop_lifecycle.append({
+                    "stop_name": r["stop_name"],
+                    "from": int(f_dt.timestamp() * 1000),
+                    "until": int(u_dt.timestamp() * 1000) if u_dt else None
+                })
+
         result_data = {
             "start_ts": int(replay_start.timestamp() * 1000),
             "end_ts": int(replay_end.timestamp() * 1000),
             "config": state["config"],
             "teams": teams_dict,
             "locations": locations,
-            "events": events
+            "events": events,
+            "stop_lifecycle": stop_lifecycle  # <--- NEU
         }
 
         # Schreibe das Ergebnis in den Cache, sofern das Spiel endgültig beendet ist

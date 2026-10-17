@@ -93,6 +93,7 @@
     
     <div class="admin-timer" id="admin-timer">Timer wird geladen...</div>
 
+    <!-- 1. Ausstehende Anfragen -->
     <div class="box notifications" id="notifications-container">
         <h3>Ausstehende Anfragen ({{ pending_requests|length }})</h3>
         {% for req in pending_requests %}
@@ -116,26 +117,140 @@
         {% endfor %}
     </div>
 
+    <!-- 2. Rangliste & Team-Status -->
+    <div class="box leaderboard">
+        <h3>Rangliste & Team-Status</h3>
+        {% for entry in leaderboard %}
+        <div class="team-rank">
+            <div class="team-score">
+                {{ loop.index }}. {{ entry.display_name }} 
+                {% if entry.deactivated %}<span style="color:red; font-size: 0.7em;">(DEAKTIVIERT)</span>{% endif %}  
+                — {{ entry.score }} Punkte
+                <span class="role-badge {{ 'badge-catcher' if entry.role == 'fänger' else 'badge-runner' if entry.role == 'läufer' else 'badge-keine' }}">{{ entry.role }}</span>
+                {% if enable_swap and phase in ['pre_game', 'game'] and not roles_swapped and not entry.deactivated and entry.next_role != 'keine' %}
+                    <span style="font-size: 0.6em; color: #888; font-weight: normal; margin-left: 5px; text-transform: uppercase;">(Danach: {{ entry.next_role }})</span>
+                {% endif %}
+            </div>
+            <div class="team-details">
+                <div><b>Erreichte Haltestellen:</b>
+                    {% if entry.stops %}{{ entry.stops | join(', ') }}{% else %}<i>Keine</i>{% endif %}
+                </div>
+                <div><b>Andere Teams gefangen:</b>
+                    {% if entry.caught %}
+                        {% for c in entry.caught %}{{ team_names_map[c] }}{% if not loop.last %}, {% endif %}{% endfor %}
+                    {% else %}<i>Niemanden</i>{% endif %}
+                </div>
+                <div><b>Gefangen worden von:</b>
+                    {% if entry.caught_by %}
+                        {% for c in entry.caught_by %}{{ team_names_map[c] }}{% if not loop.last %}, {% endif %}{% endfor %}
+                    {% else %}<i>Noch ungeschlagen</i>{% endif %}
+                </div>
+                {% if entry.manual_points != 0 %}
+                <div><b>Manuelle Korrektur:</b> {{ "+%s" % entry.manual_points if entry.manual_points > 0 else entry.manual_points }} Punkte</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- 3. Live Karte (Alle Haltestellen & Teams) -->
+    <div class="box">
+        <h2>Live Karte (Alle Haltestellen & Teams)</h2>
+        <p style="font-size: 0.9em; color: #555; margin-bottom: 15px;">Aktivierte Haltestellen sowie alle aktiven Teams (nach Rolle eingefärbt) werden live angezeigt.</p>
+        <div id="admin-map" style="height: 450px; width: 100%; border: 1px solid #ddd; z-index: 1;"></div>
+    </div>
+
+    <!-- 4. Geheime Zugangslinks -->
+    <div class="box team-urls">
+        <h3>Geheime Zugangslinks</h3>
+        {% for team_name, url in team_urls.items() %}
+        <div class="url-row">
+            <b>{{ team_name }}:</b>
+            <input type="text" value="{{ url }}" readonly class="url-input" id="url-{{ loop.index }}">
+            <button class="btn btn-neutral" onclick="copyUrl('url-{{ loop.index }}')">Kopieren</button>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- 5. Aktions-Historie (Paginierung: 20 pro Seite) -->
+    <div class="box">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+            <h3 style="margin: 0;">Aktions-Historie</h3>
+            <span id="history-total-count" style="font-size: 0.88em; color: #666; font-weight: bold;"></span>
+        </div>
+        <div class="table-wrapper">
+            <table id="history-table">
+                <thead>
+                    <tr>
+                        <th>Aktion</th>
+                        <th style="width: 120px;">Verwaltung</th>
+                    </tr>
+                </thead>
+                <tbody id="history-table-body">
+                    {% set filtered_logs = action_log | rejectattr('type', 'equalto', 'role_change') | list %}
+                    {% for log in filtered_logs[:20] %}
+                    <tr>
+                        <td>
+                            {{ log.desc }}
+                            {% if log.timestamp or log.actual_timestamp %}
+                            <div class="time-meta">
+                                {% if log.timestamp %}Eingereicht: {{ log.timestamp[11:19] }} UTC{% endif %}
+                                {% if log.actual_timestamp %} | <b>Tatsächliche Zeit: {{ log.actual_timestamp[11:19] }} UTC</b>{% endif %}
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if log.type != "system" %}
+                            <button class="btn btn-orange" style="padding: 6px 10px; font-size: 11px;" onclick="undoAction('{{ log.id }}')">Rückgängig</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="2" style="text-align: center; color: #777;">Noch keine Aktionen im Spielverlauf verzeichnet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div id="history-pagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; flex-wrap: wrap; gap: 10px; border-top: 1px solid #eee; padding-top: 12px;">
+            <div style="display: flex; gap: 8px;">
+                <button id="btn-history-prev" class="btn btn-petrol" style="padding: 7px 14px; font-size: 12px;" onclick="changeHistoryPage(currentHistoryPage - 1)">« Vorherige</button>
+                <button id="btn-history-next" class="btn btn-petrol" style="padding: 7px 14px; font-size: 12px;" onclick="changeHistoryPage(currentHistoryPage + 1)">Nächste »</button>
+            </div>
+            <div id="history-page-info" style="font-size: 0.9em; color: #555; font-weight: bold;">
+                Seite 1
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. Manuelles Eingreifen -->
     <div class="box">
         <h2>Manuelles Eingreifen</h2>
         <p style="font-size: 0.9em; color: #555; margin-bottom: 25px;">Zuweisungen korrigieren oder direkte Systemeingaben tätigen. Unabhängig vom Spielstatus jederzeit möglich.</p>
         
-        <h4 style="margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Haltestelle zuweisen</h4>
-        <div id="stop-list">
-            {% for name in active_stops|sort %}
-            <div class="stop-item">
-                <span>{{ name }}</span>
-                <div class="stop-controls">
-                    <select id="team-select-{{ loop.index }}">
-                        <option value="">-- Kein Team --</option>
-                        {% for t in teams %}
-                        <option value="{{ t.id }}">{{ t.name }}</option>
-                        {% endfor %}
-                    </select>
-                    <button class="btn btn-petrol" onclick="catchStop('{{ name }}', 'team-select-{{ loop.index }}', this)">Austauschen</button>
-                </div>
+        <h4 style="margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Haltestelle zuweisen / austauschen</h4>
+        <div class="manual-catch-wrapper">
+            <div class="manual-catch-col" style="flex: 1; min-width: 220px;">
+                <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Haltestelle auswählen:</label>
+                <select id="assign-stop-select" style="width: 100%;">
+                    {% for name in active_stops|sort %}
+                    <option value="{{ name }}">{{ name }}</option>
+                    {% else %}
+                    <option value="">-- Keine aktiven Haltestellen --</option>
+                    {% endfor %}
+                </select>
             </div>
-            {% endfor %}
+            <div class="manual-catch-col" style="flex: 1; min-width: 220px;">
+                <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Team zuweisen (optional):</label>
+                <select id="assign-team-select" style="width: 100%;">
+                    <option value="">-- Kein Team (Neutral) --</option>
+                    {% for t in teams %}
+                    <option value="{{ t.id }}">{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button class="btn btn-petrol" onclick="catchStopFromDropdown(this)" style="white-space: nowrap;">Haltestelle austauschen</button>
         </div>
 
         <h4 style="margin-top: 40px; margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Catch manuell eintragen</h4>
@@ -178,93 +293,6 @@
         </div>
     </div>
 
-    <div class="box leaderboard">
-        <h3>Rangliste & Team-Status</h3>
-        {% for entry in leaderboard %}
-        <div class="team-rank">
-            <div class="team-score">
-                {{ loop.index }}. {{ entry.display_name }} 
-                {% if entry.deactivated %}<span style="color:red; font-size: 0.7em;">(DEAKTIVIERT)</span>{% endif %}  
-                — {{ entry.score }} Punkte
-                <span class="role-badge {{ 'badge-catcher' if entry.role == 'fänger' else 'badge-runner' if entry.role == 'läufer' else 'badge-keine' }}">{{ entry.role }}</span>
-                {% if enable_swap and phase in ['pre_game', 'game'] and not roles_swapped and not entry.deactivated and entry.next_role != 'keine' %}
-                    <span style="font-size: 0.6em; color: #888; font-weight: normal; margin-left: 5px; text-transform: uppercase;">(Danach: {{ entry.next_role }})</span>
-                {% endif %}
-            </div>
-            <div class="team-details">
-                <div><b>Erreichte Haltestellen:</b>
-                    {% if entry.stops %}{{ entry.stops | join(', ') }}{% else %}<i>Keine</i>{% endif %}
-                </div>
-                <div><b>Andere Teams gefangen:</b>
-                    {% if entry.caught %}
-                        {% for c in entry.caught %}{{ team_names_map[c] }}{% if not loop.last %}, {% endif %}{% endfor %}
-                    {% else %}<i>Niemanden</i>{% endif %}
-                </div>
-                <div><b>Gefangen worden von:</b>
-                    {% if entry.caught_by %}
-                        {% for c in entry.caught_by %}{{ team_names_map[c] }}{% if not loop.last %}, {% endif %}{% endfor %}
-                    {% else %}<i>Noch ungeschlagen</i>{% endif %}
-                </div>
-                {% if entry.manual_points != 0 %}
-                <div><b>Manuelle Korrektur:</b> {{ "+%s" % entry.manual_points if entry.manual_points > 0 else entry.manual_points }} Punkte</div>
-                {% endif %}
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-
-    <div class="box">
-        <h3>Aktions-Historie (Letzte 50)</h3>
-        <div class="table-wrapper">
-            <table id="history-table">
-                <tr>
-                    <th>Aktion</th>
-                    <th style="width: 120px;">Verwaltung</th>
-                </tr>
-                {% for log in action_log %}
-                <tr>
-                    <td>
-                        {{ log.desc }}
-                        {% if log.timestamp or log.actual_timestamp %}
-                        <div class="time-meta">
-                            {% if log.timestamp %}Eingereicht: {{ log.timestamp[11:19] }} UTC{% endif %}
-                            {% if log.actual_timestamp %} | <b>Tatsächliche Zeit: {{ log.actual_timestamp[11:19] }} UTC</b>{% endif %}
-                        </div>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if log.type != "system" %}
-                        <button class="btn btn-orange" style="padding: 6px 10px; font-size: 11px;" onclick="undoAction('{{ log.id }}')">Rückgängig</button>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="2" style="text-align: center; color: #777;">Noch keine Aktionen im Spielverlauf verzeichnet.</td>
-                </tr>
-                {% endfor %}
-            </table>
-        </div>
-    </div>
-
-    <div class="box team-urls">
-        <h3>Geheime Zugangslinks</h3>
-        {% for team_name, url in team_urls.items() %}
-        <div class="url-row">
-            <b>{{ team_name }}:</b>
-            <input type="text" value="{{ url }}" readonly class="url-input" id="url-{{ loop.index }}">
-            <button class="btn btn-neutral" onclick="copyUrl('url-{{ loop.index }}')">Kopieren</button>
-        </div>
-        {% endfor %}
-    </div>
-
-    <!-- LIVE KARTE FÜR ADMIN -->
-    <div class="box">
-        <h2>Live Karte (Alle Haltestellen & Teams)</h2>
-        <p style="font-size: 0.9em; color: #555; margin-bottom: 15px;">Aktivierte Haltestellen sowie alle aktiven Teams (nach Rolle eingefärbt) werden live angezeigt.</p>
-        <div id="admin-map" style="height: 450px; width: 100%; border: 1px solid #ddd; z-index: 1;"></div>
-    </div>
-
     <div style="text-align: center; margin-top: 20px; margin-bottom: 40px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
         <a href="/replay" target="_blank" class="btn btn-green" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">🎬 Zum Replay</a>
         <button type="button" onclick="clearReplayCache()" class="btn btn-orange" style="padding: 15px 30px; font-size: 1em;">🗑️ Replay-Cache leeren</button>
@@ -280,6 +308,9 @@
         let reloadedTrigger = false;
         let lastKnownPhase = null;
         let lastTeamLocations = []; // Globale Speicherung für den Sekundentakt-Timer
+        let allActionLogs = {{ action_log | tojson | safe }};
+        let currentHistoryPage = 1;
+        const HISTORY_PAGE_SIZE = 20;
         
         function initTimer() {
             const serverNowStr = "{{ now_time }}";
@@ -492,6 +523,23 @@
             const el = document.getElementById(elementId);
             el.select(); document.execCommand("copy"); alert("Link in die Zwischenablage kopiert.");
         }
+
+        function updateActiveStopsDropdown(activeStops) {
+            const sel = document.getElementById('assign-stop-select');
+            if (!sel || !activeStops) return;
+            const curVal = sel.value;
+            const sorted = [...activeStops].sort();
+            let html = '';
+            if (sorted.length === 0) {
+                html = '<option value="">-- Keine aktiven Haltestellen --</option>';
+            } else {
+                sorted.forEach(name => {
+                    const selected = (name === curVal) ? 'selected' : '';
+                    html += `<option value="${name}" ${selected}>${name}</option>`;
+                });
+            }
+            sel.innerHTML = html;
+        }
         
         function loadAdminData() {
             fetch('/api/admin_data/{{ admin_url }}').then(res => res.json()).then(data => {
@@ -499,7 +547,10 @@
                     renderNotifications(data.pending_requests);
                     renderHistory(data.action_log);
                     if (data.now_time) serverOffset = new Date(data.now_time).getTime() - Date.now();
-                    if (data.active_stops) updateAdminMap(data.active_stops);
+                    if (data.active_stops) {
+                        updateAdminMap(data.active_stops);
+                        updateActiveStopsDropdown(data.active_stops);
+                    }
                     if (data.team_locations) {
                         lastTeamLocations = data.team_locations;
                         updateTeamMap(lastTeamLocations);
@@ -543,27 +594,76 @@
             return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' Uhr';
         }
 
-        function renderHistory(logs) {
-            const table = document.getElementById('history-table');
-            let html = `<tr><th>Aktion</th><th style="width: 120px;">Verwaltung</th></tr>`;
-            if (logs.length === 0) {
-                html += `<tr><td colspan="2" style="text-align: center; color: #777;">Noch keine Aktionen im Spielverlauf.</td></tr>`;
-            } else {
-                logs.forEach(log => {
-                    let metaHtml = '';
-                    if (log.timestamp || log.actual_timestamp) {
-                        const subStr = log.timestamp ? `Eingereicht: ${formatIsoTime(log.timestamp)}` : '';
-                        const actStr = log.actual_timestamp ? `<b>Tatsächliche Zeit: ${formatIsoTime(log.actual_timestamp)}</b>` : '';
-                        metaHtml = `<div class="time-meta">${subStr}${subStr && actStr ? ' | ' : ''}${actStr}</div>`;
-                    }
+        function changeHistoryPage(newPage) {
+            currentHistoryPage = newPage;
+            renderHistory(allActionLogs);
+        }
 
-                    html += `<tr>
-                        <td>${log.desc}${metaHtml}</td>
-                        <td>${log.type !== 'system' ? `<button class="btn btn-orange" style="padding: 6px 10px; font-size: 11px;" onclick="undoAction('${log.id}')">Rückgängig</button>` : ''}</td>
-                    </tr>`;
-                });
+        function renderHistory(logs) {
+            if (logs) allActionLogs = logs;
+            const tbody = document.getElementById('history-table-body');
+            if (!tbody) return;
+
+            const totalCountEl = document.getElementById('history-total-count');
+            const pageInfoEl = document.getElementById('history-page-info');
+            const prevBtn = document.getElementById('btn-history-prev');
+            const nextBtn = document.getElementById('btn-history-next');
+            const paginationContainer = document.getElementById('history-pagination');
+
+            // Filtere maschinelle role_change Events heraus
+            const filteredLogs = allActionLogs.filter(log => log.type !== 'role_change');
+            const totalItems = filteredLogs.length;
+
+            if (totalCountEl) {
+                totalCountEl.textContent = `(Gesamt: ${totalItems})`;
             }
-            table.innerHTML = html;
+
+            if (totalItems === 0) {
+                tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: #777; padding: 20px;">Noch keine Aktionen im Spielverlauf verzeichnet.</td></tr>`;
+                if (paginationContainer) paginationContainer.style.display = 'none';
+                return;
+            }
+
+            if (paginationContainer) paginationContainer.style.display = 'flex';
+
+            const totalPages = Math.max(1, Math.ceil(totalItems / HISTORY_PAGE_SIZE));
+            if (currentHistoryPage < 1) currentHistoryPage = 1;
+            if (currentHistoryPage > totalPages) currentHistoryPage = totalPages;
+
+            const startIndex = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE;
+            const endIndex = Math.min(startIndex + HISTORY_PAGE_SIZE, totalItems);
+            const pageItems = filteredLogs.slice(startIndex, endIndex);
+
+            let html = '';
+            pageItems.forEach(log => {
+                let metaHtml = '';
+                if (log.timestamp || log.actual_timestamp) {
+                    const subStr = log.timestamp ? `Eingereicht: ${formatIsoTime(log.timestamp)}` : '';
+                    const actStr = log.actual_timestamp ? `<b>Tatsächliche Zeit: ${formatIsoTime(log.actual_timestamp)}</b>` : '';
+                    metaHtml = `<div class="time-meta">${subStr}${subStr && actStr ? ' | ' : ''}${actStr}</div>`;
+                }
+
+                html += `<tr>
+                    <td>${log.desc}${metaHtml}</td>
+                    <td>${log.type !== 'system' ? `<button class="btn btn-orange" style="padding: 6px 10px; font-size: 11px;" onclick="undoAction('${log.id}')">Rückgängig</button>` : ''}</td>
+                </tr>`;
+            });
+
+            tbody.innerHTML = html;
+
+            if (pageInfoEl) {
+                pageInfoEl.textContent = `Seite ${currentHistoryPage} von ${totalPages} (Einträge ${startIndex + 1}–${endIndex} von ${totalItems})`;
+            }
+            if (prevBtn) {
+                prevBtn.disabled = (currentHistoryPage <= 1);
+                prevBtn.style.opacity = (currentHistoryPage <= 1) ? '0.5' : '1';
+                prevBtn.style.cursor = (currentHistoryPage <= 1) ? 'not-allowed' : 'pointer';
+            }
+            if (nextBtn) {
+                nextBtn.disabled = (currentHistoryPage >= totalPages);
+                nextBtn.style.opacity = (currentHistoryPage >= totalPages) ? '0.5' : '1';
+                nextBtn.style.cursor = (currentHistoryPage >= totalPages) ? 'not-allowed' : 'pointer';
+            }
         }
         
         function resolveReq(id, action) {
@@ -575,6 +675,45 @@
             if(!confirm("Möchtest du diese Aktion wirklich rückgängig machen?")) return;
             fetch('/api/undo_action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id })
             }).then(() => location.reload()).catch(() => alert('Netzwerkfehler!'));
+        }
+
+        function catchStopFromDropdown(btn) {
+            const stopSelect = document.getElementById('assign-stop-select');
+            const teamSelect = document.getElementById('assign-team-select');
+            const stopName = stopSelect.value;
+            const teamId = teamSelect.value;
+
+            if (!stopName) {
+                alert('Bitte wähle eine Haltestelle aus!');
+                return;
+            }
+
+            const teamLabel = teamSelect.options[teamSelect.selectedIndex].text;
+            let confirmMsg = `Möchtest du die Haltestelle "${stopName}" wirklich austauschen?`;
+            if (teamId) {
+                confirmMsg = `Möchtest du die Haltestelle "${stopName}" dem Team "${teamLabel}" gutschreiben und austauschen?`;
+            }
+            if (!confirm(confirmMsg)) return;
+
+            btn.disabled = true;
+            btn.innerText = "Lädt...";
+            fetch('/api/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: stopName, team_id: teamId })
+            }).then(r => r.json()).then(d => {
+                if (d.success) {
+                    location.reload();
+                } else {
+                    alert(d.error || 'Fehler beim Austauschen!');
+                    btn.disabled = false;
+                    btn.innerText = "Haltestelle austauschen";
+                }
+            }).catch(() => {
+                alert('Netzwerkfehler!');
+                btn.disabled = false;
+                btn.innerText = "Haltestelle austauschen";
+            });
         }
 
         function catchStop(stopName, selectId, btn) {
@@ -631,6 +770,9 @@
                 })
                 .catch(() => alert("Netzwerkfehler beim Leeren des Replay-Caches!"));
         }
+
+        // Initiale Renderung der Historie nach dem Laden
+        renderHistory(allActionLogs);
     </script>
 </body>
 </html>

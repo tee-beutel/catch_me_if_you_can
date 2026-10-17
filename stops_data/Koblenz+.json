@@ -15,19 +15,80 @@
         "lon": 7.617363
     },
     "Asterstein, Seniorenzentrum": {
+        "alternative": {
+            "factor": 1,
+            "lat": 50.345135,
+            "lon": 7.622088,
+            "name": "Asterstein, Rottmannstraße"
+        },
         "factor": 1,
         "lat": 50.34756,
         "lon": 7.621567
+    },
+    "Bassenheim, Kirche": {
+        "factor": 1,
+        "lat": 50.360004,
+        "lon": 7.460976
+    },
+    "Bendorf, Stadtpark": {
+        "factor": 1,
+        "lat": 50.42378,
+        "lon": 7.574559
+    },
+    "Bendorf, Weitersburger Weg": {
+        "factor": 1,
+        "lat": 50.412926,
+        "lon": 7.58585
+    },
+    "Block, Meerpfad": {
+        "factor": 1,
+        "lat": 50.43052,
+        "lon": 7.515449
     },
     "Bubenheim, Jakob-Hasslacher-Straße": {
         "factor": 1,
         "lat": 50.38014,
         "lon": 7.563298
     },
+    "Depot, Jungenstraße": {
+        "factor": 1,
+        "lat": 50.394524,
+        "lon": 7.53514
+    },
     "Ehrenbreitstein, Festungsaufzug Bergstation": {
         "factor": 2,
         "lat": 50.363816,
         "lon": 7.613981
+    },
+    "Engers, Bahnhof/Wasserturm": {
+        "factor": 1,
+        "lat": 50.427002,
+        "lon": 7.545525
+    },
+    "Feldkirchen, Fahr": {
+        "factor": 1.5,
+        "lat": 50.445522,
+        "lon": 7.419958
+    },
+    "Feldkirchen, Hüllenberg": {
+        "factor": 2,
+        "lat": 50.453644,
+        "lon": 7.409996
+    },
+    "Gewerbegebiet Distelfeld, Breslauer Straße/TÜV": {
+        "factor": 1,
+        "lat": 50.435981,
+        "lon": 7.4898
+    },
+    "Gladbach, Haus am Pilz": {
+        "factor": 2.5,
+        "lat": 50.47234,
+        "lon": 7.525097
+    },
+    "Gladbach, Kirche": {
+        "factor": 1,
+        "lat": 50.458107,
+        "lon": 7.519977
     },
     "Goldgrube, Overbergplatz": {
         "factor": 1,
@@ -38,6 +99,26 @@
         "factor": 2,
         "lat": 50.33498,
         "lon": 7.533811
+    },
+    "Heddesdorf, Teichweg": {
+        "factor": 1,
+        "lat": 50.4429,
+        "lon": 7.465
+    },
+    "Heddesdorfer Berg, Beverwijker Ring": {
+        "factor": 1,
+        "lat": 50.447884,
+        "lon": 7.476328
+    },
+    "Heimbach-Weis, Am Sayner Weg": {
+        "factor": 1.5,
+        "lat": 50.44324,
+        "lon": 7.553556
+    },
+    "Heimbach-Weis, Vierzigmorgen": {
+        "factor": 1,
+        "lat": 50.44673,
+        "lon": 7.528196
     },
     "Horchheim, Mendelssohn": {
         "factor": 1,
@@ -55,14 +136,30 @@
         "lon": 7.659368
     },
     "Innenstadt, Bahnhof Stadtmitte/Löhr-Center": {
-        "factor": 0,
         "lat": 50.35865,
-        "lon": 7.591402
+        "lon": 7.591402,
+        "factor": 0,
+        "alternative": {
+            "name": "Innenstadt, Zentralplatz/Forum",
+            "lat": 50.358967,
+            "lon": 7.595714,
+            "factor": 0
+        }
     },
     "Innenstadt, Deutsches Eck/Seilbahn": {
         "factor": 0.5,
         "lat": 50.361996,
         "lon": 7.60308
+    },
+    "Irlich, Brücke": {
+        "factor": 1,
+        "lat": 50.44166,
+        "lon": 7.445345
+    },
+    "Kaltenengers, Auf den Weiden": {
+        "factor": 1.5,
+        "lat": 50.41505,
+        "lon": 7.548355
     },
     "Karthause, Friedhofskapelle": {
         "factor": 1,
@@ -84,6 +181,16 @@
         "lat": 50.397507,
         "lon": 7.583398
     },
+    "Kettig, Lindenstraße": {
+        "factor": 2,
+        "lat": 50.390457,
+        "lon": 7.459242
+    },
+    "Kärlich, Raiffeisenplatz": {
+        "factor": 1,
+        "lat": 50.389896,
+        "lon": 7.486811
+    },
     "Lützel, Balduinbrücke": {
         "factor": 1,
         "lat": 50.3665,
@@ -93,6 +200,16 @@
         "factor": 1,
         "lat": 50.37165,
         "lon": 7.5879254
+    },
+    "Mallendar, Gräverich": {
+        "factor": 1.5,
+        "lat": 50.39087,
+        "lon": 7.620822
+    },
+    "Mallendarer Berg, BFW": {
+        "factor": 1.5,
+        "lat": 50.38918,
+        "lon": 7.633506
     },
     "Metternich, Gewerbepark Metternich": {
         "factor": 1,
@@ -105,6 +222,12 @@
         "lon": 7.557203
     },
     "Mittelweiden, DB-Museum": {
+        "alternative": {
+            "factor": 1,
+            "lat": 50.381046,
+            "lon": 7.587701,
+            "name": "Mittelweiden, Kesselheimer Weg"
+        },
         "factor": 1,
         "lat": 50.378414,
         "lon": 7.59398
@@ -114,10 +237,45 @@
         "lat": 50.34583,
         "lon": 7.554966
     },
+    "Mülheim, Rotes Kreuz": {
+        "factor": 1,
+        "lat": 50.384033,
+        "lon": 7.529077
+    },
+    "Neuwied, Lessingweg": {
+        "factor": 1,
+        "lat": 50.42275,
+        "lon": 7.468719
+    },
+    "Neuwied, Moltkeplatz": {
+        "factor": 0.5,
+        "lat": 50.43087,
+        "lon": 7.466958
+    },
     "Niederberg, Kaserne": {
         "factor": 1,
         "lat": 50.37301,
         "lon": 7.632644
+    },
+    "Niederbieber, In der Schleth": {
+        "factor": 1,
+        "lat": 50.458004,
+        "lon": 7.468782
+    },
+    "Niederbieber, Schulzentrum": {
+        "factor": 1.5,
+        "lat": 50.466022,
+        "lon": 7.468378
+    },
+    "Niederwerth, Landrat-Jost-Straße": {
+        "factor": 1.5,
+        "lat": 50.396854,
+        "lon": 7.606664
+    },
+    "Oberbiber, Kirche": {
+        "factor": 1.5,
+        "lat": 50.47351,
+        "lon": 7.501552
     },
     "Oberwerth, EPG Arena/Stadion": {
         "factor": 1,
@@ -125,14 +283,25 @@
         "lon": 7.585671
     },
     "Pfaffendorf, Kirche": {
-        "factor": 1,
         "lat": 50.348705,
-        "lon": 7.605038
+        "lon": 7.605038,
+        "factor": 1,
+        "alternative": {
+            "name": "Pfaffendorf, Seizstraße",
+            "lat": 50.34397,
+            "lon": 7.600807,
+            "factor": 1
+        }
     },
     "Pfaffendorfer Höhe, Augusta-Kaserne": {
         "factor": 1,
         "lat": 50.341007,
         "lon": 7.615207
+    },
+    "Raiffeisenring, Nelkengarten": {
+        "factor": 1,
+        "lat": 50.440727,
+        "lon": 7.480694
     },
     "Rauental, Verwaltungszentrum Mitte": {
         "factor": 1,
@@ -145,9 +314,24 @@
         "lon": 7.490126
     },
     "Rübenach, Im Rübenacher Gesetz": {
+        "factor": 1.5,
         "lat": 50.374469,
-        "lon": 7.52748,
-        "factor": 1.5
+        "lon": 7.52748
+    },
+    "Sankt Sebastian, Mehrzweckhalle": {
+        "factor": 1,
+        "lat": 50.41133,
+        "lon": 7.564003
+    },
+    "Sayn, Sayner Hütte": {
+        "factor": 1.5,
+        "lat": 50.440174,
+        "lon": 7.5760098
+    },
+    "Segendorf, Preisbergstraße": {
+        "factor": 2,
+        "lat": 50.466026,
+        "lon": 7.458874
     },
     "Südliche Vorstadt, EVM/koveb": {
         "factor": 1,
@@ -159,199 +343,59 @@
         "lat": 50.349705,
         "lon": 7.59584
     },
+    "Torney, Friedhof Wennenberg": {
+        "factor": 1,
+        "lat": 50.45735,
+        "lon": 7.491923
+    },
+    "Urbar, Arenberger Straße": {
+        "factor": 1,
+        "lat": 50.38316,
+        "lon": 7.624047
+    },
+    "Urbar, In den Wiesen": {
+        "factor": 1,
+        "lat": 50.38272,
+        "lon": 7.620543
+    },
+    "Urmitz, Auf'm Bungert": {
+        "factor": 1,
+        "lat": 50.410909,
+        "lon": 7.512065
+    },
+    "Urmitz, Bahnhof Rheinbrücke": {
+        "factor": 1,
+        "lat": 50.417933,
+        "lon": 7.52821
+    },
+    "Urmitz-Bahnhof, Landstraße": {
+        "factor": 1,
+        "lat": 50.39987,
+        "lon": 7.510895
+    },
+    "Vallendar, Bahnhof": {
+        "factor": 1,
+        "lat": 50.399662,
+        "lon": 7.610554
+    },
     "Wallersheim, Messeplatz": {
         "factor": 1,
         "lat": 50.38272,
         "lon": 7.604194
     },
-    "Urbar, Arenberger Straße": {
-        "lat": 50.38316,
-        "lon": 7.624047,
-        "factor": 1
-    },
-    "Mallendarer Berg, BFW": {
-        "lat": 50.38918,
-        "lon": 7.633506,
-        "factor": 1.5
-    },
-    "Mallendar, Gräverich": {
-        "lat": 50.39087,
-        "lon": 7.620822,
-        "factor": 1.5
-    },
-    "Niederwerth, Landrat-Jost-Straße": {
-        "lat": 50.396854,
-        "lon": 7.606664,
-        "factor": 1.5
-    },
-    "Vallendar, Bahnhof": {
-        "lat": 50.399662,
-        "lon": 7.610554,
-        "factor": 1
-    },
-    "Urbar, In den Wiesen": {
-        "lat": 50.38272,
-        "lon": 7.620543,
-        "factor": 1
-    },
     "Weitersburg, Humboldtstraße": {
+        "factor": 1.5,
         "lat": 50.406773,
-        "lon": 7.600924,
-        "factor": 1.5
+        "lon": 7.600924
     },
-    "Bendorf, Weitersburger Weg": {
-        "lat": 50.412926,
-        "lon": 7.58585,
-        "factor": 1
+    "Weißenthurm, Friedhof": {
+        "factor": 1.5,
+        "lat": 50.40873,
+        "lon": 7.461038
     },
-    "Bendorf, Stadtpark": {
-        "lat": 50.42378,
-        "lon": 7.574559,
-        "factor": 1
-    },
-    "Engers, Bahnhof/Wasserturm": {
-        "lat": 50.427002,
-        "lon": 7.545525,
-        "factor": 1
-    },
-    "Heimbach-Weis, Am Sayner Weg": {
-        "lat": 50.44324,
-        "lon": 7.553556,
-        "factor": 1.5
-    },
-    "Sayn, Sayner Hütte": {
-        "lat": 50.440174,
-        "lon": 7.5760098,
-        "factor": 1.5
-    },
-    "Heimbach-Weis, Vierzigmorgen": {
-        "lat": 50.44673,
-        "lon": 7.528196,
-        "factor": 1
-    },
-    "Gladbach, Kirche": {
-        "lat": 50.458107,
-        "lon": 7.519977,
-        "factor": 1
-    },
-    "Gladbach, Haus am Pilz": {
-        "lat": 50.47234,
-        "lon": 7.525097,
-        "factor": 2.5
-    },
-    "Oberbiber, Kirche": {
-        "lat": 50.47351,
-        "lon": 7.501552,
-        "factor": 1.5
-    },
-    "Feldkirchen, Hüllenberg": {
-        "lat": 50.453644,
-        "lon": 7.409996,
-        "factor": 2
-    },
-    "Feldkirchen, Fahr": {
-        "lat": 50.445522,
-        "lon": 7.419958,
-        "factor": 1.5
-    },
-    "Irlich, Brücke": {
-        "lat": 50.44166,
-        "lon": 7.445345,
-        "factor": 1
-    },
-    "Niederbieber, Schulzentrum": {
-        "lat": 50.466022,
-        "lon": 7.468378,
-        "factor": 1.5
-    },
-    "Niederbieber, In der Schleth": {
-        "lat": 50.458004,
-        "lon": 7.468782,
-        "factor": 1
-    },
-    "Segendorf, Preisbergstraße": {
-        "lat": 50.466026,
-        "lon": 7.458874,
-        "factor": 2
-    },
-    "Torney, Friedhof Wennenberg": {
-        "lat": 50.45735,
-        "lon": 7.491923,
-        "factor": 1
-    },
-    "Heddesdorfer Berg, Beverwijker Ring": {
-        "lat": 50.447884,
-        "lon": 7.476328,
-        "factor": 1
-    },
-    "Raiffeisenring, Nelkengarten": {
-        "lat": 50.440727,
-        "lon": 7.480694,
-        "factor": 1
-    },
-    "Heddesdorf, Teichweg": {
-        "lat": 50.4429,
-        "lon": 7.465,
-        "factor": 1
-    },
-    "Neuwied, Moltkeplatz": {
-        "lat": 50.43087,
-        "lon": 7.466958,
-        "factor": 0.5
-    },
-    "Neuwied, Lessingweg": {
-        "lat": 50.42275,
-        "lon": 7.468719,
-        "factor": 1
-    },
-    "Gewerbegebiet Distelfeld, Breslauer Straße/TÜV": {
-        "lat": 50.435981,
-        "lon": 7.4898,
-        "factor": 1
-    },
-    "Block, Meerpfad": {
-        "lat": 50.43052,
-        "lon": 7.515449,
-        "factor": 1
-    },
-    "Sankt Sebastian, Mehrzweckhalle": {
-        "lat": 50.41133,
-        "lon": 7.564003,
-        "factor": 1
-    },
-    "Kaltenengers, Auf den Weiden": {
-        "lat": 50.41505,
-        "lon": 7.548355,
-        "factor": 1.5
-    },
-    "Urmitz, Bahnhof Rheinbrücke": {
-        "lat": 50.417933,
-        "lon": 7.52821,
-        "factor": 1
-    },
-    "Urmitz, Auf'm Bungert": {
-        "lat": 50.410909,
-        "lon": 7.512065,
-        "factor": 1
-    },
-    "Urmitz-Bahnhof, Landstraße": {
-        "lat": 50.39987,
-        "lon": 7.510895,
-        "factor": 1
-    },
-    "Depot, Jungenstraße": {
-        "lat": 50.394524,
-        "lon": 7.53514,
-        "factor": 1
-    },
-    "Mülheim, Rotes Kreuz": {
-        "lat": 50.384033,
-        "lon": 7.529077,
-        "factor": 1
-    },
-    "Kärlich, Raiffeisenplatz": {
-        "lat": 50.389896,
-        "lon": 7.486811,
-        "factor": 1
+    "Weißenthurm, Rathaus/Raiffeisenbrücke": {
+        "factor": 1,
+        "lat": 50.418507,
+        "lon": 7.451364
     }
 }
