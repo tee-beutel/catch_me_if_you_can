@@ -225,6 +225,27 @@
             </button>
             <ul id="test-steps" class="step-list"></ul>
         </div>
+
+        <!-- Logging & Export -->
+        <div class="card">
+            <h2>3. Logging & Diagnose-Export</h2>
+            <div class="status-row">
+                <span>Traccar API in log.json schreiben</span>
+                <label style="position: relative; display: inline-block; width: 48px; height: 24px; cursor: pointer;">
+                    <input type="checkbox" id="log-toggle" onchange="toggleLogging()" style="opacity: 0; width: 0; height: 0;">
+                    <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .2s; border-radius: 24px;" id="log-slider"></span>
+                    <span style="position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%;" id="log-circle"></span>
+                </label>
+            </div>
+            <div class="status-row" style="margin-top: 10px; border-bottom: none;">
+                <span id="log-status-text" style="font-size: 0.85rem; color: var(--muted);">Status: Deaktiviert (Standard)</span>
+            </div>
+            <div style="margin-top: 14px;">
+                <a id="btn-download-log" class="btn btn-secondary" style="width: 100%; justify-content: center;" href="/api/traccar_debug/{{ admin_url }}/download_log">
+                    📥 Download log.json
+                </a>
+            </div>
+        </div>
     </div>
 
     <div class="grid">
@@ -446,6 +467,57 @@
             btn.textContent = "🚀 End-to-End Test (Koblenz) erneut starten";
         }
     }
+
+    async function fetchLogStatus() {
+        try {
+            const res = await fetch(`/api/traccar_debug/${ADMIN_SLUG}/log_settings`);
+            const data = await res.json();
+            if (data.success) {
+                const checkbox = document.getElementById('log-toggle');
+                checkbox.checked = data.enabled;
+                updateSwitchUI(data.enabled);
+            }
+        } catch (e) {
+            console.error("Fehler beim Laden des Log-Status", e);
+        }
+    }
+
+    async function toggleLogging() {
+        const checkbox = document.getElementById('log-toggle');
+        const enabled = checkbox.checked;
+        updateSwitchUI(enabled);
+
+        try {
+            await fetch(`/api/traccar_debug/${ADMIN_SLUG}/log_settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application' + '/json' },
+                body: JSON.stringify({ enabled: enabled })
+            });
+        } catch (e) {
+            alert("Fehler beim Speichern der Log-Einstellung!");
+        }
+    }
+
+    function updateSwitchUI(enabled) {
+        const slider = document.getElementById('log-slider');
+        const circle = document.getElementById('log-circle');
+        const statusText = document.getElementById('log-status-text');
+
+        if (enabled) {
+            slider.style.backgroundColor = 'var(--green)';
+            circle.style.transform = 'translateX(24px)';
+            statusText.textContent = "Status: Aktiv (Schreibt API-Anfragen in log.json)";
+            statusText.style.color = 'var(--green)';
+        } else {
+            slider.style.backgroundColor = '#334155';
+            circle.style.transform = 'translateX(0)';
+            statusText.textContent = "Status: Deaktiviert (Standard)";
+            statusText.style.color = 'var(--muted)';
+        }
+    }
+
+    // Beim Laden der Seite den aktuellen Status abrufen
+    fetchLogStatus();
 
     loadStatus();
     setInterval(loadStatus, 5000);

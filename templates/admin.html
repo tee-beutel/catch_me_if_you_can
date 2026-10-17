@@ -66,6 +66,44 @@
         /* Custom Factor Map Icon */
         .custom-factor-icon { background: transparent; border: none; }
 
+        /* Offline-Details Accordion */
+        .offline-details { 
+            margin-top: 12px; 
+            background: #fdfdfd; 
+            border-left: 4px solid #EB6502; 
+            padding: 10px 15px; 
+            border-radius: 0 4px 4px 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+        }
+        .offline-details summary { 
+            font-weight: 700; 
+            font-size: 0.9em; 
+            color: #333; 
+            cursor: pointer; 
+            outline: none;
+            transition: color 0.2s ease;
+        }
+        .offline-details summary:hover { 
+            color: #EB6502; 
+        }
+        .offline-details ul { 
+            margin: 10px 0 0 20px; 
+            padding: 0; 
+            font-size: 0.85em; 
+            color: #555; 
+            line-height: 1.6;
+        }
+        .offline-details li { 
+            margin-bottom: 4px; 
+            padding-bottom: 4px; 
+            border-bottom: 1px dotted #ddd; 
+        }
+        .offline-details li:last-child { 
+            border-bottom: none; 
+            margin-bottom: 0; 
+            padding-bottom: 0; 
+        }
+
         @media (max-width: 768px) {
             body { padding: 10px; }
             .box { padding: 15px; }
@@ -145,6 +183,24 @@
                         {% for c in entry.caught_by %}{{ team_names_map[c] }}{% if not loop.last %}, {% endif %}{% endfor %}
                     {% else %}<i>Noch ungeschlagen</i>{% endif %}
                 </div>
+                {% set team_warnings = action_log | selectattr('type', 'equalto', 'gps_warning') | selectattr('team', 'equalto', entry.id) | list %}
+                {% if team_warnings|length > 0 %}
+                <details class="offline-details">
+                    <summary>⚠️ Offlinezeiten (Gesamt: {{ (entry.total_offline_seconds / 60) | round | int }} Min.)</summary>
+                    <ul>
+                    {% for warn in team_warnings %}
+                        <li>
+                            Ab {{ warn.timestamp[11:16] }} Uhr: 
+                            {% if warn.actual_timestamp %}
+                                bis {{ warn.actual_timestamp[11:16] }} Uhr
+                            {% else %}
+                                <b style="color: #EB6502;">bis jetzt</b>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                    </ul>
+                </details>
+                {% endif %}
                 {% if entry.manual_points != 0 %}
                 <div><b>Manuelle Korrektur:</b> {{ "+%s" % entry.manual_points if entry.manual_points > 0 else entry.manual_points }} Punkte</div>
                 {% endif %}
@@ -187,7 +243,7 @@
                     </tr>
                 </thead>
                 <tbody id="history-table-body">
-                    {% set filtered_logs = action_log | rejectattr('type', 'equalto', 'role_change') | list %}
+                    {% set filtered_logs = action_log | rejectattr('type', 'equalto', 'role_change') | rejectattr('type', 'equalto', 'gps_warning') | list %}
                     {% for log in filtered_logs[:20] %}
                     <tr>
                         <td>
@@ -294,7 +350,7 @@
     </div>
 
     <div style="text-align: center; margin-top: 20px; margin-bottom: 40px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
-        <a href="/replay" target="_blank" class="btn btn-green" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">🎬 Zum Replay</a>
+        <a href="/adminconsole-{{ admin_url }}/replay" target="_blank" class="btn btn-green" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">🎬 Zum Live-Replay</a>
         <button type="button" onclick="clearReplayCache()" class="btn btn-orange" style="padding: 15px 30px; font-size: 1em;">🗑️ Replay-Cache leeren</button>
         <a href="/adminconsole-{{ admin_url }}/settings" class="btn btn-petrol" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">⚙️ Zu den Spiel-Einstellungen</a>
         <a href="/traccar_debug-{{ admin_url }}" class="btn btn-neutral" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">🛰️ Traccar Diagnose & Debug</a>
@@ -611,7 +667,7 @@
             const paginationContainer = document.getElementById('history-pagination');
 
             // Filtere maschinelle role_change Events heraus
-            const filteredLogs = allActionLogs.filter(log => log.type !== 'role_change');
+            const filteredLogs = allActionLogs.filter(log => log.type !== 'role_change' && log.type !== 'gps_warning');
             const totalItems = filteredLogs.length;
 
             if (totalCountEl) {

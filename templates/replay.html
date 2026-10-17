@@ -481,6 +481,9 @@
                     <button class="ctrl-btn speed-btn" onclick="setSpeed(50)">50x</button>
                     <button class="ctrl-btn speed-btn" onclick="setSpeed(100)">100x</button>
                     <button class="ctrl-btn speed-btn" onclick="setSpeed(200)">200x</button>
+                    {% if is_admin %}
+                    <button class="ctrl-btn speed-btn" id="btn-live" onclick="toggleLiveMode()" style="margin-left: 8px; font-weight: 900;">🔴 LIVE</button>
+                    {% endif %}
                 </div>
             </div>
 
@@ -494,6 +497,9 @@
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
+        const isAdmin = {{ 'true' if is_admin else 'false' }};
+        const currentPhase = "{{ phase }}";
+
         // --- GLOBALE VARIABLEN & STATUS ---
         let replayData = null;
         let allStopsData = [];
@@ -604,7 +610,7 @@
 
         // --- REPLAY DATEN LADEN & SETUP ---
         function loadReplay() {
-            fetch('/api/replay_data')
+            fetch(isAdmin ? '/api/replay_data?admin=1' : '/api/replay_data')
                 .then(r => r.json())
                 .then(data => {
                     document.getElementById('loading-overlay').style.display = 'none';
@@ -783,24 +789,30 @@
             return null;
         }
 
-        // --- UPDATE-ROUTINE BEI ZEITÄNDERUNG ---
+        // --- ÜBERSCHREIBEN DER UPDATE-ROUTINE UM DEN BUG ZU FIXEN ---
+        // Kopiere dies über (ersetze) die bestehende updateReplayView(time) Funktion
         function updateReplayView(time) {
-            // Zeitanzeige aktualisieren
             document.getElementById('current-time-label').innerText = formatFullTime(time);
 
-            // 1. Rollen und Punkte dynamisch anhand des aktuellen Replay-Zeitstempels berechnen
-            const hasRoleChangeEvents = (replayData && replayData.events) ? replayData.events.some(e => e.type === 'role_change') : false;
             const currentTeamStates = {};
-
             if (replayData && replayData.teams) {
                 for (const tId in replayData.teams) {
-                    currentTeamStates[tId] = {
-                        role: hasRoleChangeEvents ? 'keine' : (replayData.teams[tId].role || 'keine'),
-                        score: 0
-                    };
+                    currentTeamStates[tId] = { role: 'keine', score: 0 };
                 }
             }
 
+            // 1. NEU: Rollen aus der Lifecycle Tabelle holen (fixt den Bug!)
+            if (replayData && replayData.role_lifecycle) {
+                replayData.role_lifecycle.forEach(cycle => {
+                    if (time >= cycle.from && (cycle.until === null || time < cycle.until)) {
+                        if (currentTeamStates[cycle.team_id]) {
+                            currentTeamStates[cycle.team_id].role = cycle.role;
+                        }
+                    }
+                });
+            }
+
+            // 2. Punkte aus Events berechnen
             if (replayData && replayData.events) {
                 const cfg = replayData.config || {};
                 const ptsStop = (cfg.points_stop_reached !== undefined) ? Number(cfg.points_stop_reached) : 2;
@@ -810,37 +822,25 @@
                 for (const ev of replayData.events) {
                     if (ev.ts > time) break;
 
-                    if (ev.type === 'role_change') {
-                        if (ev.team && currentTeamStates[ev.team]) {
-                            currentTeamStates[ev.team].role = ev.desc || 'keine';
-                        }
-                    } else if (ev.type === 'manual_points') {
-                        if (ev.team && currentTeamStates[ev.team]) {
-                            currentTeamStates[ev.team].score += parseFloat(ev.desc) || 0;
-                        }
+                    if (ev.type === 'manual_points') {
+                        if (ev.team && currentTeamStates[ev.team]) currentTeamStates[ev.team].score += parseFloat(ev.desc) || 0;
                     } else if (ev.type === 'stop') {
                         if (ev.team && currentTeamStates[ev.team]) {
                             let factor = 1.0;
                             if (Array.isArray(allStopsData)) {
                                 const found = allStopsData.find(s => s.name === ev.stop);
-                                if (found && found.factor !== undefined) {
-                                    factor = Number(found.factor);
-                                }
+                                if (found && found.factor !== undefined) factor = Number(found.factor);
                             }
                             currentTeamStates[ev.team].score += factor * ptsStop;
                         }
                     } else if (ev.type === 'catch') {
-                        if (ev.hunter && currentTeamStates[ev.hunter]) {
-                            currentTeamStates[ev.hunter].score += ptsCaughtTeam;
-                        }
-                        if (ev.prey && currentTeamStates[ev.prey]) {
-                            currentTeamStates[ev.prey].score += ptsWasCaught;
-                        }
+                        if (ev.hunter && currentTeamStates[ev.hunter]) currentTeamStates[ev.hunter].score += ptsCaughtTeam;
+                        if (ev.prey && currentTeamStates[ev.prey]) currentTeamStates[ev.prey].score += ptsWasCaught;
                     }
                 }
             }
 
-            // 2. Teams UI (Marker, Popup, Legenden-Chips) aktualisieren
+            // 3. Teams UI (Marker, Popup, Legenden-Chips) aktualisieren
             for (const tId in currentTeamStates) {
                 const state = currentTeamStates[tId];
                 const role = state.role || 'keine';
@@ -849,7 +849,6 @@
                 const scoreStr = (score === Math.round(score)) ? `${score} Pkt.` : `${score.toFixed(1)} Pkt.`;
                 const displayName = (replayData.teams && replayData.teams[tId] && replayData.teams[tId].display_name) || tId;
 
-                // Marker Pin & Label aktualisieren
                 const marker = teamMarkers[tId];
                 if (marker) {
                     if (marker._currentRole !== role || marker._currentScore !== score) {
@@ -866,10 +865,8 @@
                                     </div>
                                 </div>
                             `,
-                            iconSize: [0, 0],
-                            iconAnchor: [0, 0]
+                            iconSize: [0, 0], iconAnchor: [0, 0]
                         }));
-
                         marker.setPopupContent(`
                             <div style="text-align:center; font-family:'Roboto',sans-serif;">
                                 <b style="font-size:1.15em; color:#333;">${displayName}</b><br>
@@ -880,27 +877,18 @@
                     }
                 }
 
-                // Polyline Trail Style aktualisieren
                 const trail = teamTrails[tId];
-                if (trail) {
-                    trail.setStyle({
-                        color: roleColor,
-                        dashArray: role === 'fänger' ? '6, 6' : null
-                    });
-                }
+                if (trail) trail.setStyle({ color: roleColor, dashArray: role === 'fänger' ? '6, 6' : null });
 
-                // Legenden-Elemente in der unteren Leiste aktualisieren
                 const dotEl = document.getElementById(`legend-dot-${tId}`);
                 if (dotEl) dotEl.style.backgroundColor = roleColor;
-
                 const roleEl = document.getElementById(`legend-role-${tId}`);
                 if (roleEl) roleEl.textContent = `(${role.toUpperCase()})`;
-
                 const scoreEl = document.getElementById(`legend-score-${tId}`);
                 if (scoreEl) scoreEl.textContent = scoreStr;
             }
 
-            // 3. Teams Positionen aktualisieren
+            // 4. Teams Positionen aktualisieren
             if (replayData && replayData.locations) {
                 for (const tId in replayData.locations) {
                     const pts = replayData.locations[tId];
@@ -911,8 +899,6 @@
                     if (pos) {
                         marker.setLatLng([pos.lat, pos.lon]);
                         if (!map.hasLayer(marker)) marker.addTo(map);
-
-                        // Trail-Polyline bis zum aktuellen Zeitpunkt
                         if (trail) {
                             const trailPts = pts.slice(0, pos.index + 1).map(p => [p.lat, p.lon]);
                             trailPts.push([pos.lat, pos.lon]);
@@ -925,33 +911,25 @@
                 }
             }
 
-            // --- HALTESTELLEN DYNAMISCH EIN-/AUSBLENDEN ---
+            // 5. HALTESTELLEN DYNAMISCH EIN-/AUSBLENDEN
             if (replayData && replayData.stop_lifecycle) {
                 let activeAtCurrentTime = new Set();
-
-                // Ermittle, welche Haltestellen zu 'time' aktiv sind
                 replayData.stop_lifecycle.forEach(cycle => {
                     if (time >= cycle.from && (cycle.until === null || time < cycle.until)) {
                         activeAtCurrentTime.add(cycle.stop_name);
                     }
                 });
 
-                // Marker aktualisieren
                 for (const stopName in stopMarkers) {
                     const marker = stopMarkers[stopName];
                     if (activeAtCurrentTime.has(stopName)) {
-                        if (!stopsLayerGroup.hasLayer(marker)) {
-                            stopsLayerGroup.addLayer(marker);
-                        }
+                        if (!stopsLayerGroup.hasLayer(marker)) stopsLayerGroup.addLayer(marker);
                     } else {
-                        if (stopsLayerGroup.hasLayer(marker)) {
-                            stopsLayerGroup.removeLayer(marker);
-                        }
+                        if (stopsLayerGroup.hasLayer(marker)) stopsLayerGroup.removeLayer(marker);
                     }
                 }
             }
 
-            // Events prüfen und auslösen
             checkAndTriggerEvents(time);
         }
 
@@ -1066,7 +1044,7 @@
         function play() {
             if (!replayData || !startTs) return;
             // Wenn am Ende angekommen, wieder von vorne starten
-            if (currentReplayTime >= endTs) {
+            if (currentReplayTime >= endTs && !isLiveMode) {
                 seekToStart();
             }
             isPlaying = true;
@@ -1076,6 +1054,7 @@
         }
 
         function pause() {
+            disableLiveMode(); // Live-Modus beenden, wenn manuell pausiert wird
             isPlaying = false;
             updatePlayBtnUI();
             if (animationFrameId) {
@@ -1109,12 +1088,17 @@
                         currentReplayTime = endTs;
                         document.getElementById('time-slider').value = Math.floor(currentReplayTime);
                         updateReplayView(currentReplayTime);
-                        pause();
-                        return;
+                        
+                        // Wenn der Live-Modus an ist, pausieren wir nicht, 
+                        // sondern der Loop läuft weiter und wartet auf den nächsten Daten-Poll.
+                        if (!isLiveMode) {
+                            pause();
+                            return;
+                        }
+                    } else {
+                        document.getElementById('time-slider').value = Math.floor(currentReplayTime);
+                        updateReplayView(currentReplayTime);
                     }
-
-                    document.getElementById('time-slider').value = Math.floor(currentReplayTime);
-                    updateReplayView(currentReplayTime);
                 }
 
                 animationFrameId = requestAnimationFrame(frame);
@@ -1124,6 +1108,7 @@
 
         // --- SPULEN & NAVIGATION ---
         function seekToTime(targetTime) {
+            disableLiveMode(); // Live-Modus beenden bei manuellem Spulen
             currentReplayTime = Math.max(startTs, Math.min(endTs, targetTime));
             document.getElementById('time-slider').value = Math.floor(currentReplayTime);
 
@@ -1144,9 +1129,51 @@
         function seekToEnd() { seekToTime(endTs); }
         function stepTime(deltaMs) { seekToTime(currentReplayTime + deltaMs); }
 
+        let isLiveMode = false;
+
+        function toggleLiveMode() {
+            isLiveMode = true;
+            const btnLive = document.getElementById('btn-live');
+            if (btnLive) {
+                btnLive.style.backgroundColor = '#dc2626';
+                btnLive.style.borderColor = '#dc2626';
+                btnLive.style.color = 'white';
+            }
+            
+            // Setze Speed auf 1x (ohne den Live-Modus zu deaktivieren)
+            playbackSpeed = 1;
+            const buttons = document.querySelectorAll('.speed-btn:not(#btn-live)');
+            buttons.forEach(b => {
+                if (b.innerText === '1x') b.classList.add('active');
+                else b.classList.remove('active');
+            });
+
+            // Springe ans aktuelle Ende und starte
+            currentReplayTime = endTs;
+            document.getElementById('time-slider').value = Math.floor(currentReplayTime);
+            updateReplayView(currentReplayTime);
+            
+            if (!isPlaying) {
+                play();
+            }
+        }
+
+        function disableLiveMode() {
+            if (isLiveMode) {
+                isLiveMode = false;
+                const btnLive = document.getElementById('btn-live');
+                if (btnLive) {
+                    btnLive.style.backgroundColor = '';
+                    btnLive.style.borderColor = '';
+                    btnLive.style.color = '';
+                }
+            }
+        }
+
         function setSpeed(speedMultiplier) {
+            disableLiveMode(); // Live-Modus beenden, wenn manuelle Tempowahl erfolgt
             playbackSpeed = speedMultiplier;
-            const buttons = document.querySelectorAll('.speed-btn');
+            const buttons = document.querySelectorAll('.speed-btn:not(#btn-live)');
             buttons.forEach(b => {
                 if (b.innerText === `${speedMultiplier}x`) b.classList.add('active');
                 else b.classList.remove('active');
@@ -1168,6 +1195,32 @@
                 loadReplay();
             });
         });
+
+        // Admin Live-Polling: Alle 15 Sekunden neue Daten ziehen
+        if (isAdmin && currentPhase !== 'finished' && currentPhase !== 'post_game') {
+            setInterval(() => {
+                fetch('/api/replay_data?admin=1')
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.error) return;
+                        
+                        replayData = data;
+                        endTs = Number(data.end_ts);
+                        
+                        const slider = document.getElementById('time-slider');
+                        slider.max = endTs;
+                        document.getElementById('end-time-label').innerText = formatClock(endTs);
+                        
+                        // Wenn der Slider ganz am Ende war, schieben wir ihn automatisch mit
+                        if (!isPlaying && currentReplayTime >= (endTs - 15000)) {
+                            seekToTime(endTs);
+                        } else {
+                            // Andernfalls nur die Ansicht aktualisieren (neue Marker etc.)
+                            updateReplayView(currentReplayTime);
+                        }
+                    });
+            }, 15000);
+        }
     </script>
 </body>
 </html>

@@ -147,9 +147,24 @@
             </div>
         </div>
 
-        {% if phase == 'post_game' or phase == 'finished' %}
+        {% if phase in ['pre_game', 'game'] %}
+            {% set now_ms = (now_time | string | replace('Z', '+00:00')) %}
+            {% set mid_ms = (mid_time | string | replace('Z', '+00:00')) %}
+            
+            {% if mid_time and mid_time != 'None' and now_ms >= mid_ms %}
+                <div class="box" style="text-align: center; border-left: 4px solid #049EAB; background: #e6f7f8;">
+                    <h3 style="margin-top: 0; color: #049EAB;">🎬 Replay der 1. Halbzeit</h3>
+                    <p style="font-size: 0.95em; color: #555;">Die 1. Halbzeit ist abgeschlossen. Ihr könnt euch den bisherigen Spielverlauf jetzt im Replay ansehen.</p>
+                    <a href="/replay" class="btn btn-petrol" style="display:inline-block; width:auto; text-decoration:none; padding:12px 24px; border-radius:4px;">Replay öffnen</a>
+                </div>
+            {% else %}
+                <div class="box" style="text-align: center; border: 1px dashed #ccc; background: #fcfcfc;">
+                    <p style="color: #888; font-size: 0.9em; margin: 0;">Das Replay (Karte des Spielverlaufs) ist in der 1. Halbzeit gesperrt und wird zur Halbzeitpause freigeschaltet.</p>
+                </div>
+            {% endif %}
+        {% elif phase == 'post_game' or phase == 'finished' %}
         <div style="text-align: center; margin: 25px 0;">
-            <a href="/replay" class="btn btn-petrol" style="display:inline-block; width:auto; text-decoration:none; padding:15px 30px; border-radius:4px; font-size: 1.15em; font-weight: 900; box-shadow: 0 4px 12px rgba(4,158,171,0.3);">🎬 Zum Replay</a>
+            <a href="/replay" class="btn btn-petrol" style="display:inline-block; width:auto; text-decoration:none; padding:15px 30px; border-radius:4px; font-size: 1.15em; font-weight: 900; box-shadow: 0 4px 12px rgba(4,158,171,0.3);">🎬 Komplettes Replay ansehen</a>
         </div>
         {% endif %}
 

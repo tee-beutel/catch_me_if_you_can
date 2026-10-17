@@ -136,15 +136,15 @@
         "lon": 7.659368
     },
     "Innenstadt, Bahnhof Stadtmitte/Löhr-Center": {
-        "lat": 50.35865,
-        "lon": 7.591402,
-        "factor": 0,
         "alternative": {
-            "name": "Innenstadt, Zentralplatz/Forum",
+            "factor": 0,
             "lat": 50.358967,
             "lon": 7.595714,
-            "factor": 0
-        }
+            "name": "Innenstadt, Zentralplatz/Forum"
+        },
+        "factor": 0,
+        "lat": 50.35865,
+        "lon": 7.591402
     },
     "Innenstadt, Deutsches Eck/Seilbahn": {
         "factor": 0.5,
@@ -162,14 +162,26 @@
         "lon": 7.548355
     },
     "Karthause, Friedhofskapelle": {
-        "factor": 1,
         "lat": 50.34916,
-        "lon": 7.574199
+        "lon": 7.574199,
+        "factor": 1,
+        "alternative": {
+            "name": "Karthause, Am Falkenhorst",
+            "lat": 50.344734,
+            "lon": 7.57949,
+            "factor": 1
+        }
     },
     "Karthause, Hochschule/Schulzentrum": {
-        "factor": 1,
         "lat": 50.337734,
-        "lon": 7.569762
+        "lon": 7.569762,
+        "factor": 1,
+        "alternative": {
+            "name": "Karthause, Pionierhöhe",
+            "lat": 50.342342,
+            "lon": 7.576113,
+            "factor": 1
+        }
     },
     "Kesselheim, HWK-Campus": {
         "factor": 2,
@@ -192,9 +204,15 @@
         "lon": 7.486811
     },
     "Lützel, Balduinbrücke": {
-        "factor": 1,
         "lat": 50.3665,
-        "lon": 7.593818
+        "lon": 7.593818,
+        "factor": 1,
+        "alternative": {
+            "name": "Lützel, Bahnhof/Schüllerplatz",
+            "lat": 50.3657,
+            "lon": 7.593217,
+            "factor": 1
+        }
     },
     "Lützel, Bodelschwinghstraße": {
         "factor": 1,
@@ -217,9 +235,15 @@
         "lon": 7.549487
     },
     "Metternich, Universität": {
-        "factor": 1,
         "lat": 50.3618,
-        "lon": 7.557203
+        "lon": 7.557203,
+        "factor": 1,
+        "alternative": {
+            "name": "Metternich, Uni/Winninger Straße",
+            "lat": 50.36082,
+            "lon": 7.559143,
+            "factor": 1
+        }
     },
     "Mittelweiden, DB-Museum": {
         "alternative": {
@@ -231,11 +255,6 @@
         "factor": 1,
         "lat": 50.378414,
         "lon": 7.59398
-    },
-    "Moselweiß, Gülser Brücke": {
-        "factor": 1,
-        "lat": 50.34583,
-        "lon": 7.554966
     },
     "Mülheim, Rotes Kreuz": {
         "factor": 1,
@@ -283,15 +302,15 @@
         "lon": 7.585671
     },
     "Pfaffendorf, Kirche": {
-        "lat": 50.348705,
-        "lon": 7.605038,
-        "factor": 1,
         "alternative": {
-            "name": "Pfaffendorf, Seizstraße",
+            "factor": 1,
             "lat": 50.34397,
             "lon": 7.600807,
-            "factor": 1
-        }
+            "name": "Pfaffendorf, Seizstraße"
+        },
+        "factor": 1,
+        "lat": 50.348705,
+        "lon": 7.605038
     },
     "Pfaffendorfer Höhe, Augusta-Kaserne": {
         "factor": 1,
@@ -334,9 +353,15 @@
         "lon": 7.458874
     },
     "Südliche Vorstadt, EVM/koveb": {
-        "factor": 1,
         "lat": 50.340874,
-        "lon": 7.585428
+        "lon": 7.585428,
+        "factor": 1,
+        "alternative": {
+            "name": "Südliche Vorstadt, Schützenhof",
+            "lat": 50.341633,
+            "lon": 7.58647,
+            "factor": 1
+        }
     },
     "Südstadt, Markenbildchenweg": {
         "factor": 0.5,
@@ -397,5 +422,27 @@
         "factor": 1,
         "lat": 50.418507,
         "lon": 7.451364
+    },
+    "Moselweiß, Gülser Brücke": {
+        "lat": 50.34583,
+        "lon": 7.554966,
+        "factor": 1,
+        "alternative": {
+            "name": "Moselweiß, Bahnhof",
+            "lat": 50.349617,
+            "lon": 7.560844,
+            "factor": 1
+        }
+    },
+    "Rauental, Saarplatz": {
+        "lat": 50.361023,
+        "lon": 7.588042,
+        "factor": 0.5,
+        "alternative": {
+            "name": "Rauental, Moselbad/K.-Tesche-Str.",
+            "lat": 50.364595,
+            "lon": 7.574534,
+            "factor": 1
+        }
     }
 }

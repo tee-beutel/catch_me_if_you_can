@@ -18,7 +18,7 @@ import secrets
 import threading
 from collections import deque
 from datetime import datetime, timedelta, timezone
-from flask import Flask, render_template, request, jsonify, redirect
+from flask import Flask, render_template, request, jsonify, redirect, send_file
 import requests
 from requests.auth import HTTPBasicAuth
 from dotenv import load_dotenv
@@ -161,6 +161,42 @@ TRACCAR_API_URL = f"{TRACCAR_BASE_URL}/devices"
 TRACCAR_USER = os.getenv("TRACCAR_API_USER", "admin").strip()
 TRACCAR_PASS = os.getenv("TRACCAR_API_PASSWORD", "admin").strip()
 
+# --- TRACCAR LOGGING KONFIGURATION ---
+TRACCAR_LOG_ENABLED = False
+TRACCAR_LOG_FILE = os.path.join(BASE_DIR, 'log.json')
+traccar_log_lock = threading.Lock()
+
+def write_traccar_api_log(data):
+    """Schreibt Traccar-API-Anfragen thread-sicher in die log.json."""
+    if not TRACCAR_LOG_ENABLED:
+        return
+    
+    with traccar_log_lock:
+        try:
+            logs = []
+            if os.path.exists(TRACCAR_LOG_FILE):
+                with open(TRACCAR_LOG_FILE, 'r', encoding='utf-8') as f:
+                    try:
+                        logs = json.load(f)
+                        if not isinstance(logs, list):
+                            logs = []
+                    except json.JSONDecodeError:
+                        logs = []
+            
+            # Maximal 1000 Einträge im Log behalten, um die Datei nicht explodieren zu lassen
+            if len(logs) >= 1000:
+                logs = logs[-999:]
+                
+            logs.append({
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "payload": data
+            })
+            
+            with open(TRACCAR_LOG_FILE, 'w', encoding='utf-8') as f:
+                json.dump(logs, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            app.logger.error(f"Fehler beim Schreiben der log.json: {e}")
+
 traccar_lock = threading.RLock()
 install_lock = threading.Lock()
 gps_rules_lock = threading.Lock()
@@ -298,6 +334,16 @@ def init_db():
                         active_from TEXT,
                         active_until TEXT
                     )''')
+
+        # NEU: Tabelle für den Rollen-Lebenszyklus
+        c.execute('''CREATE TABLE IF NOT EXISTS replay_role_lifecycle (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        team_id TEXT,
+                        role TEXT,
+                        active_from TEXT,
+                        active_until TEXT
+                    )''')
+
 
         # Sicherstellen, dass bestehende Datenbanken nahtlos um die neuen Zeitspalten erweitert werden
         ensure_column(c, "team_stops", "submitted_at", "TEXT")
@@ -884,12 +930,15 @@ def check_game_gps_rules():
                     remaining_requests.append(req)
                 state["pending_requests"] = remaining_requests
 
-            # 2. 5 / 10 / 15... Minuten Standort-Ausfall-Historie für den Admin (während 'game')
-            if phase == "game":
+            # 2. 5 / 10 / 15... Minuten Standort-Ausfall-Historie für den Admin (ab 'pre_game')
+            if phase in ("pre_game", "game"):
                 c = conn.cursor()
                 c.execute("SELECT team_id, updated_at FROM team_locations")
                 loc_map = {r["team_id"]: parse_iso_utc(r["updated_at"]) for r in c.fetchall()}
                 start_dt_utc = parse_iso_utc(start_iso)
+                
+                # NEU: Vorbereitungszeit (5 Minuten vor Start) als Basis verwenden
+                pre_start_utc = start_dt_utc - timedelta(minutes=5) if start_dt_utc else None
 
                 for t_id, t_data in state["teams_data"].items():
                     if t_data.get("deactivated", False):
@@ -898,36 +947,47 @@ def check_game_gps_rules():
                         continue
 
                     last_dt = loc_map.get(t_id)
-                    if last_dt is not None and start_dt_utc is not None and last_dt < start_dt_utc:
-                        ref_dt = start_dt_utc
+                    # NEU: Auf pre_start_utc prüfen statt auf start_dt_utc
+                    if last_dt is not None and pre_start_utc is not None and last_dt < pre_start_utc:
+                        ref_dt = pre_start_utc
                     else:
-                        ref_dt = last_dt or start_dt_utc
+                        ref_dt = last_dt or pre_start_utc
 
                     if not ref_dt:
                         continue
 
                     missing_sec = (now_utc - ref_dt).total_seconds()
+                    
+                    # Sucht nach einer noch offenen Offline-Phase (Endzeitpunkt = None)
+                    open_warn = next((log for log in state["action_log"] if log.get("type") == "gps_warning" and log.get("team") == t_id and log.get("actual_timestamp") is None), None)
+
                     if missing_sec >= 300:
-                        stage = int(missing_sec // 300) * 5  # 5, 10, 15, 20...
-                        prev_stage = gps_inactivity_notified_stage.get(t_id, 0)
-                        if stage > prev_stage:
-                            gps_inactivity_notified_stage[t_id] = stage
+                        if not open_warn:
                             t_name = t_data.get("display_name", t_id)
-                            role_label = t_data.get("role", "Team").capitalize()
-                            desc = f"⚠️ GPS-WARNUNG: {t_name} ({role_label}) hat seit {stage} Minuten keinen Standort mehr gesendet!"
                             state["action_log"].insert(0, {
                                 "id": str(uuid.uuid4()),
-                                "type": "system",
+                                "type": "gps_warning",
                                 "team": t_id,
                                 "team_name": t_name,
-                                "timestamp": now_utc.isoformat(),
-                                "desc": desc,
+                                "timestamp": ref_dt.isoformat(), # Beginn der Offlinezeit
+                                "actual_timestamp": None,        # Ende (noch offen)
+                                "desc": "Offline-Phase",
                                 "is_late": False,
                                 "admin_only": True
                             })
                             state_changed = True
                     else:
-                        gps_inactivity_notified_stage[t_id] = 0
+                        # Signal wieder da -> offenen Eintrag schließen
+                        if open_warn:
+                            open_warn["actual_timestamp"] = last_dt.isoformat() if last_dt else now_utc.isoformat()
+                            state_changed = True
+            elif phase in ("post_game", "finished"):
+                # In Post-Game oder Finished: Offene Offline-Phasen zum Spielende abschließen
+                end_dt_utc = parse_iso_utc(end_iso)
+                for log in state["action_log"]:
+                    if log.get("type") == "gps_warning" and log.get("actual_timestamp") is None:
+                        log["actual_timestamp"] = end_dt_utc.isoformat() if end_dt_utc else now_utc.isoformat()
+                        state_changed = True
 
             if state_changed:
                 save_state(conn, state)
@@ -1168,6 +1228,24 @@ def save_state(conn, state):
         if s_name not in open_stops_in_db:
             c.execute("INSERT INTO replay_stop_lifecycle (stop_name, active_from) VALUES (?, ?)", (s_name, now_iso))
     # ----------------------------------
+
+    # --- NEU: REPLAY ROLE LIFECYCLE SYNC ---
+    c.execute("SELECT id, team_id, role FROM replay_role_lifecycle WHERE active_until IS NULL")
+    open_roles = {}
+    for r in c.fetchall():
+        open_roles[r[1]] = {"id": r[0], "role": r[2]}
+
+    for t_id, data in state["teams_data"].items():
+        current_role = data.get("role", "keine")
+        if t_id in open_roles:
+            if open_roles[t_id]["role"] != current_role:
+                # Rolle hat sich geändert -> alten Zyklus schließen, neuen öffnen
+                c.execute("UPDATE replay_role_lifecycle SET active_until = ? WHERE id = ?", (now_iso, open_roles[t_id]["id"]))
+                c.execute("INSERT INTO replay_role_lifecycle (team_id, role, active_from) VALUES (?, ?, ?)", (t_id, current_role, now_iso))
+        else:
+            # Bisher kein offener Zyklus -> neu öffnen
+            c.execute("INSERT INTO replay_role_lifecycle (team_id, role, active_from) VALUES (?, ?, ?)", (t_id, current_role, now_iso))
+    # ---------------------------------------
 
     conn.commit()
 
@@ -1763,6 +1841,20 @@ def admin(admin_slug):
         state = get_state(conn)
         phase, start_iso, end_iso, mid_iso, now_iso = update_game_time_state(conn, state)
 
+        now_utc = datetime.now(timezone.utc)
+        game_end_utc = parse_iso_utc(end_iso)
+        is_game_ended = (phase in ("post_game", "finished")) or (game_end_utc and now_utc > game_end_utc)
+
+        # Falls in Post-Game oder Finished: Offene Offline-Phasen zum Spielende abschließen
+        if is_game_ended and game_end_utc:
+            state_changed = False
+            for log in state["action_log"]:
+                if log.get("type") == "gps_warning" and log.get("actual_timestamp") is None:
+                    log["actual_timestamp"] = game_end_utc.isoformat()
+                    state_changed = True
+            if state_changed:
+                save_state(conn, state)
+
     config = state["config"]
     leaderboard = []
     team_urls = {}
@@ -1770,6 +1862,7 @@ def admin(admin_slug):
     base_url = request.host_url.rstrip('/')
 
     team_names_map = {t_id: d["display_name"] for t_id, d in state["teams_data"].items()}
+    cutoff_utc = game_end_utc if (is_game_ended and game_end_utc) else now_utc
 
     for t_id, data in state["teams_data"].items():
         team_urls[data["display_name"]] = f"{base_url}/team/{data['slug']}"
@@ -1777,12 +1870,25 @@ def admin(admin_slug):
 
         score = calculate_score(data, config)
 
+        # NEU: Gesamte Offlinezeit berechnen (stoppt in Post-Game / Finished beim Spielende)
+        total_offline_seconds = 0
+        team_warnings = [log for log in state["action_log"] if log.get("type") == "gps_warning" and log.get("team") == t_id]
+        for w in team_warnings:
+            start_offline = parse_iso_utc(w["timestamp"])
+            if start_offline:
+                end_offline = parse_iso_utc(w.get("actual_timestamp")) or cutoff_utc
+                if is_game_ended and game_end_utc and end_offline > game_end_utc:
+                    end_offline = game_end_utc
+                total_offline_seconds += max(0, (end_offline - start_offline).total_seconds())
+
+        # Das Feld "total_offline_seconds" dem Leaderboard-Eintrag anhängen
         leaderboard.append({
             "id": t_id, "display_name": data["display_name"], "score": score, "role": data.get("role", "keine"),
             "next_role": data.get("next_role", ""),
             "stops": data.get("stops", []), "caught": data.get("caught", []), "caught_by": data.get("caught_by", []),
             "deactivated": data.get("deactivated", False),
-            "manual_points": data.get("manual_points", 0)
+            "manual_points": data.get("manual_points", 0),
+            "total_offline_seconds": total_offline_seconds
         })
 
     leaderboard.sort(key=lambda x: x["score"], reverse=True)
@@ -2049,6 +2155,8 @@ def reset_game(admin_slug):
         c.execute("DELETE FROM location_history")
         c.execute("DELETE FROM team_stops")
         c.execute("DELETE FROM team_catches")
+        c.execute("DELETE FROM replay_stop_lifecycle")
+        c.execute("DELETE FROM replay_role_lifecycle")
 
         save_state(conn, state)
         trigger_traccar_sync_async(state["teams_data"])
@@ -2821,46 +2929,50 @@ def api_ticker_data():
 
 @app.route('/api/replay_data')
 def api_replay_data():
+    is_admin = request.args.get('admin') == '1'
+
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='DEFERRED') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
         phase, start_iso, end_iso, mid_iso, now_iso = update_game_time_state(conn, state)
 
         if not start_iso or not end_iso:
-            return jsonify({
-                "start_ts": 0,
-                "end_ts": 0,
-                "teams": {},
-                "locations": {},
-                "events": [],
-                "error": "Keine Spielzeiten konfiguriert."
-            })
+            return jsonify({"error": "Keine Spielzeiten konfiguriert."})
 
         start_dt = parse_iso_utc(start_iso)
         end_dt = parse_iso_utc(end_iso)
         now_dt = parse_iso_utc(now_iso)
+        mid_dt = parse_iso_utc(mid_iso) if mid_iso else None
 
-        if not start_dt or not end_dt:
-            return jsonify({
-                "start_ts": 0,
-                "end_ts": 0,
-                "teams": {},
-                "locations": {},
-                "events": [],
-                "error": "Ungültiges Zeitformat."
-            })
-
+        is_second_half = bool(mid_dt and now_dt >= mid_dt)
         replay_start = start_dt - timedelta(minutes=5)
-        replay_end = end_dt + timedelta(minutes=3)
-        post_end = end_dt + timedelta(minutes=5)
 
-        # Prüfung: Wenn die aktuelle Zeit > end_time + 5 Minuten ist und replay_cache["data"] existiert
-        if (phase == "finished" or (now_dt and now_dt > post_end)) and replay_cache["data"] is not None:
-            return jsonify(replay_cache["data"])
+        # --- LOGIK FÜR SICHTBARKEIT & ZEITFENSTER ---
+        if not is_admin:
+            # Spieler / Öffentlich
+            if phase in ["inactive", "roles_assigned", "pre_game"] or (phase == "game" and not is_second_half):
+                return jsonify({"error": "Das Replay ist während der 1. Halbzeit nicht verfügbar. Es wird zur Halbzeitpause für die erste Spielhälfte freigeschaltet."})
+            elif phase == "game" and is_second_half:
+                replay_end = mid_dt  # Zeige in der 2. Halbzeit nur das Replay bis zur Halbzeit
+            else:
+                replay_end = end_dt + timedelta(minutes=3)  # Spiel ist komplett vorbei
+        else:
+            # Admin (Live-Modus mit 30 Sekunden Verzögerung)
+            if phase in ["inactive", "roles_assigned", "pre_game"]:
+                replay_end = start_dt
+            elif phase == "game":
+                replay_end = now_dt - timedelta(seconds=30)
+                if replay_end > end_dt:
+                    replay_end = end_dt
+            else:
+                replay_end = end_dt + timedelta(minutes=3)
+
+        if replay_end < replay_start:
+            replay_end = replay_start
 
         c = conn.cursor()
 
-        # 1. GPS-Punkte aus location_history für alle Teams im Zeitfenster
+        # 1. GPS-Punkte
         sql_start = (replay_start - timedelta(minutes=1)).isoformat()
         sql_end = (replay_end + timedelta(minutes=1)).isoformat()
         c.execute("""
@@ -2877,22 +2989,16 @@ def api_replay_data():
             if pt_dt and replay_start <= pt_dt <= replay_end:
                 if t_id not in locations:
                     locations[t_id] = []
-                locations[t_id].append({
-                    "lat": row["lat"],
-                    "lon": row["lon"],
-                    "ts": int(pt_dt.timestamp() * 1000)
-                })
+                locations[t_id].append({"lat": row["lat"], "lon": row["lon"], "ts": int(pt_dt.timestamp() * 1000)})
 
-        # 2. Aktionen aus action_logs im Zeitfenster
+        # 2. Events (Aktionen)
         c.execute("""
             SELECT id, type, team, team_name, stop, hunter, hunter_name, prey, prey_name, timestamp, actual_timestamp, desc, is_late, admin_only
-            FROM action_logs
-            ORDER BY timestamp ASC
+            FROM action_logs ORDER BY timestamp ASC
         """)
 
         def find_closest_coords(pts, target_ts_ms, max_diff_ms=10 * 60 * 1000):
-            if not pts:
-                return None, None
+            if not pts: return None, None
             closest = min(pts, key=lambda p: abs(p["ts"] - target_ts_ms))
             if abs(closest["ts"] - target_ts_ms) <= max_diff_ms:
                 return closest["lat"], closest["lon"]
@@ -2900,19 +3006,15 @@ def api_replay_data():
 
         events = []
         for row in c.fetchall():
-            if row["admin_only"] and row["type"] not in ("role_change", "manual_points"):
-                continue
-            if row["type"] == "stop" and not row["team"]:
-                continue
+            if row["admin_only"] and row["type"] not in ("role_change", "manual_points"): continue
+            if row["type"] == "stop" and not row["team"]: continue
 
             act_dt = parse_iso_utc(row["actual_timestamp"]) or parse_iso_utc(row["timestamp"])
-            if not act_dt:
-                continue
+            if not act_dt: continue
 
             act_ts_ms = int(act_dt.timestamp() * 1000)
             lat, lon = None, None
 
-            # Lade Koordinaten (lat/lon) nur für Events auf, deren act_dt im sichtbaren Zeitfenster liegt
             if replay_start <= act_dt <= replay_end:
                 if row["type"] == "stop":
                     stop_name = row["stop"]
@@ -2922,69 +3024,60 @@ def api_replay_data():
                     else:
                         lat, lon = find_closest_coords(locations.get(row["team"], []), act_ts_ms)
                 elif row["type"] == "catch":
-                    prey_locs = locations.get(row["prey"], [])
-                    hunter_locs = locations.get(row["hunter"], [])
-                    lat, lon = find_closest_coords(prey_locs, act_ts_ms)
+                    lat, lon = find_closest_coords(locations.get(row["prey"], []), act_ts_ms)
                     if lat is None:
-                        lat, lon = find_closest_coords(hunter_locs, act_ts_ms)
+                        lat, lon = find_closest_coords(locations.get(row["hunter"], []), act_ts_ms)
 
             events.append({
-                "id": row["id"],
-                "type": row["type"],
-                "ts": act_ts_ms,
-                "desc": row["desc"],
-                "team": row["team"],
-                "team_name": row["team_name"],
-                "stop": row["stop"],
-                "hunter": row["hunter"],
-                "hunter_name": row["hunter_name"],
-                "prey": row["prey"],
-                "prey_name": row["prey_name"],
-                "lat": lat,
-                "lon": lon
+                "id": row["id"], "type": row["type"], "ts": act_ts_ms, "desc": row["desc"],
+                "team": row["team"], "team_name": row["team_name"], "stop": row["stop"],
+                "hunter": row["hunter"], "hunter_name": row["hunter_name"], "prey": row["prey"],
+                "prey_name": row["prey_name"], "lat": lat, "lon": lon
             })
-
         events.sort(key=lambda e: e["ts"])
 
-        # 3. Teams Daten
-        teams_dict = {}
-        for t_id, d in state["teams_data"].items():
-            teams_dict[t_id] = {
-                "id": t_id,
-                "display_name": d.get("display_name", t_id),
-                "role": d.get("role", "keine"),
-                "deactivated": bool(d.get("deactivated", False))
-            }
+        # 3. Teams Grunddaten
+        teams_dict = {t_id: {"id": t_id, "display_name": d.get("display_name", t_id), "deactivated": bool(d.get("deactivated", False))} for t_id, d in state["teams_data"].items()}
 
-        # 4. Stop Lifecycle laden
+        # 4. Stop Lifecycle
         c.execute("SELECT stop_name, active_from, active_until FROM replay_stop_lifecycle")
         stop_lifecycle = []
         for r in c.fetchall():
             f_dt = parse_iso_utc(r["active_from"])
             u_dt = parse_iso_utc(r["active_until"]) if r["active_until"] else None
-            if f_dt:
-                stop_lifecycle.append({
-                    "stop_name": r["stop_name"],
-                    "from": int(f_dt.timestamp() * 1000),
-                    "until": int(u_dt.timestamp() * 1000) if u_dt else None
-                })
+            if f_dt: stop_lifecycle.append({"stop_name": r["stop_name"], "from": int(f_dt.timestamp() * 1000), "until": int(u_dt.timestamp() * 1000) if u_dt else None})
 
-        result_data = {
+        # 5. NEU: Role Lifecycle
+        c.execute("SELECT team_id, role, active_from, active_until FROM replay_role_lifecycle")
+        role_lifecycle = []
+        for r in c.fetchall():
+            f_dt = parse_iso_utc(r["active_from"])
+            u_dt = parse_iso_utc(r["active_until"]) if r["active_until"] else None
+            if f_dt: role_lifecycle.append({"team_id": r["team_id"], "role": r["role"], "from": int(f_dt.timestamp() * 1000), "until": int(u_dt.timestamp() * 1000) if u_dt else None})
+
+        return jsonify({
             "start_ts": int(replay_start.timestamp() * 1000),
             "end_ts": int(replay_end.timestamp() * 1000),
             "config": state["config"],
             "teams": teams_dict,
             "locations": locations,
             "events": events,
-            "stop_lifecycle": stop_lifecycle  # <--- NEU
-        }
+            "stop_lifecycle": stop_lifecycle,
+            "role_lifecycle": role_lifecycle
+        })
 
-        # Schreibe das Ergebnis in den Cache, sofern das Spiel endgültig beendet ist
-        if phase == "finished" or (now_dt and now_dt > post_end):
-            replay_cache["data"] = result_data
-            replay_cache["timestamp"] = datetime.now(timezone.utc).isoformat()
 
-        return jsonify(result_data)
+@app.route('/adminconsole-<admin_slug>/replay')
+def admin_replay(admin_slug):
+    if not is_valid_admin_slug(admin_slug):
+        return "Zugriff verweigert", 403
+
+    with sqlite3.connect(DB_FILE, timeout=10, isolation_level='DEFERRED') as conn:
+        conn.row_factory = sqlite3.Row
+        state = get_state(conn)
+        phase, start_iso, end_iso, mid_iso, now_iso = update_game_time_state(conn, state)
+
+    return render_template('replay.html', phase=phase, start_time=start_iso, end_time=end_iso, is_admin=True)
 
 
 @app.route('/replay')
@@ -3001,6 +3094,15 @@ def replay():
 @app.route('/api/traccar', methods=['GET', 'POST'])
 def traccar_webhook():
     payload = request.get_json(silent=True) or {}
+    
+    # NEU: Traccar API in log.json schreiben (falls aktiviert)
+    log_data = {
+        "method": request.method,
+        "args": request.args.to_dict(),
+        "form": request.form.to_dict(),
+        "json": payload
+    }
+    write_traccar_api_log(log_data)
 
     identifier = (
         request.args.get('id')
@@ -3232,6 +3334,8 @@ def traccar_webhook():
 
             existing_loc = c.fetchone()
 
+
+
             update_live = False
             if existing_loc is None or existing_loc[0] is None:
                 update_live = True
@@ -3257,6 +3361,8 @@ def traccar_webhook():
                     lon,
                     packet_time_iso
                 ))
+
+
 
             # Sobald ein Standort eintrifft, GPS-Ausfall-Stufe für dieses Team zurücksetzen
             gps_inactivity_notified_stage[resolved_team_id] = 0
@@ -3296,6 +3402,34 @@ def traccar_webhook():
 
 
 # --- TRACCAR DEBUG DASHBOARD & E2E-TEST ROUTEN (MIT -{adminpin} UND _{adminpin} UNTERSTÜTZUNG) ---
+@app.route('/api/traccar_debug/<admin_slug>/log_settings', methods=['GET', 'POST'])
+def traccar_debug_log_settings(admin_slug):
+    if not is_valid_admin_slug(admin_slug):
+        return jsonify({'success': False, 'error': 'Zugriff verweigert'}), 403
+    
+    global TRACCAR_LOG_ENABLED
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        TRACCAR_LOG_ENABLED = bool(data.get('enabled', False))
+    
+    return jsonify({
+        'success': True,
+        'enabled': TRACCAR_LOG_ENABLED,
+        'file_exists': os.path.exists(TRACCAR_LOG_FILE)
+    })
+
+@app.route('/api/traccar_debug/<admin_slug>/download_log')
+def traccar_debug_download_log(admin_slug):
+    if not is_valid_admin_slug(admin_slug):
+        return "Zugriff verweigert", 403
+    
+    if os.path.exists(TRACCAR_LOG_FILE):
+        return send_file(TRACCAR_LOG_FILE, as_attachment=True, download_name='log.json')
+    
+    # Falls noch keine Logdatei existiert, eine leere JSON-Liste zurückgeben
+    return jsonify([]), 200
+
+
 @app.route('/traccar_debug-<admin_slug>')
 @app.route('/traccar_debug_<admin_slug>')
 def traccar_debug_page(admin_slug):

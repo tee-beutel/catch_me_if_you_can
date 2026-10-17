@@ -10,3 +10,4 @@ game.db
 /Zwischespeicher
 /stops_data/stops.txt
 /log.txt
+/log.json
