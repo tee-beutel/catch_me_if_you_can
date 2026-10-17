@@ -8,6 +8,7 @@ import time
 import math
 import re
 import shutil
+import csv
 import socket
 import atexit
 import zipfile
@@ -17,7 +18,7 @@ import secrets
 import threading
 from collections import deque
 from datetime import datetime, timedelta, timezone
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect
 import requests
 from requests.auth import HTTPBasicAuth
 from dotenv import load_dotenv
@@ -36,8 +37,22 @@ app = Flask(__name__)
 
 # --- PFADE & KONSTANTEN ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(BASE_DIR, 'Catch_Haltestellen.json')
+STOPS_DIR = os.path.join(BASE_DIR, 'stops_data')
+GTFS_STOPS_FILE = os.path.join(STOPS_DIR, 'stops.txt')
+DATA_FILE = os.path.join(STOPS_DIR, 'Catch_Haltestellen.json')
 DB_FILE = os.path.join(BASE_DIR, 'game.db')
+
+# Migration beim Start
+if not os.path.exists(STOPS_DIR):
+    os.makedirs(STOPS_DIR, exist_ok=True)
+    old_data_file = os.path.join(BASE_DIR, 'Catch_Haltestellen.json')
+    if os.path.exists(old_data_file):
+        shutil.copy2(old_data_file, os.path.join(STOPS_DIR, 'Catch_Haltestellen.json'))
+else:
+    dst_data_file = os.path.join(STOPS_DIR, 'Catch_Haltestellen.json')
+    old_data_file = os.path.join(BASE_DIR, 'Catch_Haltestellen.json')
+    if not os.path.exists(dst_data_file) and os.path.exists(old_data_file):
+        shutil.copy2(old_data_file, dst_data_file)
 
 # Alle Traccar-Dateien liegen strikt isoliert im Projektordner unter ./traccar_runtime
 TRACCAR_RUNTIME_DIR = os.path.join(BASE_DIR, 'traccar_runtime')
@@ -67,13 +82,52 @@ DEFAULT_CONFIG = {
     "enable_mid_game_swap": True,
     "shuffle_stops_on_swap": True,
     "auto_approve_stops": False,
-    "stop_radius_meters": 100
+    "stop_radius_meters": 75
 }
 
-with open(DATA_FILE, 'r', encoding='utf-8') as f:
-    stops_data = json.load(f)
+stops_data = {}
+ALL_STOPS = []
+current_active_dataset = None
 
-ALL_STOPS = list(stops_data.keys())
+
+def load_active_stops_data(filename=None):
+    global stops_data, ALL_STOPS, current_active_dataset
+    if not filename:
+        try:
+            with sqlite3.connect(DB_FILE, timeout=10) as conn:
+                c = conn.cursor()
+                c.execute("SELECT value FROM settings WHERE key = 'active_stops_dataset'")
+                row = c.fetchone()
+                if row and row[0]:
+                    filename = row[0]
+        except Exception:
+            pass
+    if not filename:
+        filename = "Catch_Haltestellen.json"
+
+    safe_filename = os.path.basename(filename)
+    filepath = os.path.join(STOPS_DIR, safe_filename)
+    if not os.path.exists(filepath):
+        base_fallback = os.path.join(BASE_DIR, safe_filename)
+        if os.path.exists(base_fallback):
+            filepath = base_fallback
+
+    loaded = {}
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                loaded = json.load(f)
+        except Exception as e:
+            app.logger.error(f"Fehler beim Laden von {filepath}: {e}")
+            loaded = {}
+
+    stops_data.clear()
+    stops_data.update(loaded)
+
+    ALL_STOPS.clear()
+    ALL_STOPS.extend(list(stops_data.keys()))
+    current_active_dataset = safe_filename
+    return stops_data
 
 # --- TRACCAR KONFIGURATION & SYNC ---
 TRACCAR_BASE_URL = os.getenv("TRACCAR_BASE_URL", "http://127.0.0.1:8082/api")
@@ -97,6 +151,9 @@ debug_test_events = {}
 
 # Merkt sich pro Team die zuletzt im Admin-Log gemeldete GPS-Ausfall-Stufe (5, 10, 15, ...)
 gps_inactivity_notified_stage = {}
+
+# Globaler Replay-Cache für /api/replay_data
+replay_cache = {"data": None, "timestamp": None}
 
 
 # --- DATENBANK SETUP & MIGRATION ---
@@ -222,10 +279,12 @@ def init_db():
         ensure_column(c, "action_logs", "admin_only", "INTEGER")
 
         c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_slug', ?)", (ADMIN_SLUG,))
+        c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('active_stops_dataset', 'Catch_Haltestellen.json')")
 
         conn.commit()
 
 init_db()
+load_active_stops_data()
 
 
 def is_valid_admin_slug(slug):
@@ -956,6 +1015,8 @@ def save_state(conn, state):
     c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('config', ?)", (json.dumps(state['config']),))
     c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('roles_assigned', ?)", (1 if state.get('roles_assigned') else 0,))
     c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('roles_swapped', ?)", (1 if state.get('roles_swapped') else 0,))
+    if 'active_stops_dataset' in state:
+        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('active_stops_dataset', ?)", (state['active_stops_dataset'],))
 
     c.execute("DELETE FROM active_stops")
     for stop in state.get('active_stops', []):
@@ -1064,7 +1125,8 @@ def get_state(conn):
     rows = c.fetchall()
 
     if not rows:
-        initial_active = random.sample(ALL_STOPS, min(DEFAULT_CONFIG["target_stops"], len(ALL_STOPS)))
+        load_active_stops_data("Catch_Haltestellen.json")
+        initial_active = random.sample(ALL_STOPS, min(DEFAULT_CONFIG["target_stops"], len(ALL_STOPS))) if ALL_STOPS else []
         num_teams = DEFAULT_CONFIG["num_teams"]
         team_names = DEFAULT_CONFIG["team_names"]
 
@@ -1084,6 +1146,7 @@ def get_state(conn):
         calculate_next_roles(teams_data)
         state = {
             "config": DEFAULT_CONFIG.copy(),
+            "active_stops_dataset": "Catch_Haltestellen.json",
             "active_stops": initial_active,
             "history": initial_active.copy(),
             "teams_data": teams_data,
@@ -1092,6 +1155,7 @@ def get_state(conn):
             "roles_swapped": False,
             "roles_assigned": False
         }
+        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('active_stops_dataset', ?)", ("Catch_Haltestellen.json",))
         save_state(conn, state)
         return state
 
@@ -1101,6 +1165,10 @@ def get_state(conn):
     state['config'] = json.loads(settings_dict.get('config', '{}'))
     state['roles_assigned'] = bool(int(settings_dict.get('roles_assigned', 0)))
     state['roles_swapped'] = bool(int(settings_dict.get('roles_swapped', 0)))
+    state['active_stops_dataset'] = settings_dict.get('active_stops_dataset', 'Catch_Haltestellen.json')
+
+    if current_active_dataset != state['active_stops_dataset'] or not stops_data:
+        load_active_stops_data(state['active_stops_dataset'])
 
     c.execute("SELECT stop_name FROM active_stops")
     state['active_stops'] = [r['stop_name'] for r in c.fetchall()]
@@ -1222,13 +1290,23 @@ def update_game_time_state(conn, state):
             roles = ["fänger"] * num_faenger + ["läufer"] * num_laeufer
             random.shuffle(roles)
 
+            now_iso = datetime.now(timezone.utc).isoformat()
             for i, t_id in enumerate(active_teams):
                 state["teams_data"][t_id]["role"] = roles[i]
+                state["action_log"].insert(0, {
+                    "id": str(uuid.uuid4()),
+                    "type": "role_change",
+                    "team": t_id,
+                    "timestamp": now_iso,
+                    "actual_timestamp": now_iso,
+                    "desc": roles[i],
+                    "admin_only": True
+                })
 
             calculate_next_roles(state["teams_data"])
             state["roles_assigned"] = True
             state["action_log"].insert(0, {
-                "id": str(uuid.uuid4()), "type": "system", "timestamp": datetime.now(timezone.utc).isoformat(),
+                "id": str(uuid.uuid4()), "type": "system", "timestamp": now_iso,
                 "desc": "🎲 Die Rollen wurden zugewiesen!"
             })
             save_state(conn, state)
@@ -1237,13 +1315,27 @@ def update_game_time_state(conn, state):
     if config.get("enable_mid_game_swap", True):
         mid_dt = start_dt + (end_dt - start_dt) / 2
         if now >= mid_dt and not state.get("roles_swapped", False):
+            now_iso = datetime.now(timezone.utc).isoformat()
             for t_id, data in state["teams_data"].items():
                 if not data.get("deactivated", False):
                     current_role = data.get("role", "keine")
+                    new_role = None
                     if current_role == "läufer":
+                        new_role = "fänger"
                         data["role"] = "fänger"
                     elif current_role == "fänger":
+                        new_role = "läufer"
                         data["role"] = "läufer"
+                    if new_role:
+                        state["action_log"].insert(0, {
+                            "id": str(uuid.uuid4()),
+                            "type": "role_change",
+                            "team": t_id,
+                            "timestamp": now_iso,
+                            "actual_timestamp": now_iso,
+                            "desc": new_role,
+                            "admin_only": True
+                        })
 
             calculate_next_roles(state["teams_data"])
             state["roles_swapped"] = True
@@ -1669,12 +1761,45 @@ def admin_settings(admin_slug):
 
         if request.method == 'GET':
             sorted_teams = sorted(state["teams_data"].items(), key=lambda x: int(x[0].replace("Team ", "")) if "Team " in x[0] else 999)
-            return render_template('settings.html', config=config, sorted_teams=sorted_teams, admin_url=ADMIN_SLUG)
+            available_datasets = [f for f in sorted(os.listdir(STOPS_DIR)) if f.endswith('.json') and os.path.isfile(os.path.join(STOPS_DIR, f))]
+            active_dataset = state.get("active_stops_dataset", "Catch_Haltestellen.json")
+            if not available_datasets:
+                available_datasets = [active_dataset]
+            return render_template(
+                'settings.html',
+                config=config,
+                sorted_teams=sorted_teams,
+                admin_url=ADMIN_SLUG,
+                available_datasets=available_datasets,
+                active_stops_dataset=active_dataset
+            )
 
         data = request.json
         old_start = config.get("start_time")
         old_end = config.get("end_time")
         old_swap = config.get("enable_mid_game_swap")
+
+        # Datensatz-Änderung prüfen
+        new_dataset = data.get("active_stops_dataset")
+        old_dataset = state.get("active_stops_dataset", "Catch_Haltestellen.json")
+        if new_dataset and new_dataset != old_dataset:
+            state["active_stops_dataset"] = new_dataset
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('active_stops_dataset', ?)", (new_dataset,))
+            load_active_stops_data(new_dataset)
+
+            target = int(data.get("target_stops", config["target_stops"]))
+            state["history"] = []
+            new_active = random.sample(ALL_STOPS, min(target, len(ALL_STOPS))) if ALL_STOPS else []
+            state["active_stops"] = new_active
+            state["history"] = new_active.copy()
+
+            state["action_log"].insert(0, {
+                "id": str(uuid.uuid4()),
+                "type": "system",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "desc": f"📁 Haltestellen-Datensatz geändert auf '{new_dataset}'. Haltestellen wurden neu ausgewürfelt."
+            })
 
         config["target_stops"] = int(data.get("target_stops", config["target_stops"]))
         config["max_history"] = int(data.get("max_history", config["max_history"]))
@@ -1695,6 +1820,7 @@ def admin_settings(admin_slug):
         old_teams_data = state.get("teams_data", {})
         new_teams_data = {}
 
+        now_iso = datetime.now(timezone.utc).isoformat()
         for t in team_list:
             team_id = str(t["team_id"]).strip()
             display_name = str(t["new_name"]).strip() or team_id
@@ -1704,6 +1830,17 @@ def admin_settings(admin_slug):
 
             if team_id and team_id in old_teams_data:
                 team_data = old_teams_data[team_id]
+                old_role = team_data.get("role", "keine")
+                if role != old_role:
+                    state["action_log"].insert(0, {
+                        "id": str(uuid.uuid4()),
+                        "type": "role_change",
+                        "team": team_id,
+                        "timestamp": now_iso,
+                        "actual_timestamp": now_iso,
+                        "desc": role,
+                        "admin_only": True
+                    })
                 team_data["display_name"] = display_name
                 team_data["role"] = role
                 team_data["pin"] = pin
@@ -1711,6 +1848,16 @@ def admin_settings(admin_slug):
                 team_data["deactivated"] = not active
                 new_teams_data[team_id] = team_data
             else:
+                if role != "keine":
+                    state["action_log"].insert(0, {
+                        "id": str(uuid.uuid4()),
+                        "type": "role_change",
+                        "team": team_id,
+                        "timestamp": now_iso,
+                        "actual_timestamp": now_iso,
+                        "desc": role,
+                        "admin_only": True
+                    })
                 new_teams_data[team_id] = {
                     "display_name": display_name,
                     "stops": [], "stop_timestamps": [], "caught": [], "catch_timestamps": [], "caught_by": [], "pin": pin,
@@ -1757,6 +1904,8 @@ def reset_game(admin_slug):
         return jsonify({'success': False, 'error': 'Verboten'}), 403
 
     gps_inactivity_notified_stage.clear()
+    replay_cache["data"] = None
+    replay_cache["timestamp"] = None
 
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
@@ -1851,6 +2000,193 @@ def shuffle_stops(admin_slug):
         save_state(conn, state)
 
     return jsonify({'success': True})
+
+
+@app.route('/adminconsole-<admin_slug>/clear_replay_cache', methods=['GET', 'POST'])
+def clear_replay_cache(admin_slug):
+    if not is_valid_admin_slug(admin_slug):
+        return jsonify({'success': False, 'error': 'Verboten'}), 403
+
+    global replay_cache
+    replay_cache["data"] = None
+    replay_cache["timestamp"] = None
+
+    if request.method == 'POST' or request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+        return jsonify({'success': True, 'message': 'Replay-Cache wurde erfolgreich geleert.'})
+
+    return redirect(f"/adminconsole-{admin_slug}")
+
+
+
+
+# --- HALTESTELLEN & GTFS MANAGEMENT ---
+@app.route('/adminconsole-<admin_slug>/stop_config')
+def admin_stop_config(admin_slug):
+    if not is_valid_admin_slug(admin_slug):
+        return "Zugriff verweigert", 403
+    return render_template('stop_config.html', admin_url=ADMIN_SLUG)
+
+
+@app.route('/api/stop_datasets')
+def api_stop_datasets():
+    try:
+        if not os.path.exists(STOPS_DIR):
+            os.makedirs(STOPS_DIR, exist_ok=True)
+        files = [f for f in sorted(os.listdir(STOPS_DIR)) if f.endswith('.json') and os.path.isfile(os.path.join(STOPS_DIR, f))]
+        return jsonify(files)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/stop_dataset/<path:filename>')
+def api_stop_dataset(filename):
+    safe_filename = os.path.basename(filename)
+    if not safe_filename.endswith('.json'):
+        return jsonify({"error": "Ungültiges Dateiformat. Nur .json erlaubt."}), 400
+    filepath = os.path.join(STOPS_DIR, safe_filename)
+    if not os.path.exists(filepath):
+        base_fallback = os.path.join(BASE_DIR, safe_filename)
+        if os.path.exists(base_fallback):
+            filepath = base_fallback
+        else:
+            return jsonify({"error": "Datei nicht gefunden."}), 404
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = json.load(f)
+        return jsonify(content)
+    except Exception as e:
+        return jsonify({"error": f"Fehler beim Lesen der Datei: {str(e)}"}), 500
+
+
+@app.route('/api/save_stop_dataset', methods=['POST'])
+def api_save_stop_dataset():
+    req_data = request.get_json(silent=True) or {}
+    filename = req_data.get('filename', '').strip()
+
+    if not filename:
+        return jsonify({"success": False, "error": "Kein Dateiname angegeben."}), 400
+
+    if not filename.endswith('.json'):
+        filename += '.json'
+    safe_filename = os.path.basename(filename)
+
+    if 'data' in req_data and isinstance(req_data['data'], dict):
+        stops = req_data['data']
+    elif 'stops' in req_data and isinstance(req_data['stops'], dict):
+        stops = req_data['stops']
+    elif 'dataset' in req_data and isinstance(req_data['dataset'], dict):
+        stops = req_data['dataset']
+    else:
+        stops = {k: v for k, v in req_data.items() if k != 'filename'}
+
+    if not isinstance(stops, dict):
+        return jsonify({"success": False, "error": "Ungültiges Format für Haltestellen-Datensatz."}), 400
+
+    os.makedirs(STOPS_DIR, exist_ok=True)
+    target_path = os.path.join(STOPS_DIR, safe_filename)
+
+    try:
+        with open(target_path, 'w', encoding='utf-8') as f:
+            json.dump(stops, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Fehler beim Speichern: {str(e)}"}), 500
+
+    active_dataset = "Catch_Haltestellen.json"
+    try:
+        with sqlite3.connect(DB_FILE, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key = 'active_stops_dataset'")
+            row = c.fetchone()
+            if row and row[0]:
+                active_dataset = row[0]
+    except Exception:
+        pass
+
+    if safe_filename == active_dataset:
+        load_active_stops_data(safe_filename)
+
+    return jsonify({"success": True, "filename": safe_filename, "count": len(stops)})
+
+
+@app.route('/api/search_gtfs', methods=['POST'])
+def api_search_gtfs():
+    if not os.path.exists(GTFS_STOPS_FILE):
+        return jsonify({"error": "GTFS-Datei 'stops.txt' wurde im Ordner 'stops_data' nicht gefunden.", "results": []}), 404
+
+    req_data = request.get_json(silent=True) or {}
+    if not req_data and request.form:
+        req_data = request.form
+
+    stadt = req_data.get('stadt', '').strip()
+    stadtteil = req_data.get('stadtteil', '').strip()
+    name = req_data.get('name', '').strip()
+
+    if not name and not stadt and not stadtteil:
+        return jsonify([])
+
+    results = []
+    seen = set()
+
+    q_name = name.lower()
+    q_stadt = stadt.lower()
+    q_stadtteil = stadtteil.lower()
+
+    tokens_both = [t for t in f"{q_stadt} {q_name}".split() if len(t) > 0]
+    tokens_name = [t for t in q_name.split() if len(t) > 0]
+
+    try:
+        with open(GTFS_STOPS_FILE, 'r', encoding='utf-8-sig', errors='replace') as f:
+            sample = f.read(4096)
+            f.seek(0)
+            delimiter = ';' if ';' in sample and sample.count(';') > sample.count(',') else ','
+            reader = csv.DictReader(f, delimiter=delimiter)
+
+            candidates_both = []
+            candidates_name = []
+
+            for row in reader:
+                s_name = row.get('stop_name') or row.get('STOP_NAME') or ''
+                s_desc = row.get('stop_desc') or row.get('STOP_DESC') or ''
+                s_lat = row.get('stop_lat') or row.get('STOP_LAT') or ''
+                s_lon = row.get('stop_lon') or row.get('STOP_LON') or ''
+
+                if not s_name or not s_lat or not s_lon:
+                    continue
+
+                try:
+                    lat = float(str(s_lat).replace(',', '.'))
+                    lon = float(str(s_lon).replace(',', '.'))
+                except ValueError:
+                    continue
+
+                combined = f"{s_name} {s_desc}".lower()
+
+                if tokens_both and all(t in combined for t in tokens_both):
+                    candidates_both.append((s_name, lat, lon, combined))
+                elif tokens_name and all(t in combined for t in tokens_name):
+                    candidates_name.append((s_name, lat, lon, combined))
+
+            chosen = candidates_both if candidates_both else candidates_name
+
+            if q_stadtteil:
+                chosen.sort(key=lambda c: 0 if q_stadtteil in c[3] else 1)
+
+            for s_name, lat, lon, _ in chosen:
+                key = (s_name, round(lat, 5), round(lon, 5))
+                if key in seen:
+                    continue
+                seen.add(key)
+                results.append({
+                    "name": s_name,
+                    "lat": lat,
+                    "lon": lon
+                })
+                if len(results) >= 100:
+                    break
+
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"Fehler beim Lesen der GTFS-Datei: {str(e)}"}), 500
 
 
 # --- PLAYER ACTIONS API ---
@@ -2214,8 +2550,22 @@ def add_manual_points():
 
             now_iso = datetime.now(timezone.utc).isoformat()
             state["action_log"].insert(0, {
-                "id": str(uuid.uuid4()), "type": "system",
-                "timestamp": now_iso, "actual_timestamp": now_iso, "desc": desc
+                "id": str(uuid.uuid4()),
+                "type": "manual_points",
+                "team": team_id,
+                "timestamp": now_iso,
+                "actual_timestamp": now_iso,
+                "desc": str(points),
+                "admin_only": True
+            })
+            state["action_log"].insert(0, {
+                "id": str(uuid.uuid4()),
+                "type": "system",
+                "team": team_id,
+                "timestamp": now_iso,
+                "actual_timestamp": now_iso,
+                "desc": desc,
+                "admin_only": False
             })
             save_state(conn, state)
             return jsonify({'success': True})
@@ -2292,6 +2642,168 @@ def api_ticker_data():
             'action_log': public_log,
             'leaderboard': leaderboard
         })
+
+
+@app.route('/api/replay_data')
+def api_replay_data():
+    with sqlite3.connect(DB_FILE, timeout=10, isolation_level='DEFERRED') as conn:
+        conn.row_factory = sqlite3.Row
+        state = get_state(conn)
+        phase, start_iso, end_iso, mid_iso, now_iso = update_game_time_state(conn, state)
+
+        if not start_iso or not end_iso:
+            return jsonify({
+                "start_ts": 0,
+                "end_ts": 0,
+                "teams": {},
+                "locations": {},
+                "events": [],
+                "error": "Keine Spielzeiten konfiguriert."
+            })
+
+        start_dt = parse_iso_utc(start_iso)
+        end_dt = parse_iso_utc(end_iso)
+        now_dt = parse_iso_utc(now_iso)
+
+        if not start_dt or not end_dt:
+            return jsonify({
+                "start_ts": 0,
+                "end_ts": 0,
+                "teams": {},
+                "locations": {},
+                "events": [],
+                "error": "Ungültiges Zeitformat."
+            })
+
+        replay_start = start_dt - timedelta(minutes=5)
+        replay_end = end_dt + timedelta(minutes=3)
+        post_end = end_dt + timedelta(minutes=5)
+
+        # Prüfung: Wenn die aktuelle Zeit > end_time + 5 Minuten ist und replay_cache["data"] existiert
+        if (phase == "finished" or (now_dt and now_dt > post_end)) and replay_cache["data"] is not None:
+            return jsonify(replay_cache["data"])
+
+        c = conn.cursor()
+
+        # 1. GPS-Punkte aus location_history für alle Teams im Zeitfenster
+        sql_start = (replay_start - timedelta(minutes=1)).isoformat()
+        sql_end = (replay_end + timedelta(minutes=1)).isoformat()
+        c.execute("""
+            SELECT team_id, lat, lon, timestamp
+            FROM location_history
+            WHERE timestamp >= ? AND timestamp <= ?
+            ORDER BY timestamp ASC
+        """, (sql_start, sql_end))
+
+        locations = {t_id: [] for t_id in state["teams_data"]}
+        for row in c.fetchall():
+            t_id = row["team_id"]
+            pt_dt = parse_iso_utc(row["timestamp"])
+            if pt_dt and replay_start <= pt_dt <= replay_end:
+                if t_id not in locations:
+                    locations[t_id] = []
+                locations[t_id].append({
+                    "lat": row["lat"],
+                    "lon": row["lon"],
+                    "ts": int(pt_dt.timestamp() * 1000)
+                })
+
+        # 2. Aktionen aus action_logs im Zeitfenster
+        c.execute("""
+            SELECT id, type, team, team_name, stop, hunter, hunter_name, prey, prey_name, timestamp, actual_timestamp, desc, is_late, admin_only
+            FROM action_logs
+            ORDER BY timestamp ASC
+        """)
+
+        def find_closest_coords(pts, target_ts_ms, max_diff_ms=10 * 60 * 1000):
+            if not pts:
+                return None, None
+            closest = min(pts, key=lambda p: abs(p["ts"] - target_ts_ms))
+            if abs(closest["ts"] - target_ts_ms) <= max_diff_ms:
+                return closest["lat"], closest["lon"]
+            return None, None
+
+        events = []
+        for row in c.fetchall():
+            if row["admin_only"] and row["type"] not in ("role_change", "manual_points"):
+                continue
+
+            act_dt = parse_iso_utc(row["actual_timestamp"]) or parse_iso_utc(row["timestamp"])
+            if not act_dt:
+                continue
+
+            act_ts_ms = int(act_dt.timestamp() * 1000)
+            lat, lon = None, None
+
+            # Lade Koordinaten (lat/lon) nur für Events auf, deren act_dt im sichtbaren Zeitfenster liegt
+            if replay_start <= act_dt <= replay_end:
+                if row["type"] == "stop":
+                    stop_name = row["stop"]
+                    if stop_name and stop_name in stops_data:
+                        lat = stops_data[stop_name]["lat"]
+                        lon = stops_data[stop_name]["lon"]
+                    else:
+                        lat, lon = find_closest_coords(locations.get(row["team"], []), act_ts_ms)
+                elif row["type"] == "catch":
+                    prey_locs = locations.get(row["prey"], [])
+                    hunter_locs = locations.get(row["hunter"], [])
+                    lat, lon = find_closest_coords(prey_locs, act_ts_ms)
+                    if lat is None:
+                        lat, lon = find_closest_coords(hunter_locs, act_ts_ms)
+
+            events.append({
+                "id": row["id"],
+                "type": row["type"],
+                "ts": act_ts_ms,
+                "desc": row["desc"],
+                "team": row["team"],
+                "team_name": row["team_name"],
+                "stop": row["stop"],
+                "hunter": row["hunter"],
+                "hunter_name": row["hunter_name"],
+                "prey": row["prey"],
+                "prey_name": row["prey_name"],
+                "lat": lat,
+                "lon": lon
+            })
+
+        events.sort(key=lambda e: e["ts"])
+
+        # 3. Teams Daten
+        teams_dict = {}
+        for t_id, d in state["teams_data"].items():
+            teams_dict[t_id] = {
+                "id": t_id,
+                "display_name": d.get("display_name", t_id),
+                "role": d.get("role", "keine"),
+                "deactivated": bool(d.get("deactivated", False))
+            }
+
+        result_data = {
+            "start_ts": int(replay_start.timestamp() * 1000),
+            "end_ts": int(replay_end.timestamp() * 1000),
+            "config": state["config"],
+            "teams": teams_dict,
+            "locations": locations,
+            "events": events
+        }
+
+        # Schreibe das Ergebnis in den Cache, sofern das Spiel endgültig beendet ist
+        if phase == "finished" or (now_dt and now_dt > post_end):
+            replay_cache["data"] = result_data
+            replay_cache["timestamp"] = datetime.now(timezone.utc).isoformat()
+
+        return jsonify(result_data)
+
+
+@app.route('/replay')
+def replay():
+    with sqlite3.connect(DB_FILE, timeout=10, isolation_level='DEFERRED') as conn:
+        conn.row_factory = sqlite3.Row
+        state = get_state(conn)
+        phase, start_iso, end_iso, mid_iso, now_iso = update_game_time_state(conn, state)
+
+    return render_template('replay.html', phase=phase, start_time=start_iso, end_time=end_iso)
 
 
 # --- TRACCAR WEBHOOK ROUTE ---

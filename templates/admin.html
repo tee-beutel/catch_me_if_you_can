@@ -266,6 +266,8 @@
     </div>
 
     <div style="text-align: center; margin-top: 20px; margin-bottom: 40px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
+        <a href="/replay" target="_blank" class="btn btn-green" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">🎬 Zum Replay</a>
+        <button type="button" onclick="clearReplayCache()" class="btn btn-orange" style="padding: 15px 30px; font-size: 1em;">🗑️ Replay-Cache leeren</button>
         <a href="/adminconsole-{{ admin_url }}/settings" class="btn btn-petrol" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">⚙️ Zu den Spiel-Einstellungen</a>
         <a href="/traccar_debug-{{ admin_url }}" class="btn btn-neutral" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">🛰️ Traccar Diagnose & Debug</a>
     </div>
@@ -416,13 +418,17 @@
         }
 
         // Funktion zur sekundengenauen Darstellung der Spieler auf der Karte
+        let adminTeamMarkers = {};
         function updateTeamMap(teamLocations) {
-            teamLayerGroup.clearLayers();
             if (!teamLocations) return;
 
             const now = Date.now() + serverOffset;
+            const currentKeys = new Set();
 
             teamLocations.forEach(team => {
+                const markerKey = String(team.id || team.name);
+                currentKeys.add(markerKey);
+
                 let bgColor = '#6c757d'; // Standard (Keine Rolle)
                 if (team.role === 'fänger') bgColor = '#EB6502';
                 else if (team.role === 'läufer') bgColor = '#AEC905';
@@ -461,10 +467,25 @@
                     </div>
                 `;
 
-                L.marker([team.lat, team.lon], {icon: icon, zIndexOffset: 1000})
-                    .bindPopup(popupContent)
-                    .addTo(teamLayerGroup);
+                if (adminTeamMarkers[markerKey]) {
+                    const m = adminTeamMarkers[markerKey];
+                    m.setLatLng([team.lat, team.lon]);
+                    m.setIcon(icon);
+                    m.setPopupContent(popupContent);
+                } else {
+                    const m = L.marker([team.lat, team.lon], {icon: icon, zIndexOffset: 1000})
+                        .bindPopup(popupContent)
+                        .addTo(teamLayerGroup);
+                    adminTeamMarkers[markerKey] = m;
+                }
             });
+
+            for (const key in adminTeamMarkers) {
+                if (!currentKeys.has(key)) {
+                    teamLayerGroup.removeLayer(adminTeamMarkers[key]);
+                    delete adminTeamMarkers[key];
+                }
+            }
         }
 
         function copyUrl(elementId) {
@@ -598,6 +619,17 @@
                 if (d.success) location.reload();
                 else alert(d.error || 'Fehler beim Eintragen!');
             }).catch(() => alert('Netzwerkfehler!'));
+        }
+
+        function clearReplayCache() {
+            if (!confirm("Möchtest du den Replay-Cache wirklich manuell leeren?")) return;
+            fetch('/adminconsole-{{ admin_url }}/clear_replay_cache', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success) alert(d.message || "Replay-Cache wurde erfolgreich geleert.");
+                    else alert(d.error || "Fehler beim Leeren des Caches.");
+                })
+                .catch(() => alert("Netzwerkfehler beim Leeren des Replay-Caches!"));
         }
     </script>
 </body>

@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Haltestellen-Editor - Catch Me</title>
+    <!-- VCD Hausschriften laden -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@700&family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        /* Basis VCD-Typografie und Farben */
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Roboto', Arial, sans-serif;
+            font-weight: 400;
+            background-color: #f4f7f6;
+            color: #333;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* VCD Farbpalette */
+        :root {
+            --vcd-petrol: #049EAB;
+            --vcd-petrol-hover: #038c98;
+            --vcd-green: #AEC905;
+            --vcd-green-hover: #9bb503;
+            --vcd-orange: #EB6502;
+            --vcd-orange-hover: #d15902;
+            --vcd-gray-petrol: #4E8293;
+        }
+
+        /* Header mit VCD-Logo oben rechts */
+        .header {
+            height: 65px;
+            background: white;
+            border-bottom: 2px solid var(--vcd-petrol);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            flex-shrink: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .header h1 {
+            font-family: 'Roboto Slab', serif;
+            font-weight: 700;
+            color: var(--vcd-petrol);
+            margin: 0;
+            font-size: 1.4rem;
+        }
+        .header-logo {
+            height: 46px;
+            object-fit: contain;
+        }
+
+        /* Buttons mit Roboto Black */
+        .btn {
+            padding: 10px 18px;
+            border: none;
+            cursor: pointer;
+            font-family: 'Roboto', sans-serif;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: white;
+            font-size: 13px;
+            text-align: center;
+            border-radius: 3px;
+            transition: background 0.2s ease, transform 0.1s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .btn:active { transform: translateY(1px); }
+        .btn-petrol { background-color: var(--vcd-petrol); }
+        .btn-petrol:hover { background-color: var(--vcd-petrol-hover); }
+        .btn-green { background-color: var(--vcd-green); }
+        .btn-green:hover { background-color: var(--vcd-green-hover); }
+        .btn-orange { background-color: var(--vcd-orange); }
+        .btn-orange:hover { background-color: var(--vcd-orange-hover); }
+        .btn-secondary { background-color: #6c757d; }
+        .btn-secondary:hover { background-color: #5a6268; }
+
+        /* Split-Screen Layout */
+        .split-container {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 65px);
+            position: relative;
+            overflow: hidden;
+        }
+        #map-container {
+            flex: 1;
+            height: 100%;
+            position: relative;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Sidebar */
+        #sidebar {
+            width: 480px;
+            max-width: 42%;
+            height: 100%;
+            background: white;
+            border-left: 1px solid #ddd;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.04);
+        }
+
+        /* Überschriften in Roboto Slab */
+        h2, h3 {
+            font-family: 'Roboto Slab', serif;
+            font-weight: 700;
+            color: var(--vcd-petrol);
+            margin-top: 0;
+            margin-bottom: 12px;
+        }
+        h3 {
+            font-size: 1.15rem;
+            border-bottom: 2px solid #eef2f2;
+            padding-bottom: 6px;
+        }
+
+        /* Formular-Elemente */
+        .card-box {
+            background: #fafbfc;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 16px;
+        }
+        .form-group {
+            margin-bottom: 12px;
+        }
+        label {
+            display: block;
+            font-family: 'Roboto', Arial, sans-serif;
+            font-weight: 400;
+            margin-bottom: 4px;
+            color: #333;
+            font-size: 0.9em;
+        }
+        input[type="text"], input[type="number"], select {
+            width: 100%;
+            padding: 9px 12px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-family: 'Roboto', sans-serif;
+            font-size: 14px;
+            background: white;
+            transition: border 0.2s ease;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--vcd-petrol);
+            box-shadow: 0 0 0 2px rgba(4, 158, 171, 0.15);
+        }
+        .row {
+            display: flex;
+            gap: 10px;
+        }
+        .row .form-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+        .help-text {
+            font-size: 0.82em;
+            color: #666;
+            margin-top: 4px;
+            line-height: 1.35;
+        }
+
+        /* JSON Key Preview Box */
+        .key-preview-box {
+            background: #eef8f8;
+            border-left: 3px solid var(--vcd-petrol);
+            padding: 8px 12px;
+            margin: 8px 0 14px 0;
+            font-size: 0.88em;
+            border-radius: 2px;
+        }
+        .key-preview-box code {
+            font-weight: 700;
+            color: #026770;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 1.05em;
+        }
+
+        /* Haltestellen Liste */
+        .stops-list-container {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #e0e6ed;
+            border-radius: 4px;
+            background: white;
+            margin-top: 8px;
+        }
+        .stop-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 7px 10px;
+            border-bottom: 1px solid #f0f3f6;
+            cursor: pointer;
+            font-size: 0.88em;
+            transition: background 0.15s ease;
+        }
+        .stop-item:hover {
+            background-color: #f1f8f9;
+        }
+        .stop-item.selected {
+            background-color: #e0f2f3;
+            border-left: 3px solid var(--vcd-petrol);
+        }
+        .stop-item-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .badge-factor {
+            font-size: 0.75em;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 10px;
+            color: white;
+        }
+        .badge-orange { background-color: var(--vcd-orange); }
+        .badge-petrol { background-color: var(--vcd-petrol); }
+        .badge-gray { background-color: var(--vcd-gray-petrol); }
+
+        .btn-delete-stop {
+            background: none;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            padding: 3px 6px;
+            font-size: 13px;
+            border-radius: 3px;
+            transition: color 0.15s ease, background 0.15s ease;
+        }
+        .btn-delete-stop:hover {
+            color: var(--vcd-orange);
+            background: #fff0eb;
+        }
+
+        /* Leaflet Custom Marker Pins */
+        .vcd-pin {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 2px 7px rgba(0,0,0,0.4);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.15s ease;
+        }
+        .vcd-pin:hover {
+            transform: scale(1.15);
+        }
+
+        /* Karten-Legende Overlay */
+        .map-legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 10px 14px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+            font-size: 12px;
+            z-index: 1000;
+            border: 1px solid #ddd;
+            line-height: 1.6;
+        }
+        .legend-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .legend-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 9px;
+            font-weight: bold;
+        }
+
+        /* Status Toast */
+        #status-toast {
+            position: fixed;
+            top: 75px;
+            right: 20px;
+            background: #333;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 4px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            font-size: 14px;
+            z-index: 9999;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        @media (max-width: 900px) {
+            .split-container {
+                flex-direction: column;
+                height: auto;
+                overflow: auto;
+            }
+            body {
+                overflow: auto;
+                height: auto;
+            }
+            #map-container {
+                height: 420px;
+                flex: none;
+            }
+            #sidebar {
+                width: 100%;
+                max-width: 100%;
+                border-left: none;
+                border-top: 2px solid var(--vcd-petrol);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header mit VCD-Logo oben rechts -->
+    <header class="header">
+        <div class="header-left">
+            <a href="/adminconsole-{{ admin_url }}/settings" class="btn btn-secondary" style="padding: 7px 12px; font-size: 12px;">← Einstellungen</a>
+            <h1>Haltestellen-Editor</h1>
+        </div>
+        <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo" class="header-logo">
+    </header>
+
+    <!-- Split-Screen -->
+    <div class="split-container">
+
+        <!-- Linke Seite: Karte -->
+        <div id="map-container">
+            <div id="map"></div>
+            <div class="map-legend">
+                <b style="color: var(--vcd-petrol); display:block; margin-bottom: 4px;">VCD Farbcodes:</b>
+                <div class="legend-row">
+                    <span class="legend-dot" style="background: var(--vcd-orange);">⭐</span>
+                    <span>Wertigkeit &gt; 1 (Sonderpunkte)</span>
+                </div>
+                <div class="legend-row">
+                    <span class="legend-dot" style="background: var(--vcd-petrol);">●</span>
+                    <span>Wertigkeit = 1 (Standard)</span>
+                </div>
+                <div class="legend-row">
+                    <span class="legend-dot" style="background: var(--vcd-gray-petrol);">⚠️</span>
+                    <span>Wertigkeit &lt; 1 (Abwertung)</span>
+                </div>
+                <div class="legend-row" style="margin-top: 3px; border-top: 1px dashed #ddd; padding-top: 3px;">
+                    <span class="legend-dot" style="background: #026770; border: 1px solid var(--vcd-green);">🔍</span>
+                    <span>GTFS-Suchtreffer</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rechte Seite: Sidebar -->
+        <div id="sidebar">
+
+            <!-- Sektion 1: Datensatz-Verwaltung -->
+            <div class="card-box">
+                <h3>Datensatz-Verwaltung</h3>
+                
+                <div class="form-group">
+                    <label for="dataset-select">Bestehenden Datensatz laden:</label>
+                    <select id="dataset-select"></select>
+                </div>
+
+                <div class="form-group" style="margin-top: 14px;">
+                    <label for="new-dataset-name">Neuen Datensatz anlegen:</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="new-dataset-name" placeholder="z. B. Neuer_Datensatz.json">
+                        <button id="btn-create-dataset" class="btn btn-green" style="white-space: nowrap;">Anlegen</button>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                    <label style="margin: 0; font-weight: 700; color: #026770;">Haltestellen (<span id="stops-counter">0</span>):</label>
+                    <input type="text" id="filter-stops-input" placeholder="Filtern..." style="width: 140px; padding: 4px 8px; font-size: 12px;">
+                </div>
+                
+                <div id="stops-list" class="stops-list-container">
+                    <div style="padding: 15px; color: #777; text-align: center; font-size: 0.85em;">Keine Haltestellen geladen</div>
+                </div>
+            </div>
+
+            <!-- Sektion 2: Formular (Bearbeiten / Anlegen) -->
+            <div class="card-box">
+                <h3 id="form-title">Haltestelle bearbeiten / anlegen</h3>
+
+                <div class="form-group">
+                    <label for="input-stadt">Stadtname (nur für GTFS-Suche):</label>
+                    <input type="text" id="input-stadt" placeholder="z. B. Braunschweig">
+                </div>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label for="input-stadtteil">Stadtteilname:</label>
+                        <input type="text" id="input-stadtteil" placeholder="z. B. Innenstadt">
+                    </div>
+                    <div class="form-group">
+                        <label for="input-name">Haltestellenname:</label>
+                        <input type="text" id="input-name" placeholder="z. B. Rathaus">
+                    </div>
+                </div>
+
+                <!-- Dynamische Vorschau des finalen JSON-Keys -->
+                <div class="key-preview-box">
+                    <span>Finaler JSON-Key: </span>
+                    <code id="preview-key">—</code>
+                </div>
+
+                <div class="form-group">
+                    <label for="input-factor">Wertigkeit (Faktor, Standard: 1):</label>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <input type="number" id="input-factor" step="0.5" value="1.0" min="0.0" style="width: 110px;">
+                        <span id="factor-preview-badge" class="badge-factor badge-petrol" style="font-size: 0.85em; padding: 4px 8px;">● Standard (1.0)</span>
+                    </div>
+                </div>
+
+                <div class="row" style="margin-top: 10px;">
+                    <div class="form-group">
+                        <label for="input-lat">Latitude:</label>
+                        <input type="number" id="input-lat" step="any" placeholder="z. B. 52.2688">
+                    </div>
+                    <div class="form-group">
+                        <label for="input-lon">Longitude:</label>
+                        <input type="number" id="input-lon" step="any" placeholder="z. B. 10.5267">
+                    </div>
+                </div>
+                <div class="help-text">📍 Durch Klick auf die Karte werden Koordinaten automatisch übernommen.</div>
+
+                <!-- Formular Aktionen -->
+                <div style="margin-top: 14px;">
+                    <button id="btn-search-gtfs" class="btn btn-petrol" style="width: 100%;">
+                        🔍 In GTFS suchen
+                    </button>
+                    <div id="gtfs-status-message" class="help-text" style="display: none; padding: 6px 0; font-weight: 500;"></div>
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-top: 12px;">
+                    <button id="btn-apply-stop" class="btn btn-green" style="flex: 2;">✓ Übernehmen</button>
+                    <button id="btn-clear-form" class="btn btn-secondary" style="flex: 1;">Leeren</button>
+                </div>
+            </div>
+
+            <!-- Sektion 3: Globaler Speicher-Button -->
+            <div>
+                <button id="btn-save-server" class="btn btn-petrol" style="width: 100%; padding: 15px; font-size: 15px; box-shadow: 0 4px 12px rgba(4,158,171,0.3);">
+                    💾 Auf Server speichern
+                </button>
+                <div id="save-status-indicator" style="text-align: center; margin-top: 6px; font-size: 0.85em; color: #666;">
+                    Alle Änderungen auf Server synchronisieren
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Status Toast Popup -->
+    <div id="status-toast"></div>
+
+    <script>
+        // --- ANWENDUNGS-STATE ---
+        let currentDatasetFilename = "";
+        let stopsData = {}; // Format: { "Stadtteil, Name": { lat: ..., lon: ..., factor: ... } }
+        let currentEditKey = null; // Falls eine existierende Haltestelle editiert wird
+        let unsavedChanges = false;
+
+        // --- MAP INITIALISIERUNG ---
+        const map = L.map('map').setView([52.26887, 10.52677], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        const stopsLayerGroup = L.layerGroup().addTo(map);
+        const gtfsSearchLayerGroup = L.layerGroup().addTo(map);
+        let tempClickMarker = null;
+
+        // --- MARKER ICONS NACH VCD CORPORATE DESIGN ---
+        function getVcdStopIcon(factor) {
+            let bg = '#049EAB'; // VCD Petrol
+            let symbol = '●';
+            let size = 26;
+
+            if (factor > 1) {
+                bg = '#EB6502'; // VCD Orange
+                symbol = '⭐';
+                size = 30;
+            } else if (factor < 1) {
+                bg = '#4E8293'; // VCD Grau-Petrol
+                symbol = '⚠️';
+                size = 28;
+            }
+
+            return L.divIcon({
+                className: 'custom-vcd-marker',
+                html: `<div class="vcd-pin" style="background-color: ${bg}; width: ${size}px; height: ${size}px; font-size: ${factor === 1 ? '14px' : '12px'};">${symbol}</div>`,
+                iconSize: [size, size],
+                iconAnchor: [size / 2, size / 2],
+                popupAnchor: [0, -size / 2]
+            });
+        }
+
+        const gtfsIcon = L.divIcon({
+            className: 'custom-gtfs-marker',
+            html: `<div class="vcd-pin" style="background-color: #026770; border: 2px solid #AEC905; width: 26px; height: 26px; font-size: 12px;">🔍</div>`,
+            iconSize: [26, 26],
+            iconAnchor: [13, 13],
+            popupAnchor: [0, -13]
+        });
+
+        const tempPinIcon = L.divIcon({
+            className: 'custom-temp-marker',
+            html: `<div style="background-color: #e53e3e; width: 18px; height: 18px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 8px rgba(0,0,0,0.5);"></div>`,
+            iconSize: [18, 18],
+            iconAnchor: [9, 9]
+        });
+
+        // --- KARTEN-KLICK: TEMPORÄREN PIN SETZEN & KOORDINATEN ÜBERNEHMEN ---
+        map.on('click', function(e) {
+            const lat = parseFloat(e.latlng.lat.toFixed(6));
+            const lon = parseFloat(e.latlng.lng.toFixed(6));
+
+            document.getElementById('input-lat').value = lat;
+            document.getElementById('input-lon').value = lon;
+
+            if (tempClickMarker) {
+                map.removeLayer(tempClickMarker);
+            }
+            tempClickMarker = L.marker([lat, lon], { icon: tempPinIcon }).addTo(map);
+            showToast(`Koordinaten übernommen: ${lat}, ${lon}`);
+        });
+
+        // --- FORMULAR & LIVE-PREVIEW HANDLING ---
+        const inputStadt = document.getElementById('input-stadt');
+        const inputStadtteil = document.getElementById('input-stadtteil');
+        const inputName = document.getElementById('input-name');
+        const inputFactor = document.getElementById('input-factor');
+        const inputLat = document.getElementById('input-lat');
+        const inputLon = document.getElementById('input-lon');
+        const previewKeyEl = document.getElementById('preview-key');
+        const factorBadgeEl = document.getElementById('factor-preview-badge');
+
+        function updateKeyPreview() {
+            const stadtteil = inputStadtteil.value.trim();
+            const name = inputName.value.trim();
+            let key = "";
+            if (stadtteil && name) {
+                key = `${stadtteil}, ${name}`;
+            } else if (stadtteil) {
+                key = `${stadtteil}, ...`;
+            } else if (name) {
+                key = name;
+            } else {
+                key = "—";
+            }
+            previewKeyEl.textContent = key;
+        }
+
+        function updateFactorBadge() {
+            let parsedVal = parseFloat(inputFactor.value);
+            const val = isNaN(parsedVal) ? 1.0 : parsedVal;
+            
+            if (val > 1) {
+                factorBadgeEl.className = "badge-factor badge-orange";
+                factorBadgeEl.textContent = `⭐ Sonderpunkte (${val})`;
+            } else if (val < 1) {
+                factorBadgeEl.className = "badge-factor badge-gray";
+                factorBadgeEl.textContent = `⚠️ Abwertung (${val})`;
+            } else {
+                factorBadgeEl.className = "badge-factor badge-petrol";
+                factorBadgeEl.textContent = `● Standard (1.0)`;
+            }
+        }
+
+        inputStadtteil.addEventListener('input', updateKeyPreview);
+        inputName.addEventListener('input', updateKeyPreview);
+        inputFactor.addEventListener('input', updateFactorBadge);
+
+        function clearForm() {
+            currentEditKey = null;
+            document.getElementById('form-title').textContent = "Haltestelle anlegen";
+            inputStadtteil.value = "";
+            inputName.value = "";
+            inputFactor.value = "1.0";
+            inputLat.value = "";
+            inputLon.value = "";
+            updateKeyPreview();
+            updateFactorBadge();
+            if (tempClickMarker) {
+                map.removeLayer(tempClickMarker);
+                tempClickMarker = null;
+            }
+            document.querySelectorAll('.stop-item').forEach(el => el.classList.remove('selected'));
+        }
+
+        document.getElementById('btn-clear-form').addEventListener('click', clearForm);
+
+        function populateFormForStop(key, data) {
+            currentEditKey = key;
+            document.getElementById('form-title').textContent = `Haltestelle bearbeiten: ${key}`;
+
+            let stadtteil = "";
+            let name = key;
+            if (key.includes(',')) {
+                const parts = key.split(',');
+                stadtteil = parts[0].trim();
+                name = parts.slice(1).join(',').trim();
+            }
+
+            inputStadtteil.value = stadtteil;
+            inputName.value = name;
+            inputFactor.value = data.factor !== undefined ? data.factor : 1.0;
+            inputLat.value = data.lat;
+            inputLon.value = data.lon;
+
+            updateKeyPreview();
+            updateFactorBadge();
+
+            // Zentriere Karte auf Haltestelle
+            map.flyTo([data.lat, data.lon], 16, { animate: true, duration: 0.8 });
+
+            // Markiere ausgewählte Zeile in Liste
+            document.querySelectorAll('.stop-item').forEach(el => {
+                if (el.dataset.key === key) {
+                    el.classList.add('selected');
+                    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else {
+                    el.classList.remove('selected');
+                }
+            });
+        }
+
+        // --- HALTESTELLEN RENDERN & LISTE BEFÜLLEN ---
+        function renderStops() {
+            stopsLayerGroup.clearLayers();
+            const stopsListEl = document.getElementById('stops-list');
+            stopsListEl.innerHTML = "";
+
+            const keys = Object.keys(stopsData);
+            document.getElementById('stops-counter').textContent = keys.length;
+
+            if (keys.length === 0) {
+                stopsListEl.innerHTML = '<div style="padding: 15px; color: #777; text-align: center; font-size: 0.85em;">Keine Haltestellen im Datensatz vorhanden.</div>';
+                return;
+            }
+
+            const bounds = [];
+            const filterQuery = document.getElementById('filter-stops-input').value.toLowerCase().trim();
+
+            keys.sort().forEach(key => {
+                const stop = stopsData[key];
+                
+                let parsedFactor = parseFloat(stop.factor);
+                const factor = isNaN(parsedFactor) ? 1.0 : parsedFactor;
+                
+                const lat = parseFloat(stop.lat);
+                const lon = parseFloat(stop.lon);
+
+                if (!isNaN(lat) && !isNaN(lon)) {
+                    bounds.push([lat, lon]);
+
+                    // Marker auf Karte
+                    const marker = L.marker([lat, lon], {
+                        icon: getVcdStopIcon(factor)
+                    });
+
+                    marker.bindPopup(`
+                        <div style="font-family: 'Roboto', sans-serif;">
+                            <b style="color: #049EAB; font-size: 1.1em;">${key}</b><br>
+                            Faktor: <b>${factor}</b><br>
+                            Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}<br>
+                            <button onclick="window.editStopFromPopup('${encodeURIComponent(key)}')" class="btn btn-petrol" style="padding: 4px 8px; font-size: 11px; margin-top: 6px; width: 100%;">
+                                Im Formular bearbeiten
+                            </button>
+                        </div>
+                    `);
+
+                    marker.on('click', () => {
+                        populateFormForStop(key, stop);
+                    });
+
+                    stopsLayerGroup.addLayer(marker);
+                }
+
+                // Zeile in Sidebar-Liste
+                if (!filterQuery || key.toLowerCase().includes(filterQuery)) {
+                    const item = document.createElement('div');
+                    item.className = 'stop-item' + (currentEditKey === key ? ' selected' : '');
+                    item.dataset.key = key;
+
+                    let badgeClass = 'badge-petrol';
+                    let badgeSymbol = '●';
+                    if (factor > 1) { badgeClass = 'badge-orange'; badgeSymbol = '⭐'; }
+                    else if (factor < 1) { badgeClass = 'badge-gray'; badgeSymbol = '⚠️'; }
+
+                    item.innerHTML = `
+                        <div class="stop-item-title" title="${key}">
+                            <span class="badge-factor ${badgeClass}" style="padding: 2px 5px;">${badgeSymbol} ${factor}</span>
+                            <span>${key}</span>
+                        </div>
+                        <button class="btn-delete-stop" title="Haltestelle löschen" onclick="event.stopPropagation(); window.deleteStop('${encodeURIComponent(key)}');">✕</button>
+                    `;
+
+                    item.addEventListener('click', () => {
+                        populateFormForStop(key, stop);
+                    });
+
+                    stopsListEl.appendChild(item);
+                }
+            });
+
+            if (bounds.length > 0 && !currentEditKey) {
+                map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+            }
+        }
+
+        window.editStopFromPopup = function(encodedKey) {
+            const key = decodeURIComponent(encodedKey);
+            if (stopsData[key]) {
+                populateFormForStop(key, stopsData[key]);
+            }
+        };
+
+        window.deleteStop = function(encodedKey) {
+            const key = decodeURIComponent(encodedKey);
+            if (confirm(`Haltestelle "${key}" wirklich aus diesem Datensatz löschen?`)) {
+                delete stopsData[key];
+                if (currentEditKey === key) {
+                    clearForm();
+                }
+                unsavedChanges = true;
+                updateSaveIndicator();
+                renderStops();
+                showToast(`Haltestelle "${key}" entfernt.`);
+            }
+        };
+
+        document.getElementById('filter-stops-input').addEventListener('input', renderStops);
+
+        // --- BUTTON "ÜBERNEHMEN" (IN LOKALEN STATE ÜBERNEHMEN) ---
+        document.getElementById('btn-apply-stop').addEventListener('click', function() {
+            const stadtteil = inputStadtteil.value.trim();
+            const name = inputName.value.trim();
+
+            if (!name) {
+                alert("Bitte gib mindestens einen Haltestellennamen ein!");
+                return;
+            }
+
+            const lat = parseFloat(inputLat.value);
+            const lon = parseFloat(inputLon.value);
+
+            if (isNaN(lat) || isNaN(lon)) {
+                alert("Bitte gültige Latitude- und Longitude-Werte eingeben oder auf die Karte klicken!");
+                return;
+            }
+
+            let parsedFactor = parseFloat(inputFactor.value);
+            const factor = isNaN(parsedFactor) ? 1.0 : parsedFactor;
+            
+            const finalKey = stadtteil ? `${stadtteil}, ${name}` : name;
+
+            // Falls der Key umbenannt wurde, alten Key löschen
+            if (currentEditKey && currentEditKey !== finalKey) {
+                delete stopsData[currentEditKey];
+            }
+
+            stopsData[finalKey] = {
+                lat: lat,
+                lon: lon,
+                factor: factor
+            };
+
+            currentEditKey = finalKey;
+            unsavedChanges = true;
+            updateSaveIndicator();
+
+            if (tempClickMarker) {
+                map.removeLayer(tempClickMarker);
+                tempClickMarker = null;
+            }
+
+            renderStops();
+            clearForm();
+            showToast(`Haltestelle "${finalKey}" übernommen!`);
+        });
+
+        // --- DATASET LADEN & VERWALTEN ---
+        async function loadAvailableDatasets(selectFilename = null) {
+            try {
+                const res = await fetch('/api/stop_datasets');
+                const datasets = await res.json();
+                const selectEl = document.getElementById('dataset-select');
+                selectEl.innerHTML = "";
+
+                if (!Array.isArray(datasets) || datasets.length === 0) {
+                    selectEl.innerHTML = '<option value="">Keine Datensätze gefunden</option>';
+                    return;
+                }
+
+                datasets.forEach(ds => {
+                    const opt = document.createElement('option');
+                    opt.value = ds;
+                    opt.textContent = ds;
+                    selectEl.appendChild(opt);
+                });
+
+                let toSelect = selectFilename || datasets[0];
+                if (datasets.includes("Catch_Haltestellen.json") && !selectFilename) {
+                    toSelect = "Catch_Haltestellen.json";
+                }
+
+                selectEl.value = toSelect;
+                await loadDataset(toSelect);
+            } catch (err) {
+                console.error("Fehler beim Abrufen der Datensätze:", err);
+                showToast("Fehler beim Laden der Datensatzliste!");
+            }
+        }
+
+        async function loadDataset(filename) {
+            if (unsavedChanges) {
+                if (!confirm("Es gibt ungespeicherte Änderungen! Möchtest du wirklich einen anderen Datensatz laden und ungespeicherte Änderungen verwerfen?")) {
+                    document.getElementById('dataset-select').value = currentDatasetFilename;
+                    return;
+                }
+            }
+
+            try {
+                const res = await fetch(`/api/stop_dataset/${encodeURIComponent(filename)}`);
+                if (!res.ok) throw new Error("Fehler beim Laden");
+                stopsData = await res.json();
+                currentDatasetFilename = filename;
+                unsavedChanges = false;
+                updateSaveIndicator();
+                clearForm();
+                gtfsSearchLayerGroup.clearLayers();
+                renderStops();
+                showToast(`Datensatz "${filename}" geladen.`);
+            } catch (err) {
+                alert(`Fehler beim Laden des Datensatzes "${filename}": ${err.message}`);
+            }
+        }
+
+        document.getElementById('dataset-select').addEventListener('change', function() {
+            loadDataset(this.value);
+        });
+
+        // --- NEUEN DATENSATZ ANLEGEN ---
+        document.getElementById('btn-create-dataset').addEventListener('click', function() {
+            let nameInput = document.getElementById('new-dataset-name').value.trim();
+            if (!nameInput) {
+                alert("Bitte einen Dateinamen eingeben (z. B. Neuer_Datensatz.json)");
+                return;
+            }
+            if (!nameInput.endsWith('.json')) {
+                nameInput += '.json';
+            }
+
+            const selectEl = document.getElementById('dataset-select');
+            let exists = false;
+            for (let opt of selectEl.options) {
+                if (opt.value === nameInput) {
+                    exists = true;
+                    break;
+                }
+            }
+
+            if (exists) {
+                alert("Ein Datensatz mit diesem Namen existiert bereits!");
+                selectEl.value = nameInput;
+                loadDataset(nameInput);
+                return;
+            }
+
+            // Neues Option Element hinzufügen
+            const opt = document.createElement('option');
+            opt.value = nameInput;
+            opt.textContent = nameInput;
+            selectEl.appendChild(opt);
+            selectEl.value = nameInput;
+
+            currentDatasetFilename = nameInput;
+            stopsData = {};
+            unsavedChanges = true;
+            updateSaveIndicator();
+            clearForm();
+            gtfsSearchLayerGroup.clearLayers();
+            renderStops();
+            document.getElementById('new-dataset-name').value = "";
+            showToast(`Neuer Datensatz "${nameInput}" initialisiert. Füge Haltestellen hinzu und speichere auf dem Server.`);
+        });
+
+        // --- GTFS SUCHE (/api/search_gtfs) ---
+        const btnSearchGtfs = document.getElementById('btn-search-gtfs');
+        const gtfsStatusMsg = document.getElementById('gtfs-status-message');
+
+        btnSearchGtfs.addEventListener('click', async function() {
+            const stadt = inputStadt.value.trim();
+            const stadtteil = inputStadtteil.value.trim();
+            const name = inputName.value.trim();
+
+            if (!name && !stadt && !stadtteil) {
+                alert("Bitte mindestens einen Haltestellennamen oder eine Stadt für die GTFS-Suche eingeben!");
+                return;
+            }
+
+            btnSearchGtfs.disabled = true;
+            btnSearchGtfs.textContent = "⏳ Suche in GTFS...";
+            gtfsStatusMsg.style.display = "block";
+            gtfsStatusMsg.style.color = "#049EAB";
+            gtfsStatusMsg.textContent = "Durchsuche GTFS stops.txt...";
+
+            gtfsSearchLayerGroup.clearLayers();
+
+            try {
+                const res = await fetch('/api/search_gtfs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stadt, stadtteil, name })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    gtfsStatusMsg.style.color = "#EB6502";
+                    gtfsStatusMsg.textContent = data.error || "Fehler bei der GTFS-Suche.";
+                    alert(data.error || "GTFS-Datei nicht gefunden oder Fehler bei der Suche.");
+                    return;
+                }
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    gtfsStatusMsg.style.color = "#666";
+                    gtfsStatusMsg.textContent = "Keine Treffer in stops.txt gefunden.";
+                    showToast("Keine passenden GTFS-Treffer gefunden.");
+                    return;
+                }
+
+                gtfsStatusMsg.style.color = "#026770";
+                gtfsStatusMsg.textContent = `${data.length} Treffer auf der Karte visualisiert. Klicke auf einen Marker!`;
+
+                const searchBounds = [];
+                data.forEach(item => {
+                    const lat = parseFloat(item.lat);
+                    const lon = parseFloat(item.lon);
+                    searchBounds.push([lat, lon]);
+
+                    const marker = L.marker([lat, lon], { icon: gtfsIcon });
+                    marker.bindPopup(`
+                        <div style="font-family: 'Roboto', sans-serif;">
+                            <span style="font-size: 0.8em; color: #026770; font-weight: bold;">GTFS SUCHTREFFER</span><br>
+                            <b style="font-size: 1.1em; color: #333;">${item.name}</b><br>
+                            Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}<br>
+                            <button onclick="window.applyGtfsCoords(${lat}, ${lon}, '${encodeURIComponent(item.name)}')" class="btn btn-green" style="padding: 5px 10px; font-size: 11px; margin-top: 8px; width: 100%;">
+                                ✓ Koordinaten übernehmen
+                            </button>
+                        </div>
+                    `);
+
+                    marker.on('click', () => {
+                        window.applyGtfsCoords(lat, lon, encodeURIComponent(item.name));
+                    });
+
+                    gtfsSearchLayerGroup.addLayer(marker);
+                });
+
+                if (searchBounds.length > 0) {
+                    map.fitBounds(searchBounds, { padding: [40, 40], maxZoom: 16 });
+                }
+
+                showToast(`${data.length} GTFS-Treffer auf der Karte eingezeichnet.`);
+
+            } catch (err) {
+                gtfsStatusMsg.style.color = "#EB6502";
+                gtfsStatusMsg.textContent = "Netzwerkfehler bei der GTFS-Suche.";
+                console.error(err);
+            } finally {
+                btnSearchGtfs.disabled = false;
+                btnSearchGtfs.textContent = "🔍 In GTFS suchen";
+            }
+        });
+
+        window.applyGtfsCoords = function(lat, lon, encodedName) {
+            const rawName = decodeURIComponent(encodedName);
+            inputLat.value = lat;
+            inputLon.value = lon;
+
+            // Falls Haltestellenname noch leer ist, schlage den Namen vor
+            if (!inputName.value.trim()) {
+                if (rawName.includes(',')) {
+                    const parts = rawName.split(',');
+                    if (!inputStadtteil.value.trim() && parts.length > 1) {
+                        inputStadtteil.value = parts[0].trim();
+                        inputName.value = parts.slice(1).join(',').trim();
+                    } else {
+                        inputName.value = parts.slice(1).join(',').trim();
+                    }
+                } else {
+                    inputName.value = rawName;
+                }
+                updateKeyPreview();
+            }
+
+            if (tempClickMarker) {
+                map.removeLayer(tempClickMarker);
+            }
+            tempClickMarker = L.marker([lat, lon], { icon: tempPinIcon }).addTo(map);
+
+            showToast(`GTFS-Koordinaten für "${rawName}" übernommen.`);
+        };
+
+        // --- GLOBALER BUTTON: AUF SERVER SPEICHERN ---
+        document.getElementById('btn-save-server').addEventListener('click', async function() {
+            if (!currentDatasetFilename) {
+                alert("Kein Datensatz ausgewählt!");
+                return;
+            }
+
+            const btn = document.getElementById('btn-save-server');
+            btn.disabled = true;
+            btn.textContent = "⏳ Speichere auf Server...";
+
+            try {
+                const res = await fetch('/api/save_stop_dataset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: currentDatasetFilename,
+                        data: stopsData
+                    })
+                });
+
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    alert(data.error || "Fehler beim Speichern des Datensatzes auf dem Server!");
+                    return;
+                }
+
+                unsavedChanges = false;
+                updateSaveIndicator();
+                showToast(`✓ Datensatz "${currentDatasetFilename}" (${Object.keys(stopsData).length} Haltestellen) erfolgreich auf dem Server gespeichert!`);
+            } catch (err) {
+                alert("Netzwerkfehler beim Speichern des Datensatzes!");
+                console.error(err);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "💾 Auf Server speichern";
+            }
+        });
+
+        function updateSaveIndicator() {
+            const ind = document.getElementById('save-status-indicator');
+            if (unsavedChanges) {
+                ind.innerHTML = `<span style="color: var(--vcd-orange); font-weight: bold;">● Ungespeicherte Änderungen im Browser</span>`;
+            } else {
+                ind.innerHTML = `<span style="color: #049EAB;">✓ Alle Änderungen auf dem Server gespeichert</span>`;
+            }
+        }
+
+        // --- TOAST HILFSFUNKTION ---
+        function showToast(msg) {
+            const toast = document.getElementById('status-toast');
+            toast.textContent = msg;
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.opacity = '1'; }, 10);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => { toast.style.display = 'none'; }, 300);
+            }, 3000);
+        }
+
+        // --- INITIALISIERUNG BEIM LADEN DER SEITE ---
+        window.addEventListener('DOMContentLoaded', () => {
+            loadAvailableDatasets();
+            updateKeyPreview();
+            updateFactorBadge();
+        });
+    </script>
+</body>
+</html>

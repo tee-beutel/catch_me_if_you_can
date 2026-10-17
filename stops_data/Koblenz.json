@@ -1,0 +1,167 @@
+{
+    "Arenberg, Falkenweg": {
+        "factor": 1.5,
+        "lat": 50.365486,
+        "lon": 7.651697
+    },
+    "Arzheim, In der Strenge": {
+        "factor": 1.5,
+        "lat": 50.35573,
+        "lon": 7.634252
+    },
+    "Asterstein, Lullo-Reinhardt-Platz": {
+        "factor": 2,
+        "lat": 50.356483,
+        "lon": 7.617363
+    },
+    "Asterstein, Seniorenzentrum": {
+        "factor": 1,
+        "lat": 50.34756,
+        "lon": 7.621567
+    },
+    "Bubenheim, Jakob-Hasslacher-Straße": {
+        "factor": 1,
+        "lat": 50.38014,
+        "lon": 7.563298
+    },
+    "Ehrenbreitstein, Festungsaufzug Bergstation": {
+        "factor": 2,
+        "lat": 50.363816,
+        "lon": 7.613981
+    },
+    "Goldgrube, Overbergplatz": {
+        "factor": 1,
+        "lat": 50.35391,
+        "lon": 7.578996
+    },
+    "Güls, Bisholder": {
+        "factor": 2,
+        "lat": 50.33498,
+        "lon": 7.533811
+    },
+    "Horchheim, Mendelssohn": {
+        "factor": 1,
+        "lat": 50.330383,
+        "lon": 7.597385
+    },
+    "Horchheimer Höhe, Im Baumgarten": {
+        "factor": 2,
+        "lat": 50.32713,
+        "lon": 7.609368
+    },
+    "Immendorf, Quellenweg": {
+        "factor": 1.5,
+        "lat": 50.37424,
+        "lon": 7.659368
+    },
+    "Innenstadt, Deutsches Eck/Seilbahn": {
+        "factor": 0.5,
+        "lat": 50.361996,
+        "lon": 7.60308
+    },
+    "Karthause, Friedhofskapelle": {
+        "factor": 1,
+        "lat": 50.34916,
+        "lon": 7.574199
+    },
+    "Karthause, Hochschule/Schulzentrum": {
+        "factor": 1,
+        "lat": 50.337734,
+        "lon": 7.569762
+    },
+    "Kesselheim, HWK-Campus": {
+        "factor": 2,
+        "lat": 50.38907,
+        "lon": 7.566815
+    },
+    "Kesselheim, Schule": {
+        "factor": 1,
+        "lat": 50.397507,
+        "lon": 7.583398
+    },
+    "Lützel, Balduinbrücke": {
+        "factor": 1,
+        "lat": 50.3665,
+        "lon": 7.593818
+    },
+    "Lützel, Bodelschwinghstraße": {
+        "factor": 1,
+        "lat": 50.37165,
+        "lon": 7.5879254
+    },
+    "Metternich, Gewerbepark Metternich": {
+        "factor": 1,
+        "lat": 50.36958,
+        "lon": 7.549487
+    },
+    "Metternich, Universität": {
+        "factor": 1,
+        "lat": 50.3618,
+        "lon": 7.557203
+    },
+    "Mittelweiden, DB-Museum": {
+        "factor": 1,
+        "lat": 50.378414,
+        "lon": 7.59398
+    },
+    "Moselweiß, Gülser Brücke": {
+        "factor": 1,
+        "lat": 50.34583,
+        "lon": 7.554966
+    },
+    "Niederberg, Kaserne": {
+        "factor": 1,
+        "lat": 50.37301,
+        "lon": 7.632644
+    },
+    "Oberwerth, EPG Arena/Stadion": {
+        "factor": 1,
+        "lat": 50.332447,
+        "lon": 7.585671
+    },
+    "Pfaffendorf, Kirche": {
+        "factor": 1,
+        "lat": 50.348705,
+        "lon": 7.605038
+    },
+    "Pfaffendorfer Höhe, Augusta-Kaserne": {
+        "factor": 1,
+        "lat": 50.341007,
+        "lon": 7.615207
+    },
+    "Rauental, Verwaltungszentrum Mitte": {
+        "factor": 1,
+        "lat": 50.35816,
+        "lon": 7.568216
+    },
+    "Rübenach, Amazon": {
+        "factor": 1.5,
+        "lat": 50.349476,
+        "lon": 7.490126
+    },
+    "Rübenach, Im Rübenacher Gesetz": {
+        "factor": 2,
+        "lat": 50.374469,
+        "lon": 7.52748
+    },
+    "Südliche Vorstadt, EVM/koveb": {
+        "factor": 1,
+        "lat": 50.340874,
+        "lon": 7.585428
+    },
+    "Südstadt, Markenbildchenweg": {
+        "factor": 0.5,
+        "lat": 50.349705,
+        "lon": 7.59584
+    },
+    "Wallersheim, Messeplatz": {
+        "factor": 1,
+        "lat": 50.38272,
+        "lon": 7.604194
+    },
+    "Innenstadt, Bahnhof Stadtmitte/Löhr-Center": {
+        "lat": 50.35865,
+        "lon": 7.591402,
+        "factor": 0
+    }
+}

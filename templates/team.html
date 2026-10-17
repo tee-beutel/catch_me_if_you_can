@@ -7,7 +7,7 @@
     <!-- Leaflet CSS für die Karte -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com">
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@700&family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
     
     <style>
@@ -27,12 +27,12 @@
             display: none;
             background: #dc2626;
             color: white;
-            padding: 10px 15px;
+            padding: 8px 12px;
             text-align: center;
             font-weight: 700;
-            font-size: 0.88em;
+            font-size: 0.84em;
             z-index: 1998;
-            line-height: 1.4;
+            line-height: 1.35;
             box-shadow: 0 2px 8px rgba(0,0,0,0.25);
             border-bottom: 2px solid #991b1b;
         }
@@ -46,10 +46,10 @@
         #map { height: 100%; width: 100%; z-index: 1; }
         .map-overlay-msg { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(244, 247, 246, 0.95); z-index: 10; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; }
         
-        .bottom-sheet { position: absolute; bottom: 0; left: 0; right: 0; background: white; z-index: 1000; display: flex; flex-direction: column; transition: transform 0.3s ease-in-out; transform: translateY(calc(100% - 50px)); box-shadow: 0 -3px 15px rgba(0,0,0,0.2); max-height: 80dvh; }
+        .bottom-sheet { position: absolute; bottom: 0; left: 0; right: 0; background: white; z-index: 1000; display: flex; flex-direction: column; transition: transform 0.3s ease-in-out; transform: translateY(calc(100% - 50px)); box-shadow: 0 -3px 15px rgba(0,0,0,0.2); max-height: calc(100% - 35px); }
         .bottom-sheet.open { transform: translateY(0); }
         
-        .sheet-toggle { height: 50px; flex-shrink: 0; background: #049EAB; color: white; display: flex; justify-content: center; align-items: center; font-family: 'Roboto', sans-serif; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; }
+        .sheet-toggle { height: 50px; flex-shrink: 0; background: #049EAB; color: white; display: flex; justify-content: center; align-items: center; font-family: 'Roboto', sans-serif; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
         
         .sheet-content { padding: 20px; overflow-y: auto; flex: 1; }
         
@@ -387,8 +387,8 @@
             if(sheet.classList.contains('open')) { toggleText.innerHTML = "Menü & Rangliste zuklappen 🔽"; } 
             else { toggleText.innerHTML = "Menü & Rangliste ausklappen 🔼"; }
             
-            if (allStopsMap) {
-                setTimeout(() => allStopsMap.invalidateSize(), 350);
+            if (map) {
+                setTimeout(() => map.invalidateSize(), 350);
             }
         }
         
@@ -396,12 +396,19 @@
         L.control.zoom({ position: 'topright' }).addTo(map);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         
-        let markers = [];
+        let stopMarkers = {};
         let teamLocationsLayer = L.layerGroup().addTo(map);
+        let teamMarkers = {};
         let isFirstMapLoad = true;
         
         function loadStopsMap() {
-            if (currentPhase === 'finished') return;
+            if (currentPhase === 'finished') {
+                for (const name in stopMarkers) {
+                    map.removeLayer(stopMarkers[name]);
+                }
+                stopMarkers = {};
+                return;
+            }
 
             // Läufer bekommen in der Vorbereitungsphase (inactive) ebenfalls alle Haltestellen angezeigt
             if (currentRole === 'läufer' && currentPhase !== 'inactive') {
@@ -413,14 +420,15 @@
                     return r.json();
                 }).then(data => {
                     if (!data) return;
-                    markers.forEach(m => map.removeLayer(m)); markers = [];
                     const select = document.getElementById('stop-select');
                     const currentVal = select ? select.value : "";
                     
                     let optsHTML = '<option value="">-- Haltestelle auswählen --</option>';
                     let bounds = [];
+                    const activeStopNames = new Set();
                     
                     data.forEach(stop => {
+                        activeStopNames.add(stop.name);
                         optsHTML += `<option value="${stop.name}">${stop.name}</option>`;
                         let btnHTML = "";
                         if (currentPhase === 'game' || currentPhase === 'post_game') {
@@ -461,10 +469,25 @@
                             });
                         }
 
-                        const marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
-                        marker.addTo(map); markers.push(marker);
+                        if (stopMarkers[stop.name]) {
+                            const marker = stopMarkers[stop.name];
+                            marker.setLatLng([stop.lat, stop.lon]);
+                            if (markerOpts.icon) marker.setIcon(markerOpts.icon);
+                            marker.setPopupContent(popupContent);
+                        } else {
+                            const marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
+                            marker.addTo(map);
+                            stopMarkers[stop.name] = marker;
+                        }
                         bounds.push([stop.lat, stop.lon]);
                     });
+
+                    for (const name in stopMarkers) {
+                        if (!activeStopNames.has(name)) {
+                            map.removeLayer(stopMarkers[name]);
+                            delete stopMarkers[name];
+                        }
+                    }
                     
                     if(select) { select.innerHTML = optsHTML; select.value = currentVal; }
                     
@@ -476,10 +499,11 @@
             } else {
                 // Fänger und Läufer in 'inactive' sehen alle Haltestellen
                 fetch('/api/all_stops').then(r => r.json()).then(data => {
-                    markers.forEach(m => map.removeLayer(m)); markers = [];
                     let bounds = [];
+                    const activeStopNames = new Set();
                     
                     data.forEach(stop => {
+                        activeStopNames.add(stop.name);
                         let factorText = '';
                         if (stop.factor > 1) {
                             factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span>`;
@@ -511,10 +535,25 @@
                             });
                         }
                         
-                        const marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
-                        marker.addTo(map); markers.push(marker);
+                        if (stopMarkers[stop.name]) {
+                            const marker = stopMarkers[stop.name];
+                            marker.setLatLng([stop.lat, stop.lon]);
+                            if (markerOpts.icon) marker.setIcon(markerOpts.icon);
+                            marker.setPopupContent(popupContent);
+                        } else {
+                            const marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
+                            marker.addTo(map);
+                            stopMarkers[stop.name] = marker;
+                        }
                         bounds.push([stop.lat, stop.lon]);
                     });
+
+                    for (const name in stopMarkers) {
+                        if (!activeStopNames.has(name)) {
+                            map.removeLayer(stopMarkers[name]);
+                            delete stopMarkers[name];
+                        }
+                    }
                     
                     if (bounds.length > 0 && isFirstMapLoad) {
                         map.fitBounds(bounds, { padding: [40, 40] });
@@ -529,12 +568,21 @@
 
         // --- LIVE TEAM STANDORTE & GPS-WARNUNG ---
         function renderTeamLocationsOnMap(locations) {
-            teamLocationsLayer.clearLayers();
-            if (!locations || currentPhase === 'finished') return;
+            if (currentPhase === 'finished' || !locations) {
+                if (currentPhase === 'finished') {
+                    teamLocationsLayer.clearLayers();
+                    teamMarkers = {};
+                }
+                return;
+            }
 
             const now = Date.now() + serverOffset;
+            const currentKeys = new Set();
 
             locations.forEach(loc => {
+                const markerKey = String(loc.id || (loc.is_self ? teamId : loc.name));
+                currentKeys.add(markerKey);
+
                 const isSelf = loc.is_self || (loc.id === teamId);
                 let bgColor = '#6c757d';
                 if (loc.role === 'fänger') bgColor = '#EB6502';
@@ -559,7 +607,6 @@
 
                 const borderStyle = isSelf ? '4px solid #049EAB' : '3px solid #333';
                 const size = isSelf ? 22 : 18;
-                const labelBadge = isSelf ? '📍 IHR' : '🏃';
 
                 const icon = L.divIcon({
                     className: 'custom-team-icon',
@@ -578,15 +625,32 @@
                     </div>
                 `;
 
-                L.marker([loc.lat, loc.lon], { icon: icon, zIndexOffset: isSelf ? 2000 : 1500 })
-                    .bindPopup(popupContent)
-                    .addTo(teamLocationsLayer);
+                if (teamMarkers[markerKey]) {
+                    const marker = teamMarkers[markerKey];
+                    marker.setLatLng([loc.lat, loc.lon]);
+                    marker.setIcon(icon);
+                    marker.setPopupContent(popupContent);
+                    marker.setZIndexOffset(isSelf ? 2000 : 1500);
+                } else {
+                    const marker = L.marker([loc.lat, loc.lon], { icon: icon, zIndexOffset: isSelf ? 2000 : 1500 })
+                        .bindPopup(popupContent)
+                        .addTo(teamLocationsLayer);
+                    teamMarkers[markerKey] = marker;
+                }
             });
+
+            for (const key in teamMarkers) {
+                if (!currentKeys.has(key)) {
+                    teamLocationsLayer.removeLayer(teamMarkers[key]);
+                    delete teamMarkers[key];
+                }
+            }
         }
 
         function fetchTeamLiveLocations() {
             if (currentPhase === 'finished') {
                 teamLocationsLayer.clearLayers();
+                teamMarkers = {};
                 document.getElementById('gps-warning-banner').style.display = 'none';
                 return;
             }

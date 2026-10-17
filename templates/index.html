@@ -147,6 +147,12 @@
             </div>
         </div>
 
+        {% if phase == 'post_game' or phase == 'finished' %}
+        <div style="text-align: center; margin: 25px 0;">
+            <a href="/replay" class="btn btn-petrol" style="display:inline-block; width:auto; text-decoration:none; padding:15px 30px; border-radius:4px; font-size: 1.15em; font-weight: 900; box-shadow: 0 4px 12px rgba(4,158,171,0.3);">🎬 Zum Replay</a>
+        </div>
+        {% endif %}
+
         <div style="text-align: center; margin: 40px 0;">
             <a href="/rules.html" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#6c757d; color:white; padding:12px 24px; border-radius:4px;">Hier geht's zur Anleitung</a>
         </div>

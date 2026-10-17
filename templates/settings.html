@@ -20,8 +20,8 @@
         }
         .header-section {
             display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
+            justify-content: flex-end;
+            align-items: center;
             margin-bottom: 20px;
         }
         .card {
@@ -40,7 +40,7 @@
         h3 { border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 30px; }
 
         .form-group { margin-bottom: 20px; }
-        label { display: block; font-weight: 700; margin-bottom: 5px; color: #555; }
+        label { display: block; font-family: 'Roboto', Arial, sans-serif; font-weight: 400; margin-bottom: 5px; color: #444; }
         input[type="text"], input[type="number"], input[type="datetime-local"], select {
             width: 100%;
             padding: 10px;
@@ -82,6 +82,20 @@
         .btn-back { background-color: #6c757d; text-decoration: none; flex: 1; }
         .btn-back:hover { background-color: #5a6268; }
         .btn-neutral { background-color: #6c757d; }
+
+        .btn-editor {
+            background-color: #049EAB;
+            color: white;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            font-family: 'Roboto', sans-serif;
+            font-weight: 900;
+            transition: background 0.2s ease;
+        }
+        .btn-editor:hover { background-color: #038c98; }
 
         .danger-zone {
             margin-top: 40px;
@@ -135,6 +149,20 @@
         </div>
 
         <h3>Spielablauf & Haltestellen</h3>
+        
+        <div class="form-group" style="background: #eef8f8; padding: 18px; border-left: 4px solid #049EAB; margin-bottom: 20px;">
+            <label for="active_stops_dataset" style="font-weight: 700; color: #026770;">Aktiver Haltestellen-Datensatz:</label>
+            <select id="active_stops_dataset" style="background: white; border: 1px solid #049EAB; font-weight: 500;">
+                {% for ds in available_datasets %}
+                <option value="{{ ds }}" {% if ds == active_stops_dataset %}selected{% endif %}>{{ ds }}</option>
+                {% endfor %}
+            </select>
+            <div class="help-text">Wähle den JSON-Datensatz aus, der für das Spiel und die Zufallsauswahl der Haltestellen verwendet werden soll.</div>
+            <div style="margin-top: 14px;">
+                <a href="/adminconsole-{{ admin_url }}/stop_config" class="btn btn-editor">🔗 Haltestellen-Datenbank verwalten</a>
+            </div>
+        </div>
+
         <div class="row">
             <div class="form-group">
                 <label for="target_stops">Aktive Haltestellen:</label>
@@ -264,6 +292,14 @@
         }
 
         function saveSettings() {
+            const activeDataset = document.getElementById('active_stops_dataset').value;
+            const initialDataset = "{{ active_stops_dataset }}";
+            if (activeDataset !== initialDataset) {
+                if (!confirm(`Du änderst den Haltestellen-Datensatz von "${initialDataset}" zu "${activeDataset}".\n\nDie aktiven Haltestellen und die Historie werden auf den neuen Datensatz zurückgesetzt und neu ausgewürfelt. Fortfahren?`)) {
+                    return;
+                }
+            }
+
             const targetStops = parseInt(document.getElementById('target_stops').value);
             const maxHistory = parseInt(document.getElementById('max_history').value);
             const pointsStopReached = parseInt(document.getElementById('points_stop_reached').value);
@@ -293,6 +329,7 @@
             });
 
             const payload = {
+                active_stops_dataset: activeDataset,
                 target_stops: targetStops,
                 max_history: maxHistory,
                 teams_list: teamsList,

@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Catch Me - Spiel Replay</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- VCD Schriftarten -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@700&family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Roboto', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh;
+            background: #f4f7f6;
+            overflow: hidden;
+            color: #333;
+        }
+
+        /* Top Header */
+        .replay-header {
+            background: white;
+            border-bottom: 2px solid #049EAB;
+            padding: 8px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 2000;
+            position: relative;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            flex-shrink: 0;
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .header-logo { height: 34px; width: auto; }
+        .header-title {
+            font-family: 'Roboto Slab', serif;
+            font-size: 1.25em;
+            color: #049EAB;
+            margin: 0;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .badge-live-status {
+            font-family: 'Roboto', sans-serif;
+            font-size: 0.7em;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .status-finished { background: #049EAB; color: white; }
+        .status-running { background: #EB6502; color: white; }
+        .status-inactive { background: #6c757d; color: white; }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .btn-nav {
+            padding: 8px 14px;
+            background: #f0f0f0;
+            color: #333;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 0.85em;
+            transition: background 0.2s;
+            border: 1px solid #ccc;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn-nav:hover { background: #e0e0e0; }
+
+        /* Notice banner for non-finished game */
+        .game-running-banner {
+            background: #fff3cd;
+            color: #856404;
+            border-bottom: 2px solid #ffeeba;
+            padding: 8px 18px;
+            font-size: 0.9em;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1999;
+            flex-shrink: 0;
+        }
+        .banner-close-btn {
+            background: none;
+            border: none;
+            font-size: 1.3em;
+            cursor: pointer;
+            color: #856404;
+            padding: 0 5px;
+            line-height: 1;
+        }
+
+        /* Map Container */
+        .map-container {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Floating Toast Container */
+        .toast-container {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 2100;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+            max-width: 360px;
+            width: calc(100% - 30px);
+        }
+        .toast-card {
+            background: white;
+            border-left: 5px solid #049EAB;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+            border-radius: 6px;
+            padding: 12px 14px;
+            pointer-events: auto;
+            animation: slideIn 0.3s ease-out;
+            transition: opacity 0.4s ease, transform 0.4s ease;
+            position: relative;
+        }
+        .toast-card.toast-stop { border-left-color: #AEC905; }
+        .toast-card.toast-catch { border-left-color: #EB6502; }
+        .toast-card.toast-system { border-left-color: #049EAB; }
+        .toast-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.78em;
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            color: #666;
+        }
+        .toast-desc {
+            font-size: 0.95em;
+            font-weight: 700;
+            color: #222;
+            line-height: 1.35;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Transparent Bottom Control Panel */
+        .control-panel {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 24px);
+            max-width: 880px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 12px;
+            box-shadow: 0 6px 25px rgba(0, 0, 0, 0.22);
+            border: 1px solid rgba(0, 0, 0, 0.12);
+            padding: 12px 18px;
+            z-index: 1500;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* Timeline Slider & Time Row */
+        .time-display-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            font-size: 0.85em;
+            color: #666;
+        }
+        .current-time-label {
+            font-family: 'Roboto Slab', serif;
+            font-size: 1.35em;
+            font-weight: 700;
+            color: #049EAB;
+            text-align: center;
+        }
+        .slider-wrapper {
+            position: relative;
+            width: 100%;
+            display: flex;
+            align-items: center;
+        }
+        .timeline-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #e0e0e0;
+            outline: none;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .timeline-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #049EAB;
+            border: 3px solid white;
+            box-shadow: 0 0 5px rgba(0,0,0,0.4);
+            cursor: pointer;
+            transition: transform 0.1s, background-color 0.2s;
+        }
+        .timeline-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+            background: #038c98;
+        }
+        .timeline-slider::-moz-range-thumb {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #049EAB;
+            border: 3px solid white;
+            box-shadow: 0 0 5px rgba(0,0,0,0.4);
+            cursor: pointer;
+        }
+
+        /* Buttons & Speed Row */
+        .controls-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .btn-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .ctrl-btn {
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 14px;
+            font-family: 'Roboto', sans-serif;
+            font-weight: 900;
+            font-size: 0.9em;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+        .ctrl-btn:hover:not(:disabled) { background: #555; }
+        .ctrl-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+        .btn-play {
+            background: #049EAB;
+            min-width: 100px;
+            font-size: 1.05em;
+            padding: 9px 18px;
+        }
+        .btn-play:hover:not(:disabled) { background: #038c98; }
+        .btn-play.is-playing { background: #EB6502; }
+        .btn-play.is-playing:hover:not(:disabled) { background: #d15902; }
+
+        .speed-btn {
+            background: #f0f0f0;
+            color: #333;
+            border: 1px solid #ccc;
+            padding: 6px 10px;
+            font-size: 0.85em;
+            border-radius: 4px;
+        }
+        .speed-btn.active {
+            background: #049EAB;
+            color: white;
+            border-color: #049EAB;
+        }
+
+        /* Team Badges / Legend Row */
+        .team-legend-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            overflow-x: auto;
+            padding-top: 4px;
+            border-top: 1px solid #eee;
+        }
+        .team-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            background: #f4f7f6;
+            border: 1px solid #ddd;
+            font-size: 0.8em;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.15s;
+        }
+        .team-chip:hover { background: #e8eceb; }
+        .chip-color-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255, 255, 255, 0.9);
+            z-index: 3000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+        .spinner {
+            width: 44px;
+            height: 44px;
+            border: 5px solid #e0e0e0;
+            border-top-color: #049EAB;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Custom Leaflet Map Icons & Tooltips */
+        .custom-team-marker {
+            background: transparent;
+            border: none;
+        }
+        .team-marker-pin {
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-family: 'Roboto', sans-serif;
+            font-weight: 900;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            transition: transform 0.1s ease;
+        }
+        .team-marker-label {
+            background: white;
+            color: #333;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid #666;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+            white-space: nowrap;
+            text-align: center;
+        }
+
+        .custom-factor-icon { background: transparent; border: none; }
+
+        @media (max-width: 600px) {
+            .replay-header { padding: 6px 12px; }
+            .header-title { font-size: 1.05em; }
+            .header-logo { height: 26px; }
+            .control-panel { bottom: 8px; width: calc(100% - 16px); padding: 10px 12px; }
+            .current-time-label { font-size: 1.15em; }
+            .btn-play { min-width: 80px; padding: 7px 12px; font-size: 0.95em; }
+            .ctrl-btn { padding: 6px 10px; font-size: 0.82em; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="replay-header">
+        <div class="header-left">
+            <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo" class="header-logo">
+            <h1 class="header-title">
+                Catch Me Replay
+                {% if phase == 'finished' %}
+                <span class="badge-live-status status-finished">Spiel Beendet</span>
+                {% elif phase == 'post_game' %}
+                <span class="badge-live-status status-running">Post-Game</span>
+                {% elif phase == 'game' %}
+                <span class="badge-live-status status-running">Spiel Aktiv</span>
+                {% else %}
+                <span class="badge-live-status status-inactive">{{ phase }}</span>
+                {% endif %}
+            </h1>
+        </div>
+        <div class="header-right">
+            <a href="/" class="btn-nav">🏠 Startseite</a>
+        </div>
+    </header>
+
+    <!-- Hinweis für laufendes Spiel (Phase != 'finished') -->
+    {% if phase != 'finished' %}
+    <div class="game-running-banner" id="running-banner">
+        <span>⚠️ <b>Hinweis:</b> Das Spiel ist aktuell noch nicht endgültig beendet (Status: <b>{{ phase }}</b>). Das Replay visualisiert den bisherigen Spielverlauf bis zum aktuellen Zeitpunkt.</span>
+        <button class="banner-close-btn" onclick="document.getElementById('running-banner').remove();">&times;</button>
+    </div>
+    {% endif %}
+
+    <!-- Map & Notifications -->
+    <div class="map-container">
+        <div id="map"></div>
+
+        <!-- Floating Toast Container -->
+        <div class="toast-container" id="toast-container"></div>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loading-overlay">
+            <div class="spinner"></div>
+            <div style="font-weight: 700; color: #049EAB; font-size: 1.1em;">Lade Replay-Daten...</div>
+        </div>
+
+        <!-- Transparent Control Panel -->
+        <div class="control-panel" id="control-panel">
+            <!-- Time Display Row -->
+            <div class="time-display-row">
+                <span id="start-time-label">--:--</span>
+                <span class="current-time-label" id="current-time-label">Replay wird vorbereitet...</span>
+                <span id="end-time-label">--:--</span>
+            </div>
+
+            <!-- Timeline Range Slider -->
+            <div class="slider-wrapper">
+                <input type="range" id="time-slider" class="timeline-slider" min="0" max="100" value="0" step="1000" disabled>
+            </div>
+
+            <!-- Buttons & Speed Row -->
+            <div class="controls-row">
+                <div class="btn-group">
+                    <button class="ctrl-btn" id="btn-to-start" title="Zum Start springen" onclick="seekToStart()">⏮</button>
+                    <button class="ctrl-btn" id="btn-back-30" title="30 Sekunden zurück" onclick="stepTime(-30000)">-30s</button>
+                    <button class="ctrl-btn btn-play" id="btn-play-pause" onclick="togglePlay()">▶ Play</button>
+                    <button class="ctrl-btn" id="btn-fwd-30" title="30 Sekunden vor" onclick="stepTime(30000)">+30s</button>
+                    <button class="ctrl-btn" id="btn-to-end" title="Zum Ende springen" onclick="seekToEnd()">⏭</button>
+                </div>
+
+                <div class="btn-group">
+                    <span style="font-size: 0.8em; font-weight: bold; color: #666; margin-right: 2px;">Tempo:</span>
+                    <button class="ctrl-btn speed-btn" onclick="setSpeed(1)">1x</button>
+                    <button class="ctrl-btn speed-btn active" onclick="setSpeed(5)">5x</button>
+                    <button class="ctrl-btn speed-btn" onclick="setSpeed(20)">20x</button>
+                    <button class="ctrl-btn speed-btn" onclick="setSpeed(50)">50x</button>
+                </div>
+            </div>
+
+            <!-- Team Legend / Quick Pan Row -->
+            <div class="team-legend-row" id="team-legend-row">
+                <!-- Dynamically filled with team chips -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // --- GLOBALE VARIABLEN & STATUS ---
+        let replayData = null;
+        let allStopsData = [];
+        let startTs = 0;
+        let endTs = 0;
+        let currentReplayTime = 0;
+        let lastProcessedTime = null;
+
+        let isPlaying = false;
+        let playbackSpeed = 5; // Standard: 5x
+        let lastFrameTimestamp = null;
+        let animationFrameId = null;
+
+        // Leaflet Map & Layer
+        let map = null;
+        let stopsLayerGroup = null;
+        let teamMarkers = {};
+        let teamTrails = {}; // Polyline für Bewegungsspuren
+        let stopMarkers = {};
+        let activeEventPopup = null;
+
+        // Verfolgte getriggerte Events für Toast / Leaflet-Popup
+        const triggeredEvents = new Set();
+
+        // Team Farbpalette & Symbole
+        const TEAM_COLORS = {
+            'fänger': '#EB6502', // VCD Orange
+            'läufer': '#AEC905', // VCD Green
+            'keine': '#6c757d'
+        };
+
+        // --- HILFSFUNKTIONEN FÜR ZEITFORMATIERUNG ---
+        function formatClock(ts) {
+            if (!ts) return '--:--';
+            const d = new Date(ts);
+            return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' Uhr';
+        }
+
+        function formatFullTime(ts) {
+            if (!ts) return 'Keine Zeit';
+            const d = new Date(ts);
+            const dateStr = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+            const timeStr = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            return `${dateStr} • ${timeStr} Uhr`;
+        }
+
+        // --- MAP SETUP (ANALOG ZU TEAM.HTML) ---
+        function initMap() {
+            map = L.map('map', { zoomControl: false }).setView([52.248874, 10.526770], 12);
+            L.control.zoom({ position: 'topright' }).addTo(map);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+
+            stopsLayerGroup = L.layerGroup().addTo(map);
+        }
+
+        // Lädt statische Haltestellen via /api/all_stops analog zu team.html
+        function loadStops() {
+            return fetch('/api/all_stops')
+                .then(r => r.json())
+                .then(stops => {
+                    allStopsData = stops;
+                    stops.forEach(stop => {
+                        let factorText = '';
+                        let markerOpts = {};
+
+                        if (stop.factor > 1) {
+                            factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ ${stop.factor}-fache Punkte!</span>`;
+                            markerOpts.icon = L.divIcon({
+                                className: 'custom-factor-icon',
+                                html: '<div style="background-color: #EB6502; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 11px;">⭐</div>',
+                                iconSize: [26, 26],
+                                iconAnchor: [13, 13]
+                            });
+                        } else if (stop.factor < 1) {
+                            factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ ${stop.factor}-fache Punkte!</span>`;
+                            markerOpts.icon = L.divIcon({
+                                className: 'custom-factor-icon',
+                                html: '<div style="background-color: #6c757d; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 11px;">⚠️</div>',
+                                iconSize: [26, 26],
+                                iconAnchor: [13, 13]
+                            });
+                        } else {
+                            markerOpts.icon = L.divIcon({
+                                className: 'custom-factor-icon',
+                                html: '<div style="background-color: #049EAB; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.4);"></div>',
+                                iconSize: [16, 16],
+                                iconAnchor: [8, 8]
+                            });
+                        }
+
+                        const popupHtml = `
+                            <div style="text-align:center; font-family:'Roboto', sans-serif;">
+                                <b style="color:#049EAB; font-size:1.1em;">${stop.name}</b>
+                                ${factorText}
+                            </div>
+                        `;
+
+                        const m = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupHtml);
+                        stopsLayerGroup.addLayer(m);
+                        stopMarkers[stop.name] = m;
+                    });
+                })
+                .catch(err => console.error("Fehler beim Laden der Haltestellen:", err));
+        }
+
+        // --- REPLAY DATEN LADEN & SETUP ---
+        function loadReplay() {
+            fetch('/api/replay_data')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('loading-overlay').style.display = 'none';
+
+                    if (data.error && (!data.start_ts || !data.end_ts)) {
+                        alert(data.error);
+                        document.getElementById('current-time-label').innerText = data.error;
+                        return;
+                    }
+
+                    replayData = data;
+                    startTs = Number(data.start_ts);
+                    endTs = Number(data.end_ts);
+
+                    if (!startTs || !endTs || startTs >= endTs) {
+                        document.getElementById('current-time-label').innerText = "Keine gültigen Zeitpunkte gefunden.";
+                        return;
+                    }
+
+                    currentReplayTime = startTs;
+
+                    // Slider initialisieren
+                    const slider = document.getElementById('time-slider');
+                    slider.min = startTs;
+                    slider.max = endTs;
+                    slider.value = startTs;
+                    slider.disabled = false;
+
+                    // Labels setzen
+                    document.getElementById('start-time-label').innerText = formatClock(startTs);
+                    document.getElementById('end-time-label').innerText = formatClock(endTs);
+
+                    // Slider Event Listener (Scrubbing / Spulen)
+                    slider.addEventListener('input', (e) => {
+                        const newTime = Number(e.target.value);
+                        seekToTime(newTime);
+                    });
+
+                    // Team Marker & Legende erstellen
+                    setupTeams(data.teams, data.locations);
+
+                    // Kamera auf Spielgeschehen ausrichten
+                    fitMapBounds();
+
+                    // Initialansicht zeichnen
+                    updateReplayView(currentReplayTime);
+                })
+                .catch(err => {
+                    console.error("Replay-Ladefehler:", err);
+                    document.getElementById('loading-overlay').innerHTML = `
+                        <div style="color: #EB6502; font-weight: bold; font-size: 1.1em;">Fehler beim Laden der Replay-Daten</div>
+                        <button class="ctrl-btn" onclick="location.reload()">Neu laden</button>
+                    `;
+                });
+        }
+
+        // --- TEAM MARKER & CHIPS SETUP ---
+        function setupTeams(teams, locations) {
+            const legendContainer = document.getElementById('team-legend-row');
+            legendContainer.innerHTML = '';
+
+            for (const tId in teams) {
+                const team = teams[tId];
+                const role = team.role || 'keine';
+                const roleColor = TEAM_COLORS[role] || '#6c757d';
+                const displayName = team.display_name || tId;
+
+                // Leaflet Custom DivIcon
+                const icon = L.divIcon({
+                    className: 'custom-team-marker',
+                    html: `
+                        <div style="display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%);">
+                            <div class="team-marker-label" style="border-color:${roleColor};">${displayName} (${role})</div>
+                            <div class="team-marker-pin" style="background-color: ${roleColor}; width: 24px; height: 24px; border: 3px solid #333; margin-top: 2px;">
+                                <div style="width: 6px; height: 6px; background: white; border-radius: 50%;"></div>
+                            </div>
+                        </div>
+                    `,
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0]
+                });
+
+                const marker = L.marker([52.248874, 10.526770], { icon: icon, zIndexOffset: 2000 });
+                marker.bindPopup(`
+                    <div style="text-align:center; font-family:'Roboto',sans-serif;">
+                        <b style="font-size:1.15em; color:#333;">${displayName}</b><br>
+                        <span style="color:${roleColor}; font-weight:bold; text-transform:uppercase;">${role}</span>
+                    </div>
+                `);
+
+                teamMarkers[tId] = marker;
+
+                // Polyline für gelaufene Strecke
+                teamTrails[tId] = L.polyline([], {
+                    color: roleColor,
+                    weight: 3,
+                    opacity: 0.65,
+                    dashArray: role === 'fänger' ? '6, 6' : null
+                }).addTo(map);
+
+                // Team Chip in der Legende
+                const chip = document.createElement('div');
+                chip.className = 'team-chip';
+                chip.id = `legend-chip-${tId}`;
+                chip.innerHTML = `
+                    <div class="chip-color-dot" id="legend-dot-${tId}" style="background:#6c757d;"></div>
+                    <span>${displayName}</span>
+                    <span id="legend-role-${tId}" style="font-size:0.75em; color:#777; text-transform:uppercase;">(KEINE)</span>
+                    <span id="legend-score-${tId}" style="margin-left: 5px; font-weight: 900; color: #049EAB;">0 Pkt.</span>
+                `;
+                chip.onclick = () => focusOnTeam(tId);
+                legendContainer.appendChild(chip);
+            }
+        }
+
+        function focusOnTeam(tId) {
+            const marker = teamMarkers[tId];
+            if (marker && map.hasLayer(marker)) {
+                map.setView(marker.getLatLng(), Math.max(map.getZoom(), 15), { animate: true });
+                marker.openPopup();
+            }
+        }
+
+        function fitMapBounds() {
+            let bounds = [];
+            // Haltestellen
+            allStopsData.forEach(s => bounds.push([s.lat, s.lon]));
+            // Teampunkte
+            if (replayData && replayData.locations) {
+                for (const tId in replayData.locations) {
+                    replayData.locations[tId].forEach(p => bounds.push([p.lat, p.lon]));
+                }
+            }
+            if (bounds.length > 0) {
+                map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+            }
+        }
+
+        // --- LINEARE INTERPOLATION DER TEAM-POSITIONEN ---
+        function getTeamPositionAt(pts, time) {
+            if (!pts || pts.length === 0) return null;
+            if (time <= pts[0].ts) return { lat: pts[0].lat, lon: pts[0].lon, index: 0 };
+            if (time >= pts[pts.length - 1].ts) {
+                const last = pts[pts.length - 1];
+                return { lat: last.lat, lon: last.lon, index: pts.length - 1 };
+            }
+
+            // Schnelle binäre Suche nach dem passenden Segment
+            let low = 0;
+            let high = pts.length - 1;
+            while (low <= high) {
+                const mid = (low + high) >> 1;
+                if (pts[mid].ts <= time) {
+                    if (mid === pts.length - 1 || pts[mid + 1].ts > time) {
+                        const p1 = pts[mid];
+                        const p2 = pts[mid + 1];
+                        const diff = p2.ts - p1.ts;
+
+                        // Bei großen Datenlücken (> 5 Minuten) nicht quer durch die Stadt interpolieren
+                        if (diff <= 0 || diff > 5 * 60 * 1000) {
+                            return { lat: p1.lat, lon: p1.lon, index: mid };
+                        }
+
+                        const factor = (time - p1.ts) / diff;
+                        return {
+                            lat: p1.lat + factor * (p2.lat - p1.lat),
+                            lon: p1.lon + factor * (p2.lon - p1.lon),
+                            index: mid
+                        };
+                    }
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
+            }
+            return null;
+        }
+
+        // --- UPDATE-ROUTINE BEI ZEITÄNDERUNG ---
+        function updateReplayView(time) {
+            // Zeitanzeige aktualisieren
+            document.getElementById('current-time-label').innerText = formatFullTime(time);
+
+            // 1. Rollen und Punkte dynamisch anhand des aktuellen Replay-Zeitstempels berechnen
+            const hasRoleChangeEvents = (replayData && replayData.events) ? replayData.events.some(e => e.type === 'role_change') : false;
+            const currentTeamStates = {};
+
+            if (replayData && replayData.teams) {
+                for (const tId in replayData.teams) {
+                    currentTeamStates[tId] = {
+                        role: hasRoleChangeEvents ? 'keine' : (replayData.teams[tId].role || 'keine'),
+                        score: 0
+                    };
+                }
+            }
+
+            if (replayData && replayData.events) {
+                const cfg = replayData.config || {};
+                const ptsStop = (cfg.points_stop_reached !== undefined) ? Number(cfg.points_stop_reached) : 2;
+                const ptsCaughtTeam = (cfg.points_caught_team !== undefined) ? Number(cfg.points_caught_team) : 5;
+                const ptsWasCaught = (cfg.points_was_caught !== undefined) ? Number(cfg.points_was_caught) : -3;
+
+                for (const ev of replayData.events) {
+                    if (ev.ts > time) break;
+
+                    if (ev.type === 'role_change') {
+                        if (ev.team && currentTeamStates[ev.team]) {
+                            currentTeamStates[ev.team].role = ev.desc || 'keine';
+                        }
+                    } else if (ev.type === 'manual_points') {
+                        if (ev.team && currentTeamStates[ev.team]) {
+                            currentTeamStates[ev.team].score += parseFloat(ev.desc) || 0;
+                        }
+                    } else if (ev.type === 'stop') {
+                        if (ev.team && currentTeamStates[ev.team]) {
+                            let factor = 1.0;
+                            if (Array.isArray(allStopsData)) {
+                                const found = allStopsData.find(s => s.name === ev.stop);
+                                if (found && found.factor !== undefined) {
+                                    factor = Number(found.factor);
+                                }
+                            }
+                            currentTeamStates[ev.team].score += factor * ptsStop;
+                        }
+                    } else if (ev.type === 'catch') {
+                        if (ev.hunter && currentTeamStates[ev.hunter]) {
+                            currentTeamStates[ev.hunter].score += ptsCaughtTeam;
+                        }
+                        if (ev.prey && currentTeamStates[ev.prey]) {
+                            currentTeamStates[ev.prey].score += ptsWasCaught;
+                        }
+                    }
+                }
+            }
+
+            // 2. Teams UI (Marker, Popup, Legenden-Chips) aktualisieren
+            for (const tId in currentTeamStates) {
+                const state = currentTeamStates[tId];
+                const role = state.role || 'keine';
+                const roleColor = TEAM_COLORS[role] || '#6c757d';
+                const score = state.score;
+                const scoreStr = (score === Math.round(score)) ? `${score} Pkt.` : `${score.toFixed(1)} Pkt.`;
+                const displayName = (replayData.teams && replayData.teams[tId] && replayData.teams[tId].display_name) || tId;
+
+                // Marker Pin & Label aktualisieren
+                const marker = teamMarkers[tId];
+                if (marker) {
+                    if (marker._currentRole !== role || marker._currentScore !== score) {
+                        marker._currentRole = role;
+                        marker._currentScore = score;
+
+                        marker.setIcon(L.divIcon({
+                            className: 'custom-team-marker',
+                            html: `
+                                <div style="display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%);">
+                                    <div class="team-marker-label" style="border-color:${roleColor};">${displayName} (${scoreStr} • ${role})</div>
+                                    <div class="team-marker-pin" style="background-color: ${roleColor}; width: 24px; height: 24px; border: 3px solid #333; margin-top: 2px;">
+                                        <div style="width: 6px; height: 6px; background: white; border-radius: 50%;"></div>
+                                    </div>
+                                </div>
+                            `,
+                            iconSize: [0, 0],
+                            iconAnchor: [0, 0]
+                        }));
+
+                        marker.setPopupContent(`
+                            <div style="text-align:center; font-family:'Roboto',sans-serif;">
+                                <b style="font-size:1.15em; color:#333;">${displayName}</b><br>
+                                <span style="color:${roleColor}; font-weight:bold; text-transform:uppercase;">${role}</span><br>
+                                <b style="color:#049EAB; font-size:1.1em;">${scoreStr}</b>
+                            </div>
+                        `);
+                    }
+                }
+
+                // Polyline Trail Style aktualisieren
+                const trail = teamTrails[tId];
+                if (trail) {
+                    trail.setStyle({
+                        color: roleColor,
+                        dashArray: role === 'fänger' ? '6, 6' : null
+                    });
+                }
+
+                // Legenden-Elemente in der unteren Leiste aktualisieren
+                const dotEl = document.getElementById(`legend-dot-${tId}`);
+                if (dotEl) dotEl.style.backgroundColor = roleColor;
+
+                const roleEl = document.getElementById(`legend-role-${tId}`);
+                if (roleEl) roleEl.textContent = `(${role.toUpperCase()})`;
+
+                const scoreEl = document.getElementById(`legend-score-${tId}`);
+                if (scoreEl) scoreEl.textContent = scoreStr;
+            }
+
+            // 3. Teams Positionen aktualisieren
+            if (replayData && replayData.locations) {
+                for (const tId in replayData.locations) {
+                    const pts = replayData.locations[tId];
+                    const pos = getTeamPositionAt(pts, time);
+                    const marker = teamMarkers[tId];
+                    const trail = teamTrails[tId];
+
+                    if (pos) {
+                        marker.setLatLng([pos.lat, pos.lon]);
+                        if (!map.hasLayer(marker)) marker.addTo(map);
+
+                        // Trail-Polyline bis zum aktuellen Zeitpunkt
+                        if (trail) {
+                            const trailPts = pts.slice(0, pos.index + 1).map(p => [p.lat, p.lon]);
+                            trailPts.push([pos.lat, pos.lon]);
+                            trail.setLatLngs(trailPts);
+                        }
+                    } else {
+                        if (map.hasLayer(marker)) map.removeLayer(marker);
+                        if (trail) trail.setLatLngs([]);
+                    }
+                }
+            }
+
+            // Events prüfen und auslösen
+            checkAndTriggerEvents(time);
+        }
+
+        // --- EVENT AUSLÖSUNG (TOAST & LEAFLET POPUP MIT SPAM-SCHUTZ) ---
+        function checkAndTriggerEvents(time) {
+            if (!replayData || !replayData.events) return;
+
+            const isJump = (lastProcessedTime !== null && Math.abs(time - lastProcessedTime) > 10000);
+
+            replayData.events.forEach(ev => {
+                const eventKey = (ev.id || `${ev.type}_${ev.ts}_${ev.desc}`);
+
+                if (ev.ts <= time) {
+                    if (!triggeredEvents.has(eventKey)) {
+                        triggeredEvents.add(eventKey);
+                        if (!isJump && (ev.type === 'stop' || ev.type === 'catch' || ev.type === 'system')) {
+                            fireEventVisuals(ev);
+                        }
+                    }
+                } else {
+                    // Lösche beim Zurückspulen (wenn ev.ts > time) den Eintrag aus dem triggeredEvents-Set
+                    if (triggeredEvents.has(eventKey)) {
+                        triggeredEvents.delete(eventKey);
+                    }
+                }
+            });
+
+            lastProcessedTime = time;
+        }
+
+        function fireEventVisuals(ev) {
+            // 1. Toast Notification erstellen
+            showToast(ev);
+
+            // 2. Leaflet Popup an Koordinaten öffnen (falls vorhanden)
+            if (ev.lat && ev.lon) {
+                let iconSymbol = '📍';
+                let title = 'Haltestelle erreicht';
+                if (ev.type === 'catch') {
+                    iconSymbol = '⚔️';
+                    title = 'Team gefangen';
+                } else if (ev.type === 'system') {
+                    iconSymbol = '🔄';
+                    title = 'Spiel-Ereignis';
+                }
+
+                const popupHtml = `
+                    <div style="font-family:'Roboto',sans-serif; text-align:center; padding: 4px;">
+                        <span style="font-size: 1.3em;">${iconSymbol}</span><br>
+                        <b style="color:#049EAB; font-size:1.05em;">${title}</b>
+                        <p style="margin:5px 0 0 0; font-size:0.95em; line-height:1.3; font-weight:bold; color:#222;">
+                            ${ev.desc}
+                        </p>
+                        <span style="font-size:0.8em; color:#777; display:block; margin-top:4px;">⏱ ${formatClock(ev.ts)}</span>
+                    </div>
+                `;
+
+                if (activeEventPopup) {
+                    map.closePopup(activeEventPopup);
+                }
+
+                activeEventPopup = L.popup({ autoClose: true, closeOnClick: true, className: 'replay-event-popup' })
+                    .setLatLng([ev.lat, ev.lon])
+                    .setContent(popupHtml)
+                    .openOn(map);
+            }
+        }
+
+        function showToast(ev) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+
+            const card = document.createElement('div');
+            card.className = `toast-card toast-${ev.type || 'system'}`;
+
+            let typeLabel = 'SYSTEM';
+            if (ev.type === 'stop') typeLabel = '📍 HALTESTELLE ERREICHT';
+            else if (ev.type === 'catch') typeLabel = '⚔️ FANG GEMELDET';
+
+            card.innerHTML = `
+                <div class="toast-header">
+                    <span>${typeLabel}</span>
+                    <span>${formatClock(ev.ts)}</span>
+                </div>
+                <div class="toast-desc">${ev.desc}</div>
+            `;
+
+            container.appendChild(card);
+
+            // Nach 6 Sekunden ausblenden
+            setTimeout(() => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateX(100%)';
+                setTimeout(() => card.remove(), 400);
+            }, 6000);
+        }
+
+        // --- WIEDERGABESTEUERUNG & ANIMATIONSLOOP ---
+        function togglePlay() {
+            if (isPlaying) {
+                pause();
+            } else {
+                play();
+            }
+        }
+
+        function play() {
+            if (!replayData || !startTs) return;
+            // Wenn am Ende angekommen, wieder von vorne starten
+            if (currentReplayTime >= endTs) {
+                seekToStart();
+            }
+            isPlaying = true;
+            lastFrameTimestamp = performance.now();
+            updatePlayBtnUI();
+            startAnimationLoop();
+        }
+
+        function pause() {
+            isPlaying = false;
+            updatePlayBtnUI();
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+        }
+
+        function updatePlayBtnUI() {
+            const btn = document.getElementById('btn-play-pause');
+            if (isPlaying) {
+                btn.innerHTML = "⏸ Pause";
+                btn.classList.add('is-playing');
+            } else {
+                btn.innerHTML = "▶ Play";
+                btn.classList.remove('is-playing');
+            }
+        }
+
+        function startAnimationLoop() {
+            function frame(now) {
+                if (!isPlaying) return;
+
+                const deltaRealMs = now - lastFrameTimestamp;
+                lastFrameTimestamp = now;
+
+                if (deltaRealMs > 0 && deltaRealMs < 1000) {
+                    currentReplayTime += deltaRealMs * playbackSpeed;
+
+                    if (currentReplayTime >= endTs) {
+                        currentReplayTime = endTs;
+                        document.getElementById('time-slider').value = Math.floor(currentReplayTime);
+                        updateReplayView(currentReplayTime);
+                        pause();
+                        return;
+                    }
+
+                    document.getElementById('time-slider').value = Math.floor(currentReplayTime);
+                    updateReplayView(currentReplayTime);
+                }
+
+                animationFrameId = requestAnimationFrame(frame);
+            }
+            animationFrameId = requestAnimationFrame(frame);
+        }
+
+        // --- SPULEN & NAVIGATION ---
+        function seekToTime(targetTime) {
+            currentReplayTime = Math.max(startTs, Math.min(endTs, targetTime));
+            document.getElementById('time-slider').value = Math.floor(currentReplayTime);
+
+            // Zurückgesetzte Events neu bewerten (damit sie beim Vorwärtsabspielen wieder feuern)
+            triggeredEvents.clear();
+            if (replayData && replayData.events) {
+                replayData.events.forEach(ev => {
+                    if (ev.ts <= currentReplayTime) {
+                        triggeredEvents.add(ev.id || `${ev.type}_${ev.ts}_${ev.desc}`);
+                    }
+                });
+            }
+
+            updateReplayView(currentReplayTime);
+        }
+
+        function seekToStart() { seekToTime(startTs); }
+        function seekToEnd() { seekToTime(endTs); }
+        function stepTime(deltaMs) { seekToTime(currentReplayTime + deltaMs); }
+
+        function setSpeed(speedMultiplier) {
+            playbackSpeed = speedMultiplier;
+            const buttons = document.querySelectorAll('.speed-btn');
+            buttons.forEach(b => {
+                if (b.innerText === `${speedMultiplier}x`) b.classList.add('active');
+                else b.classList.remove('active');
+            });
+        }
+
+        // Tastatursteuerung: Leertaste schaltet Play/Pause um
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                togglePlay();
+            }
+        });
+
+        // --- INITIALISIERUNG BEIM LADEN DER SEITE ---
+        window.addEventListener('load', () => {
+            initMap();
+            loadStops().then(() => {
+                loadReplay();
+            });
+        });
+    </script>
+</body>
+</html>
