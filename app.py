@@ -344,6 +344,14 @@ def init_db():
                         active_until TEXT
                     )''')
 
+        c.execute('''CREATE TABLE IF NOT EXISTS gps_outages (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        team_id TEXT,
+                        offline_from TEXT,
+                        offline_until TEXT,
+                        FOREIGN KEY(team_id) REFERENCES teams(id)
+                    )''')
+
 
         # Sicherstellen, dass bestehende Datenbanken nahtlos um die neuen Zeitspalten erweitert werden
         ensure_column(c, "team_stops", "submitted_at", "TEXT")
@@ -930,64 +938,54 @@ def check_game_gps_rules():
                     remaining_requests.append(req)
                 state["pending_requests"] = remaining_requests
 
-            # 2. 5 / 10 / 15... Minuten Standort-Ausfall-Historie für den Admin (ab 'pre_game')
-            if phase in ("pre_game", "game"):
+            # 2. 5 Minuten Standort-Ausfall-Historie über robuste SQLite-Tabelle
+            if phase in ("pre_game", "game", "post_game", "finished"):
                 c = conn.cursor()
                 c.execute("SELECT team_id, updated_at FROM team_locations")
                 loc_map = {r["team_id"]: parse_iso_utc(r["updated_at"]) for r in c.fetchall()}
                 start_dt_utc = parse_iso_utc(start_iso)
-                
-                # NEU: Vorbereitungszeit (5 Minuten vor Start) als Basis verwenden
                 pre_start_utc = start_dt_utc - timedelta(minutes=5) if start_dt_utc else None
+                end_dt_utc = parse_iso_utc(end_iso)
 
                 for t_id, t_data in state["teams_data"].items():
-                    if t_data.get("deactivated", False):
-                        continue
-                    if t_data.get("role") not in ("läufer", "fänger"):
+                    if t_data.get("deactivated", False) or t_data.get("role") not in ("läufer", "fänger"):
                         continue
 
                     last_dt = loc_map.get(t_id)
-                    # NEU: Auf pre_start_utc prüfen statt auf start_dt_utc
-                    if last_dt is not None and pre_start_utc is not None and last_dt < pre_start_utc:
-                        ref_dt = pre_start_utc
-                    else:
-                        ref_dt = last_dt or pre_start_utc
-
+                    ref_dt = pre_start_utc if (last_dt and pre_start_utc and last_dt < pre_start_utc) else (last_dt or pre_start_utc)
+                    
                     if not ref_dt:
                         continue
 
+                    c.execute("SELECT id FROM gps_outages WHERE team_id = ? AND offline_until IS NULL", (t_id,))
+                    open_outage = c.fetchone()
+
+                    if phase in ("post_game", "finished"):
+                        if open_outage:
+                            close_time = end_dt_utc.isoformat() if end_dt_utc else now_utc.isoformat()
+                            c.execute("UPDATE gps_outages SET offline_until = ? WHERE id = ?", (close_time, open_outage["id"]))
+                        continue
+
                     missing_sec = (now_utc - ref_dt).total_seconds()
-                    
-                    # Sucht nach einer noch offenen Offline-Phase (Endzeitpunkt = None)
-                    open_warn = next((log for log in state["action_log"] if log.get("type") == "gps_warning" and log.get("team") == t_id and log.get("actual_timestamp") is None), None)
 
                     if missing_sec >= 300:
-                        if not open_warn:
+                        if not open_outage:
+                            c.execute("INSERT INTO gps_outages (team_id, offline_from) VALUES (?, ?)", (t_id, ref_dt.isoformat()))
                             t_name = t_data.get("display_name", t_id)
                             state["action_log"].insert(0, {
-                                "id": str(uuid.uuid4()),
-                                "type": "gps_warning",
-                                "team": t_id,
-                                "team_name": t_name,
-                                "timestamp": ref_dt.isoformat(), # Beginn der Offlinezeit
-                                "actual_timestamp": None,        # Ende (noch offen)
-                                "desc": "Offline-Phase",
-                                "is_late": False,
-                                "admin_only": True
+                                "id": str(uuid.uuid4()), "type": "gps_warning", "team": t_id, "team_name": t_name,
+                                "timestamp": ref_dt.isoformat(), "actual_timestamp": None, "desc": "Offline-Phase",
+                                "is_late": False, "admin_only": True
                             })
                             state_changed = True
                     else:
-                        # Signal wieder da -> offenen Eintrag schließen
-                        if open_warn:
-                            open_warn["actual_timestamp"] = last_dt.isoformat() if last_dt else now_utc.isoformat()
+                        if open_outage:
+                            c.execute("UPDATE gps_outages SET offline_until = ? WHERE id = ?", (now_utc.isoformat(), open_outage["id"]))
+                            for log in state["action_log"]:
+                                if log.get("type") == "gps_warning" and log.get("team") == t_id and log.get("actual_timestamp") is None:
+                                    log["actual_timestamp"] = now_utc.isoformat()
+                                    break
                             state_changed = True
-            elif phase in ("post_game", "finished"):
-                # In Post-Game oder Finished: Offene Offline-Phasen zum Spielende abschließen
-                end_dt_utc = parse_iso_utc(end_iso)
-                for log in state["action_log"]:
-                    if log.get("type") == "gps_warning" and log.get("actual_timestamp") is None:
-                        log["actual_timestamp"] = end_dt_utc.isoformat() if end_dt_utc else now_utc.isoformat()
-                        state_changed = True
 
             if state_changed:
                 save_state(conn, state)
@@ -1642,7 +1640,10 @@ def index():
 
 @app.route('/rules.html')
 def rules():
-    return render_template('rules.html')
+    with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
+        conn.row_factory = sqlite3.Row
+        state = get_state(conn)
+    return render_template('rules.html', config=state["config"])
 
 
 @app.route('/team/<slug>')
@@ -1841,28 +1842,23 @@ def admin(admin_slug):
         state = get_state(conn)
         phase, start_iso, end_iso, mid_iso, now_iso = update_game_time_state(conn, state)
 
-        now_utc = datetime.now(timezone.utc)
-        game_end_utc = parse_iso_utc(end_iso)
-        is_game_ended = (phase in ("post_game", "finished")) or (game_end_utc and now_utc > game_end_utc)
-
-        # Falls in Post-Game oder Finished: Offene Offline-Phasen zum Spielende abschließen
-        if is_game_ended and game_end_utc:
-            state_changed = False
-            for log in state["action_log"]:
-                if log.get("type") == "gps_warning" and log.get("actual_timestamp") is None:
-                    log["actual_timestamp"] = game_end_utc.isoformat()
-                    state_changed = True
-            if state_changed:
-                save_state(conn, state)
+        c = conn.cursor()
+        c.execute("SELECT team_id, offline_from, offline_until FROM gps_outages")
+        all_outages = c.fetchall()
 
     config = state["config"]
+    tz = ZoneInfo(config.get("timezone", "Europe/Berlin"))
+    now_utc = datetime.now(timezone.utc)
+    
+    start_dt_utc = parse_iso_utc(start_iso)
+    game_end_utc = parse_iso_utc(end_iso)
+    pre_start_utc = start_dt_utc - timedelta(minutes=5) if start_dt_utc else None
+
     leaderboard = []
     team_urls = {}
     teams_list = []
     base_url = request.host_url.rstrip('/')
-
     team_names_map = {t_id: d["display_name"] for t_id, d in state["teams_data"].items()}
-    cutoff_utc = game_end_utc if (is_game_ended and game_end_utc) else now_utc
 
     for t_id, data in state["teams_data"].items():
         team_urls[data["display_name"]] = f"{base_url}/team/{data['slug']}"
@@ -1870,25 +1866,37 @@ def admin(admin_slug):
 
         score = calculate_score(data, config)
 
-        # NEU: Gesamte Offlinezeit berechnen (stoppt in Post-Game / Finished beim Spielende)
         total_offline_seconds = 0
-        team_warnings = [log for log in state["action_log"] if log.get("type") == "gps_warning" and log.get("team") == t_id]
-        for w in team_warnings:
-            start_offline = parse_iso_utc(w["timestamp"])
-            if start_offline:
-                end_offline = parse_iso_utc(w.get("actual_timestamp")) or cutoff_utc
-                if is_game_ended and game_end_utc and end_offline > game_end_utc:
-                    end_offline = game_end_utc
-                total_offline_seconds += max(0, (end_offline - start_offline).total_seconds())
+        formatted_offline_warnings = []
+        team_outages = [o for o in all_outages if o["team_id"] == t_id]
 
-        # Das Feld "total_offline_seconds" dem Leaderboard-Eintrag anhängen
+        for outage in team_outages:
+            o_start = parse_iso_utc(outage["offline_from"])
+            o_end = parse_iso_utc(outage["offline_until"]) or (game_end_utc if (game_end_utc and now_utc > game_end_utc) else now_utc)
+
+            if not o_start or not o_end:
+                continue
+
+            if pre_start_utc and o_start < pre_start_utc:
+                o_start = pre_start_utc
+            if game_end_utc and o_end > game_end_utc:
+                o_end = game_end_utc
+
+            if o_start < o_end:
+                total_offline_seconds += (o_end - o_start).total_seconds()
+                formatted_offline_warnings.append({
+                    "start_time_str": o_start.astimezone(tz).strftime("%H:%M"),
+                    "end_time_str": o_end.astimezone(tz).strftime("%H:%M") if outage["offline_until"] else None
+                })
+
         leaderboard.append({
             "id": t_id, "display_name": data["display_name"], "score": score, "role": data.get("role", "keine"),
             "next_role": data.get("next_role", ""),
             "stops": data.get("stops", []), "caught": data.get("caught", []), "caught_by": data.get("caught_by", []),
             "deactivated": data.get("deactivated", False),
             "manual_points": data.get("manual_points", 0),
-            "total_offline_seconds": total_offline_seconds
+            "total_offline_seconds": total_offline_seconds,
+            "offline_warnings": formatted_offline_warnings
         })
 
     leaderboard.sort(key=lambda x: x["score"], reverse=True)
@@ -3389,7 +3397,7 @@ def traccar_webhook():
         "status": f"OK ({resolved_name})"
     })
 
-    app.logger.info(f'{resolved_team_id} ({resolved_name}): {lat}, {lon} um {packet_time} ')
+    #app.logger.info(f'{resolved_team_id} ({resolved_name}): {lat}, {lon} um {packet_time} ')
 
     return jsonify({
         'success': True,

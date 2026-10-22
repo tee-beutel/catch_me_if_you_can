@@ -108,8 +108,7 @@
 
     <!-- WARNUNG BEI FEHLENDEM GPS SIGNAL (> 2 MINUTEN) -->
     <div class="gps-warn-banner" id="gps-warning-banner">
-        ⚠️ <b>ACHTUNG:</b> Ihr habt seit über <span id="gps-missing-mins">2</span> Minuten keinen Standort mehr gesendet! Bitte prüft sofort eure Traccar-App.<br>
-        <span style="font-weight: normal; font-size: 0.92em;">Hinweis: Bei längerem Regelverstoß können vom Spielleiter (Admin) Minuspunkte vergeben werden!</span>
+        <!-- Wird dynamisch über JavaScript befüllt -->
     </div>
 
     <!-- GEWINNER ANZEIGE (Global für beide Rollen sichtbar) -->
@@ -669,11 +668,25 @@
                     cachedVisibleLocations = data.locations || [];
                     renderTeamLocationsOnMap(cachedVisibleLocations);
 
-                    // 2-Minuten GPS-Warnung für Fänger und Läufer
+                    // GPS-Warnung mit Unterscheidung nach Zeit (2-5 Minuten vs. ab 5 Minuten)
                     const warnBanner = document.getElementById('gps-warning-banner');
-                    const warnMinsSpan = document.getElementById('gps-missing-mins');
                     if (data.gps_warning) {
-                        warnMinsSpan.textContent = data.missing_minutes || 2;
+                        const missing = data.missing_minutes || 2;
+                        let bannerHtml = `⚠️ <b>HINWEIS:</b> Seit über ${missing} Minuten wurde kein Standort gesendet.<br>`;
+                        
+                        if (missing >= 5) {
+                            warnBanner.style.background = '#dc2626';
+                            warnBanner.style.borderBottom = '2px solid #991b1b';
+                            bannerHtml = `⚠️ <b>ACHTUNG:</b> Seit über ${missing} Minuten wurde kein Standort aktualisiert!<br>`;
+                            bannerHtml += `<span style="font-weight: normal; font-size: 0.92em;">Das liegt entweder an einem Fehler in der Traccar App oder ihr habt euch einfach eine Weile nicht bewegt. Wenn ihr unterwegs seid, checkt bitte eure Konfiguration!</span>`;
+                            bannerHtml += `<br><br><span style="font-weight: bold; font-size: 0.95em;">Bitte schickt mindestens einmal einen manuellen Standort, um mögliche Strafen zu vermeiden. Wenn es weiterhin Probleme gibt, meldet euch bitte beim Admin!</span>`;
+                        } else {
+                            warnBanner.style.background = '#EB6502'; // softer orange for 2-4 min
+                            warnBanner.style.borderBottom = '2px solid #b84f02';
+                            bannerHtml += `<span style="font-weight: normal; font-size: 0.92em;">Das liegt entweder an einem Fehler in der Traccar App oder ihr habt euch einfach eine Weile nicht bewegt. Wenn ihr unterwegs seid, checkt bitte eure Konfiguration!</span>`;
+                        }
+                        
+                        warnBanner.innerHTML = bannerHtml;
                         warnBanner.style.display = 'block';
                     } else {
                         warnBanner.style.display = 'none';

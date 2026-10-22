@@ -183,16 +183,15 @@
                         {% for c in entry.caught_by %}{{ team_names_map[c] }}{% if not loop.last %}, {% endif %}{% endfor %}
                     {% else %}<i>Noch ungeschlagen</i>{% endif %}
                 </div>
-                {% set team_warnings = action_log | selectattr('type', 'equalto', 'gps_warning') | selectattr('team', 'equalto', entry.id) | list %}
-                {% if team_warnings|length > 0 %}
+                {% if entry.offline_warnings|length > 0 %}
                 <details class="offline-details">
                     <summary>⚠️ Offlinezeiten (Gesamt: {{ (entry.total_offline_seconds / 60) | round | int }} Min.)</summary>
                     <ul>
-                    {% for warn in team_warnings %}
+                    {% for warn in entry.offline_warnings %}
                         <li>
-                            Ab {{ warn.timestamp[11:16] }} Uhr: 
-                            {% if warn.actual_timestamp %}
-                                bis {{ warn.actual_timestamp[11:16] }} Uhr
+                            Ab {{ warn.start_time_str }} Uhr: 
+                            {% if warn.end_time_str %}
+                                bis {{ warn.end_time_str }} Uhr
                             {% else %}
                                 <b style="color: #EB6502;">bis jetzt</b>
                             {% endif %}

@@ -471,6 +471,9 @@
                     <button class="ctrl-btn btn-play" id="btn-play-pause" onclick="togglePlay()">▶ Play</button>
                     <button class="ctrl-btn" id="btn-fwd-30" title="30 Sekunden vor" onclick="stepTime(30000)">+30s</button>
                     <button class="ctrl-btn" id="btn-to-end" title="Zum Ende springen" onclick="seekToEnd()">⏭</button>
+                    {% if is_admin %}
+                    <button class="ctrl-btn" id="btn-live" onclick="toggleLiveMode()" style="font-weight: 900;">🔴 LIVE</button>
+                    {% endif %}
                 </div>
 
                 <div class="btn-group">
@@ -481,9 +484,6 @@
                     <button class="ctrl-btn speed-btn" onclick="setSpeed(50)">50x</button>
                     <button class="ctrl-btn speed-btn" onclick="setSpeed(100)">100x</button>
                     <button class="ctrl-btn speed-btn" onclick="setSpeed(200)">200x</button>
-                    {% if is_admin %}
-                    <button class="ctrl-btn speed-btn" id="btn-live" onclick="toggleLiveMode()" style="margin-left: 8px; font-weight: 900;">🔴 LIVE</button>
-                    {% endif %}
                 </div>
             </div>
 

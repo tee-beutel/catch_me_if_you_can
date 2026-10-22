@@ -161,41 +161,62 @@
 
         <div class="box">
             <h2>Zusammenfassung</h2>
-            <p>Das Spielprinzip ist simpel: Ein Team läuft weg, die anderen fangen. Das Ganze findet im gesamten Stadtgebiet statt, wobei alle öffentlichen Verkehrsmittel genutzt werden dürfen. Für Absprachen und Fotos nutzen wir eine gemeinsame Signal-Gruppe. Den aktuellen Spielstatus, Haltestellen und den Punktestand findet ihr in der Catch Me Web-App, das Live-Tracking läuft über Google Maps.</p>
+            <p>Das Spielprinzip ist simpel: Ein Team läuft weg, die anderen fangen. Das Ganze findet im gesamten Stadtgebiet statt, wobei alle öffentlichen Verkehrsmittel genutzt werden dürfen. Für Absprachen und Fotos nutzen wir eine gemeinsame Chatgruppe. Den aktuellen Spielstatus, Haltestellen und den Punktestand findet ihr in der Catch Me Web-App, das Live-Tracking eurer Standorte läuft über die GPS-App Traccar.</p>
 
             <h2>1. Die Catch Me Web-App</h2>
             <p>Über die Web-App läuft die gesamte Organisation während des Spiels. Loggt euch dafür auf der Startseite mit eurem Teamnamen und eurer Team-PIN ein. Im Dashboard findet ihr folgende Infos:</p>
             <ul>
-                <li><b>Rolle:</b> Ganz oben steht, ob ihr aktuell LÄUFER oder FÄNGER seid. Eure anfängliche Rolle wird 30 Minuten vor Spielbeginn zugewiesen. Wichtig: Je nach Einstellung wechseln die Rollen zur Halbzeit. Bei einer ungeraden Teamanzahl wird beim Rollentausch exakt gespiegelt, sodass Rollen, die in der ersten Hälfte in der Überzahl waren, in der zweiten Hälfte in der Unterzahl sind und umgekehrt.</li>
+                <li><b>Rolle:</b> Ganz oben steht, ob ihr aktuell LÄUFER oder FÄNGER seid. Eure anfängliche Rolle wird 30 Minuten vor Spielbeginn zugewiesen. 
+                {% if config.enable_mid_game_swap %}
+                    <b>Wichtig:</b> Zur Halbzeit tauschen die Rollen. Bei einer ungeraden Teamanzahl wird beim Rollentausch exakt gespiegelt, sodass Rollen, die in der ersten Hälfte in der Überzahl waren, in der zweiten Hälfte in der Unterzahl sind und umgekehrt.
+                    {% if config.shuffle_stops_on_swap %}
+                        <b>Zusätzlich werden beim Rollentausch die zu erreichenden Haltestellen auf der Karte einmal komplett neu ausgewürfelt!</b>
+                    {% endif %}
+                {% else %}
+                    Ihr behaltet eure zugewiesene Rolle das gesamte Spiel über.
+                {% endif %}
+                </li>
                 <li><b>Timer:</b> Zeigt an, wann es losgeht, wie viel Zeit noch bleibt und wann das Spiel vorbei ist.</li>
                 <li><b>Live-Rangliste & Log:</b> Hier seht ihr den aktuellen Punktestand, wer gerade wen gefangen hat und welche Stationen erfolgreich abgehakt wurden.</li>
                 <li><b>Karte (nur für Läufer sichtbar):</b> Zeigt alle aktiven Haltestellen im Spielgebiet an. Die Karte wird kurz vor Spielbeginn freigeschaltet.</li>
             </ul>
 
-            <h2>2. Standortfreigabe über Google Maps</h2>
+            <h2>2. Live-Tracking über Traccar</h2>
             <div class="highlight">
-                <b>Wichtig:</b> Nur das aktuelle Läufer-Team teilt seinen Standort live. Sobald ihr zum Fänger werdet, beendet ihr die Freigabe sofort, damit euch die Läufer nicht kommen sehen.
+                <b>Was ist Traccar?</b> Traccar ist eine ressourcenschonende GPS-Tracking-App, die euren aktuellen Standort im Hintergrund an das Spiel übermittelt. So weiß das System, wo ihr seid, und Fänger können die Läufer aufspüren.
             </div>
-            <p>So richtet ihr die Freigabe als Läufer-Team ein:</p>
+            <p>Damit ihr am Spiel teilnehmen könnt, müsst ihr Traccar auf einem Smartphone eures Teams einrichten:</p>
             <ol class="step-list">
-                <li>Öffnet Google Maps auf einem eurer Smartphones (denkt an einen vollen Akku!).</li>
-                <li>Tippt oben rechts auf euer Profilbild und wählt „Standortfreigabe“.</li>
-                <li>Geht auf „Neuen Standort freigeben“.</li>
-                <li>Wählt als Dauer einen Zeitraum, der definitiv länger ist als eure Zeit als Läufer.</li>
-                <li>Kopiert den Link in die Zwischenablage und postet ihn direkt in die Signal-Gruppe.</li>
+                <li>Ladet euch die kostenlose App <b>Traccar Client</b> für iOS oder Android herunter.</li>
+                <li>Loggt euch in die <b>Catch Me Web-App</b> (Team-Dashboard) ein. Scrollt nach unten zum Bereich „Traccar GPS-Setup“.</li>
+                <li>Klickt dort auf den grünen Button zur <b>automatischen Einrichtung</b>. Dadurch werden Server-URL und eure eindeutige Team-ID direkt in die Traccar-App übernommen.</li>
+                <li><b>Ganz wichtig:</b> Geht in die Einstellungen eures Smartphones und setzt die Standortberechtigung für Traccar zwingend auf <b>„Immer“</b> (bzw. „Immer zulassen“). Macht ihr das nicht, bricht das GPS ab, sobald ihr den Bildschirm ausschaltet!</li>
+                <li>Schaltet das Tracking in der App über den Hauptschalter ein. Dieser bleibt das gesamte Spiel über an.</li>
             </ol>
 
-            <h2>3. Haltestellen ansteuern & Fotobeweis</h2>
+            <h2>3. Haltestellen ansteuern & Punkte sammeln</h2>
             <p>Als Läufer sammelt ihr Punkte, indem ihr zufällige Haltestellen ansteuert. Die jeweils aktiven Ziele werden euch auf der Karte im Dashboard angezeigt. Sobald eine Station erledigt ist, wirft das System direkt die nächste aus (eine Haltestelle wird nie doppelt hintereinander gezogen).</p>
             
-            <h3>So läuft der Nachweis ab:</h3>
+            {% if config.auto_approve_stops %}
+            <p>Es gibt zwei Möglichkeiten, wie euch eine Haltestelle gutgeschrieben wird:</p>
+            <ol class="step-list">
+                <li><b>Weg A: Automatischer GPS-Check (Bevorzugt)</b><br>
+                Fahrt oder geht zur aktiven Haltestelle. Meldet die Haltestelle im Dashboard (über das Dropdown-Menü oder Klick auf die Karte). Das System prüft nun automatisch eure Traccar-GPS-Daten der letzten 5 Minuten. Wenn ihr euch innerhalb des definierten Radius <b>(aktuell eingestellter Radius: {{ config.stop_radius_meters }} Meter)</b> befunden habt, wird die Haltestelle sofort vom System akzeptiert und ihr erhaltet die Punkte.<br><i>Tipp: Falls das GPS leicht verzögert ist, wartet das System nach dem Klick automatisch noch 1 Minute auf passende Koordinaten.</i></li>
+                
+                <li><b>Weg B: Manueller Fotobeweis (Fallback bei GPS-Problemen)</b><br>
+                Sollte die GPS-Automatik fehlschlagen, müsst ihr einen Fotobeweis erbringen. Macht ein Teambild vor dem Haltestellenschild (oder fotografiert den Monitor im Fahrzeug, auf dem der Name der Station zu sehen ist) und schickt dieses in die <b>Chatgruppe</b>. Wenn die automatische GPS-Nachprüfung nach einer Minute ohne Treffer abläuft, wird eure Anfrage automatisch an den Spielleiter weitergeleitet, der sie nach Sichtung eures Fotos in der Chatgruppe manuell freigibt.<br>
+                <i>Frist: Das Beweisfoto muss spätestens 30 Sekunden nach einem Rollenwechsel oder nach Spielende in der Chatgruppe sein, sonst verfällt der Punkt.</i></li>
+            </ol>
+            {% else %}
+            <p>So läuft der Nachweis ab:</p>
             <ol class="step-list">
                 <li>Fahrt oder geht zu einer der aktiven Haltestellen auf eurer Karte.</li>
                 <li><b>Das Foto:</b> Macht ein Teambild vor dem Haltestellenschild. Falls ihr im Bus oder in der Bahn sitzt und ohne Auszusteigen durchfahrt, fotografiert einfach den Monitor im Fahrzeug, auf dem der Name der Station zu sehen ist.</li>
-                <li>Schickt das Foto direkt in die Signal-Gruppe.</li>
-                <li><b>Punkte eintragen:</b> Wählt die Station im Dropdown-Menü der Web-App aus oder klickt sie direkt auf der Karte an. Der Admin gleicht das mit dem Foto in Signal ab und gibt die Punkte frei. Sollte die App mal klemmen, kann der Admin die Punkte auch manuell nachtragen.</li>
-                <li><b>Frist:</b> Das Beweisfoto muss spätestens 30 Sekunden nach einem Rollenwechsel oder nach Spielende in der Signal-Gruppe sein, sonst verfällt der Punkt. Wenn ihr es nicht mehr in die Website eingetragen habt, kann der Spielleiter die Punkte nachtragen</li>
+                <li>Schickt das Foto direkt in die <b>Chatgruppe</b>.</li>
+                <li><b>Punkte eintragen:</b> Wählt die Station im Dropdown-Menü der Web-App aus oder klickt sie direkt auf der Karte an. Der Admin gleicht das mit dem Foto in der Chatgruppe ab und gibt die Punkte manuell frei.</li>
+                <li><i>Frist: Das Beweisfoto muss spätestens 30 Sekunden nach einem Rollenwechsel oder nach Spielende in der Chatgruppe sein, sonst verfällt der Punkt. Wenn ihr es nicht mehr in die Website eingetragen habt, kann der Spielleiter die Punkte nachtragen.</i></li>
             </ol>
+            {% endif %}
 
             <h2>4. Spielablauf & Fangen</h2>
             <p>Los geht es am Platz der deutschen Einheit. Die Läufer starten mit 10 Minuten Vorsprung. Um ein Team zu fangen, reicht es, wenn ein Mitglied des Läuferteams von einem Fänger berührt wird.</p>
@@ -214,7 +235,8 @@
             <h2>5. Spielfeld & erlaubte Verkehrsmittel</h2>
             <p>Das Spielgebiet umfasst das gesamte Stadtgebiet Braunschweig (außer Harxbüttel), Wolfenbüttel und Weddel. Die Buslinie 740 zwischen Weddel und Wolfenbüttel darf genutzt werden, allerdings ist auf freier Strecke kein Ein- oder Ausstieg erlaubt.</p>
             <ul>
-                <li>Erlaubt sind Busse, Straßenbahnen, der Regionalverkehr sowie veloleo-Fahrräder (letztere für maximal 30 Minuten pro Spielrunde).</li>
+                <li>Erlaubt sind Busse, Straßenbahnen, der Regionalverkehr sowie <b>Nextbikes</b> (letztere für maximal 30 Minuten pro Spielrunde).
+                <br><b>Wichtig:</b> Bei Verdacht, dass ihr Nextbike länger als die erlaubten 30 Minuten insgesamt genutzt habt, kann der Spielleiter ein Foto eurer Buchungshistorie aus der Nextbike-App anfordern. Könnt ihr dies nicht vorlegen oder habt die Zeit überschritten, drohen Strafpunkte!</li>
                 <li>Ihr müsst euch so bewegen, dass innerhalb eines 15-minütigen Gehradius immer mindestens eine Haltestelle liegt, die mindestens alle 30 Minuten angefahren wird.</li>
                 <li>Verlasst ihr diesen Bereich für länger als 10 Minuten, müsst ihr direkt zu einem vom Spielleiter festgelegten Knotenpunkt. Von dort dürft ihr erst weiter, wenn ihr von zwei unterschiedlichen Fängerteams gefangen wurdet.</li>
                 <li>Taktisches Aufteilen ist nicht erlaubt – die Teams müssen immer komplett zusammenbleiben.</li>
@@ -224,9 +246,9 @@
             <p>Sobald der Timer abgelaufen ist, schaltet die Web-App auf „POST-GAME“ und das Spiel ist vorbei. Ab diesem Moment ist kein Fangen mehr erlaubt. Alle Teams machen sich auf den Weg zum Rathaus. Für eventuelle manuelle Nachträge bleibt die App noch einige Minuten offen.</p>
             
             <div class="highlight" style="border-left-color: #AEC905;">
-                <b>Punkteverteilung:</b><br><br>
-                <b>Läufer:</b> +2 Punkte pro erreichte Haltestelle und -3 Punkte, wenn ihr gefangen wurdet.<br><br>
-                <b>Fänger:</b> +4 Punkte für jeden erfolgreichen Fang.
+                <b>Punkteverteilung gemäß aktueller Servereinstellungen:</b><br><br>
+                <b>Läufer:</b> +{{ config.points_stop_reached }} Punkte pro erreichte Haltestelle und {{ config.points_was_caught }} Punkte, wenn ihr gefangen wurdet.<br><br>
+                <b>Fänger:</b> +{{ config.points_caught_team }} Punkte für jeden erfolgreichen Fang.
             </div>
             
             <p>Wer am Ende die meisten Punkte hat, gewinnt das Spiel.</p>
@@ -239,8 +261,8 @@
                 <li><b>Zweck und Speicherung:</b> Alle erhobenen persönlichen Daten werden ausschließlich zur Durchführung und Organisation des Spiels benötigt. Die Speicherung der Daten der Web-App erfolgt auf den Servern der Academic Cloud und der TU Braunschweig. Rechtsgrundlage hierfür ist die Einwilligung der Teilnehmenden (Art. 6 Abs. 1 lit. a DSGVO).</li>
                 <li><b>Löschung der Daten:</b> Deine persönlichen Daten werden nach Ende des Spiels auf Anfrage vollständig gelöscht.</li>
                 <li><b>Deine Rechte:</b> Du hast das Recht auf Auskunft, Berichtigung, Löschung oder Einschränkung der Verarbeitung deiner Daten sowie ein Beschwerderecht bei einer zuständigen Aufsichtsbehörde.</li>
-                <li><b>Drittanbieter (Signal & Google Maps):</b> Die Kommunikation während des Spiels läuft über eine gemeinsame Signal-Gruppe, das Live-Tracking über Google Maps. Bitte beachte, dass dabei deine entsprechenden Profilinformationen (z. B. Name, Profilbild, ggf. Telefonnummer) und Standortdaten mit der Spielgruppe geteilt werden. Es gelten zusätzlich die Datenschutzbestimmungen der jeweiligen Anbieter (Signal Messenger LLC und Google Ireland Limited).</li>
-                <li><b>Signal-Gruppe:</b> Die Signal-Gruppe bleibt nach Beendigung des Spiels bestehen, falls du in einer künftigen Runde erneut mitspielen möchtest. Du kannst die Gruppe selbstverständlich jederzeit selbstständig verlassen.</li>
+                <li><b>Drittanbieter (Chatgruppe & Traccar):</b> Die Kommunikation und der Foto-Austausch während des Spiels läuft über eine gemeinsame Chatgruppe, das Live-Tracking über die App Traccar. Bitte beachte, dass dabei deine entsprechenden Profilinformationen (z. B. Name, Profilbild) und fortlaufend deine Standortdaten (GPS) mit dem Spielserver und der Spielgruppe geteilt werden. Es gelten zusätzlich die Datenschutzbestimmungen der jeweiligen Anbieter.</li>
+                <li><b>Chatgruppe:</b> Die Gruppe bleibt nach Beendigung des Spiels bestehen, falls du in einer künftigen Runde erneut mitspielen möchtest. Du kannst die Gruppe selbstverständlich jederzeit selbstständig verlassen.</li>
             </ul>
             <p><i>Verantwortlicher für die Datenverarbeitung im Rahmen des Spiels:<br>Tim Beutling, VCD Kreisverband Braunschweig<br>E-Mail: <a href="mailto:tim.beutling@vcd-bs.de" style="color: #049EAB; text-decoration: none;">tim.beutling@vcd-bs.de</a></i></p>
         </div>
