@@ -515,6 +515,18 @@
                 const markerKey = String(team.id || team.name);
                 currentKeys.add(markerKey);
 
+                // --- Status des <details>-Tags merken, falls das Popup gerade offen ist ---
+                let isDetailsOpen = false;
+                if (adminTeamMarkers[markerKey] && adminTeamMarkers[markerKey].isPopupOpen()) {
+                    const popupEl = adminTeamMarkers[markerKey].getPopup().getElement();
+                    if (popupEl) {
+                        const detailsTag = popupEl.querySelector('details');
+                        if (detailsTag && detailsTag.open) {
+                            isDetailsOpen = true;
+                        }
+                    }
+                }
+
                 let bgColor = '#6c757d'; // Standard (Keine Rolle)
                 if (team.role === 'fänger') bgColor = '#EB6502';
                 else if (team.role === 'läufer') bgColor = '#AEC905';
@@ -524,7 +536,7 @@
                     : new Date(team.updated_at).getTime();
                 const diffSec = Math.max(0, Math.floor((now - updatedMs) / 1000));
                 let timeAgo = "";
-                
+
                 if (diffSec < 60) {
                     timeAgo = `vor ${diffSec} Sekunde${diffSec !== 1 ? 'n' : ''}`;
                 } else if (diffSec < 3600) {
@@ -536,6 +548,38 @@
                     timeAgo = `vor ${hours} Std. ${mins} Min.`;
                 }
 
+                // Telemetrie-Daten aufbereiten
+                const hasTelemetry = [
+                    team.batteryLevel, team.charge, team.motion,
+                    team.altitude, team.speed, team.course, team.accuracy
+                ].some(v => v !== null && v !== undefined);
+
+                const battStr = (team.batteryLevel !== null && team.batteryLevel !== undefined) ? `${Number(team.batteryLevel).toFixed(1)} %` : '<i>k. A.</i>';
+                const chargeStr = (team.charge !== null && team.charge !== undefined) ? ` (${team.charge ? 'Lädt' : 'Entlädt'})` : '';
+                const motionStr = (team.motion !== null && team.motion !== undefined) ? (team.motion ? 'Ja' : 'Nein') : '<i>k. A.</i>';
+                const speedStr = (team.speed !== null && team.speed !== undefined) ? `${Number(team.speed).toFixed(2)} m/s` : '<i>k. A.</i>';
+                const altStr = (team.altitude !== null && team.altitude !== undefined) ? `${Number(team.altitude).toFixed(1)} m` : '<i>k. A.</i>';
+                const courseStr = (team.course !== null && team.course !== undefined) ? `${Math.round(team.course)}°` : '<i>k. A.</i>';
+                const accStr = (team.accuracy !== null && team.accuracy !== undefined) ? `${Number(team.accuracy).toFixed(1)} m` : '<i>k. A.</i>';
+
+                let telemetryHtml = '';
+                if (hasTelemetry) {
+                    // --- Attribut "open" wird dynamisch gesetzt, wenn das Menü vorher offen war ---
+                    telemetryHtml = `
+                        <details ${isDetailsOpen ? 'open' : ''} style="margin-top: 8px; text-align: left; font-size: 0.85em; background: #f4f7f6; padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
+                            <summary style="cursor: pointer; font-weight: bold; color: #049EAB; outline: none;">GPS Details 🔽</summary>
+                            <div style="margin-top: 8px; line-height: 1.5; color: #444;">
+                                🔋 Akku: <b>${battStr}${chargeStr}</b><br>
+                                🏃 Bewegung: <b>${motionStr}</b><br>
+                                💨 Geschw.: <b>${speedStr}</b><br>
+                                ⛰️ Höhe: <b>${altStr}</b><br>
+                                🧭 Kurs: <b>${courseStr}</b><br>
+                                🎯 Genauigkeit: <b>${accStr}</b>
+                            </div>
+                        </details>
+                    `;
+                }
+
                 const icon = L.divIcon({
                     className: 'custom-team-icon',
                     html: `<div style="background-color: ${bgColor}; width: 18px; height: 18px; border-radius: 50%; border: 3px solid #333; box-shadow: 0 0 6px rgba(0,0,0,0.6);"></div>`,
@@ -544,12 +588,13 @@
                 });
 
                 const popupContent = `
-                    <div style="text-align:center; font-family: 'Roboto', sans-serif; min-width: 140px;">
+                    <div style="text-align:center; font-family: 'Roboto', sans-serif; min-width: 160px;">
                         <b style="font-size: 1.2em; color: #333;">${team.name}</b><br>
                         <span style="font-size: 0.9em; font-weight: bold; color: ${bgColor}; text-transform: uppercase;">${team.role}</span><br>
                         <div style="margin-top: 8px; font-size: 0.85em; color: #666; border-top: 1px solid #ccc; padding-top: 5px;">
                             Letztes GPS-Update:<br><b style="color: ${diffSec > 120 ? '#EB6502' : '#22c55e'};">${timeAgo}</b>
                         </div>
+                        ${telemetryHtml}
                     </div>
                 `;
 
@@ -615,7 +660,7 @@
         }
         loadAdminData();
         setInterval(loadAdminData, 5000);
-        
+
         function renderNotifications(requests) {
             const container = document.getElementById('notifications-container');
             let html = `<h3>Ausstehende Anfragen (${requests.length})</h3>`;

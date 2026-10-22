@@ -313,6 +313,13 @@ def init_db():
                         lat REAL,
                         lon REAL,
                         updated_at TEXT,
+                        batteryLevel REAL,
+                        charge INTEGER,
+                        motion INTEGER,
+                        altitude REAL,
+                        speed REAL,
+                        course REAL,
+                        accuracy REAL,
                         FOREIGN KEY(team_id) REFERENCES teams(id)
                     )''')
 
@@ -322,6 +329,13 @@ def init_db():
                         lat REAL,
                         lon REAL,
                         timestamp TEXT,
+                        batteryLevel REAL,
+                        charge INTEGER,
+                        motion INTEGER,
+                        altitude REAL,
+                        speed REAL,
+                        course REAL,
+                        accuracy REAL,
                         FOREIGN KEY(team_id) REFERENCES teams(id)
                     )''')
 
@@ -362,6 +376,19 @@ def init_db():
         ensure_column(c, "pending_requests", "notified_admin", "INTEGER")
         ensure_column(c, "action_logs", "actual_timestamp", "TEXT")
         ensure_column(c, "action_logs", "admin_only", "INTEGER")
+
+        # Neue Telemetrie-Spalten sicherstellen
+        for col_name, col_type in [
+            ("batteryLevel", "REAL"),
+            ("charge", "INTEGER"),
+            ("motion", "INTEGER"),
+            ("altitude", "REAL"),
+            ("speed", "REAL"),
+            ("course", "REAL"),
+            ("accuracy", "REAL"),
+        ]:
+            ensure_column(c, "team_locations", col_name, col_type)
+            ensure_column(c, "location_history", col_name, col_type)
 
         c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_slug', ?)", (ADMIN_SLUG,))
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('active_stops_dataset', 'Catch_Haltestellen.json')")
@@ -1860,6 +1887,13 @@ def admin(admin_slug):
     base_url = request.host_url.rstrip('/')
     team_names_map = {t_id: d["display_name"] for t_id, d in state["teams_data"].items()}
 
+    c = conn.cursor()
+    c.execute("""
+        SELECT team_id, lat, lon, updated_at, batteryLevel, charge, motion, altitude, speed, course, accuracy
+        FROM team_locations
+    """)
+    locations_by_team = {row["team_id"]: dict(row) for row in c.fetchall()}
+
     for t_id, data in state["teams_data"].items():
         team_urls[data["display_name"]] = f"{base_url}/team/{data['slug']}"
         teams_list.append({"id": t_id, "name": data["display_name"]})
@@ -1889,6 +1923,24 @@ def admin(admin_slug):
                     "end_time_str": o_end.astimezone(tz).strftime("%H:%M") if outage["offline_until"] else None
                 })
 
+        loc_row = locations_by_team.get(t_id)
+        telemetry = None
+        if loc_row:
+            has_telemetry = any(loc_row.get(k) is not None for k in [
+                'batteryLevel', 'charge', 'motion', 'altitude', 'speed', 'course', 'accuracy'
+            ])
+            if has_telemetry:
+                telemetry = {
+                    "batteryLevel": loc_row.get('batteryLevel'),
+                    "charge": loc_row.get('charge'),
+                    "motion": loc_row.get('motion'),
+                    "altitude": loc_row.get('altitude'),
+                    "speed": loc_row.get('speed'),
+                    "course": loc_row.get('course'),
+                    "accuracy": loc_row.get('accuracy'),
+                    "updated_at": loc_row.get('updated_at')
+                }
+
         leaderboard.append({
             "id": t_id, "display_name": data["display_name"], "score": score, "role": data.get("role", "keine"),
             "next_role": data.get("next_role", ""),
@@ -1896,7 +1948,8 @@ def admin(admin_slug):
             "deactivated": data.get("deactivated", False),
             "manual_points": data.get("manual_points", 0),
             "total_offline_seconds": total_offline_seconds,
-            "offline_warnings": formatted_offline_warnings
+            "offline_warnings": formatted_offline_warnings,
+            "telemetry": telemetry
         })
 
     leaderboard.sort(key=lambda x: x["score"], reverse=True)
@@ -1922,7 +1975,10 @@ def api_admin_data(admin_slug):
         phase, start_iso, end_iso, mid_iso, now_iso = update_game_time_state(conn, state)
 
         c = conn.cursor()
-        c.execute("SELECT team_id, lat, lon, updated_at FROM team_locations")
+        c.execute("""
+            SELECT team_id, lat, lon, updated_at, batteryLevel, charge, motion, altitude, speed, course, accuracy
+            FROM team_locations
+        """)
         locations = c.fetchall()
 
         team_locs = []
@@ -1938,8 +1994,36 @@ def api_admin_data(admin_slug):
                     "role": team_data.get("role", "keine"),
                     "lat": loc['lat'],
                     "lon": loc['lon'],
-                    "updated_at": ts_epoch
+                    "updated_at": ts_epoch,
+                    "batteryLevel": loc['batteryLevel'],
+                    "charge": bool(loc['charge']) if loc['charge'] is not None else None,
+                    "motion": bool(loc['motion']) if loc['motion'] is not None else None,
+                    "altitude": loc['altitude'],
+                    "speed": loc['speed'],
+                    "course": loc['course'],
+                    "accuracy": loc['accuracy']
                 })
+
+        c.execute("""
+            SELECT team_id, lat, lon, timestamp, batteryLevel, charge, motion, altitude, speed, course, accuracy
+            FROM location_history
+            ORDER BY timestamp ASC
+        """)
+        location_hist = []
+        for h in c.fetchall():
+            location_hist.append({
+                "team_id": h["team_id"],
+                "lat": h["lat"],
+                "lon": h["lon"],
+                "timestamp": h["timestamp"],
+                "batteryLevel": h["batteryLevel"],
+                "charge": bool(h["charge"]) if h["charge"] is not None else None,
+                "motion": bool(h["motion"]) if h["motion"] is not None else None,
+                "altitude": h["altitude"],
+                "speed": h["speed"],
+                "course": h["course"],
+                "accuracy": h["accuracy"]
+            })
 
     return jsonify({
         'success': True,
@@ -1948,7 +2032,8 @@ def api_admin_data(admin_slug):
         'phase': phase,
         'now_time': now_iso,
         'active_stops': state.get("active_stops", []),
-        'team_locations': team_locs
+        'team_locations': team_locs,
+        'location_history': location_hist
     })
 
 
@@ -3248,6 +3333,144 @@ def traccar_webhook():
     # Zukunftspakete / vorgehende Smartphone-Uhrzeit deckeln
     packet_time = min(packet_time, time.time() + 5)
 
+    # Zusätzliche Telemetrie-Daten auslesen (position bzw. position.attributes)
+    pos_dict = position if isinstance(position, dict) else {}
+    pos_attrs = pos_dict.get('attributes') if isinstance(pos_dict.get('attributes'), dict) else {}
+    payload_attrs = payload.get('attributes') if isinstance(payload.get('attributes'), dict) else {}
+
+    # batteryLevel (REAL)
+    raw_battery = (
+        pos_attrs.get('batteryLevel')
+        if pos_attrs.get('batteryLevel') is not None
+        else pos_attrs.get('battery')
+        if pos_attrs.get('battery') is not None
+        else payload_attrs.get('batteryLevel')
+        if payload_attrs.get('batteryLevel') is not None
+        else payload.get('batteryLevel')
+        if payload.get('batteryLevel') is not None
+        else request.args.get('batteryLevel')
+        or request.args.get('batt')
+        or request.args.get('battery')
+        or request.form.get('batteryLevel')
+        or request.form.get('batt')
+    )
+    battery_level = None
+    if raw_battery is not None:
+        try:
+            battery_level = float(raw_battery)
+        except (ValueError, TypeError):
+            battery_level = None
+
+    # charge (INTEGER/BOOLEAN)
+    raw_charge = (
+        pos_attrs.get('charge')
+        if pos_attrs.get('charge') is not None
+        else pos_attrs.get('charging')
+        if pos_attrs.get('charging') is not None
+        else payload_attrs.get('charge')
+        if payload_attrs.get('charge') is not None
+        else payload.get('charge')
+        if payload.get('charge') is not None
+        else request.args.get('charge')
+        or request.form.get('charge')
+    )
+    charge = None
+    if raw_charge is not None:
+        if isinstance(raw_charge, bool):
+            charge = 1 if raw_charge else 0
+        elif isinstance(raw_charge, (int, float)):
+            charge = 1 if int(raw_charge) != 0 else 0
+        elif isinstance(raw_charge, str):
+            charge = 1 if raw_charge.strip().lower() in ('true', '1', 'yes') else 0
+
+    # motion (INTEGER/BOOLEAN)
+    raw_motion = (
+        pos_attrs.get('motion')
+        if pos_attrs.get('motion') is not None
+        else payload_attrs.get('motion')
+        if payload_attrs.get('motion') is not None
+        else payload.get('motion')
+        if payload.get('motion') is not None
+        else request.args.get('motion')
+        or request.form.get('motion')
+    )
+    motion = None
+    if raw_motion is not None:
+        if isinstance(raw_motion, bool):
+            motion = 1 if raw_motion else 0
+        elif isinstance(raw_motion, (int, float)):
+            motion = 1 if int(raw_motion) != 0 else 0
+        elif isinstance(raw_motion, str):
+            motion = 1 if raw_motion.strip().lower() in ('true', '1', 'yes') else 0
+
+    # altitude (REAL)
+    raw_altitude = (
+        pos_dict.get('altitude')
+        if pos_dict.get('altitude') is not None
+        else payload.get('altitude')
+        if payload.get('altitude') is not None
+        else request.args.get('altitude')
+        or request.args.get('alt')
+        or request.form.get('altitude')
+        or request.form.get('alt')
+    )
+    altitude = None
+    if raw_altitude is not None:
+        try:
+            altitude = float(raw_altitude)
+        except (ValueError, TypeError):
+            altitude = None
+
+    # speed (REAL)
+    raw_speed = (
+        pos_dict.get('speed')
+        if pos_dict.get('speed') is not None
+        else payload.get('speed')
+        if payload.get('speed') is not None
+        else request.args.get('speed')
+        or request.form.get('speed')
+    )
+    speed = None
+    if raw_speed is not None:
+        try:
+            speed = float(raw_speed)
+        except (ValueError, TypeError):
+            speed = None
+
+    # course (REAL)
+    raw_course = (
+        pos_dict.get('course')
+        if pos_dict.get('course') is not None
+        else payload.get('course')
+        if payload.get('course') is not None
+        else request.args.get('course')
+        or request.args.get('bearing')
+        or request.form.get('course')
+        or request.form.get('bearing')
+    )
+    course = None
+    if raw_course is not None:
+        try:
+            course = float(raw_course)
+        except (ValueError, TypeError):
+            course = None
+
+    # accuracy (REAL)
+    raw_accuracy = (
+        pos_dict.get('accuracy')
+        if pos_dict.get('accuracy') is not None
+        else payload.get('accuracy')
+        if payload.get('accuracy') is not None
+        else request.args.get('accuracy')
+        or request.form.get('accuracy')
+    )
+    accuracy = None
+    if raw_accuracy is not None:
+        try:
+            accuracy = float(raw_accuracy)
+        except (ValueError, TypeError):
+            accuracy = None
+
     clean_id = str(identifier).strip()
 
     if not clean_id:
@@ -3325,13 +3548,20 @@ def traccar_webhook():
             if save_history:
                 c.execute("""
                     INSERT INTO location_history
-                        (team_id, lat, lon, timestamp)
-                    VALUES (?, ?, ?, ?)
+                        (team_id, lat, lon, timestamp, batteryLevel, charge, motion, altitude, speed, course, accuracy)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     resolved_team_id,
                     lat,
                     lon,
-                    packet_time_iso
+                    packet_time_iso,
+                    battery_level,
+                    charge,
+                    motion,
+                    altitude,
+                    speed,
+                    course,
+                    accuracy
                 ))
 
             c.execute("""
@@ -3355,19 +3585,33 @@ def traccar_webhook():
             if update_live:
                 c.execute("""
                     INSERT INTO team_locations
-                        (team_id, lat, lon, updated_at)
-                    VALUES (?, ?, ?, ?)
+                        (team_id, lat, lon, updated_at, batteryLevel, charge, motion, altitude, speed, course, accuracy)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(team_id) DO UPDATE SET
                         lat = excluded.lat,
                         lon = excluded.lon,
-                        updated_at = excluded.updated_at
+                        updated_at = excluded.updated_at,
+                        batteryLevel = excluded.batteryLevel,
+                        charge = excluded.charge,
+                        motion = excluded.motion,
+                        altitude = excluded.altitude,
+                        speed = excluded.speed,
+                        course = excluded.course,
+                        accuracy = excluded.accuracy
                     WHERE team_locations.updated_at IS NULL
                        OR excluded.updated_at >= team_locations.updated_at
                 """, (
                     resolved_team_id,
                     lat,
                     lon,
-                    packet_time_iso
+                    packet_time_iso,
+                    battery_level,
+                    charge,
+                    motion,
+                    altitude,
+                    speed,
+                    course,
+                    accuracy
                 ))
 
 
@@ -3393,6 +3637,13 @@ def traccar_webhook():
         "identifier": clean_id,
         "lat": lat,
         "lon": lon,
+        "batteryLevel": battery_level,
+        "charge": charge,
+        "motion": motion,
+        "altitude": altitude,
+        "speed": speed,
+        "course": course,
+        "accuracy": accuracy,
         "matched": True,
         "status": f"OK ({resolved_name})"
     })

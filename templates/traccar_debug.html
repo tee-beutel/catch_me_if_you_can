@@ -390,13 +390,38 @@
             container.innerHTML = '<p class="empty">Noch keine Pakete bei /api/traccar angekommen.</p>';
             return;
         }
-        let html = '<table><thead><tr><th>Zeit</th><th>Kennung (ID)</th><th>Koordinaten</th><th>Ergebnis</th></tr></thead><tbody>';
+        let html = '<table><thead><tr><th>Zeit</th><th>Kennung (ID)</th><th>Inhalt</th><th>Ergebnis</th></tr></thead><tbody>';
         for (const entry of logs) {
             const badgeClass = entry.matched ? 'badge-ok' : 'badge-warn';
+            const latStr = entry.lat != null ? Number(entry.lat).toFixed(5) : '-';
+            const lonStr = entry.lon != null ? Number(entry.lon).toFixed(5) : '-';
+            const battStr = entry.batteryLevel != null ? `${Number(entry.batteryLevel).toFixed(1)} %` : '-';
+            const chargeStr = entry.charge != null ? (entry.charge ? 'Lädt' : 'Entlädt') : '-';
+            const motionStr = entry.motion != null ? (entry.motion ? 'Ja' : 'Nein') : '-';
+            const speedStr = entry.speed != null ? `${Number(entry.speed).toFixed(2)} m/s` : '-';
+            const altStr = entry.altitude != null ? `${Number(entry.altitude).toFixed(1)} m` : '-';
+            const courseStr = entry.course != null ? `${Math.round(entry.course)}°` : '-';
+            const accStr = entry.accuracy != null ? `${Number(entry.accuracy).toFixed(1)} m` : '-';
+
+            const payloadDetails = `
+                <details>
+                    <summary style="cursor: pointer; color: var(--blue); font-weight: 600;">Payload ansehen</summary>
+                    <div style="margin-top: 6px; font-size: 0.82rem; background: rgba(0,0,0,0.35); padding: 8px 10px; border-radius: 4px; line-height: 1.6;">
+                        <div><b>Koordinaten:</b> ${latStr}, ${lonStr}</div>
+                        <div><b>Akkustand:</b> ${battStr} (${chargeStr})</div>
+                        <div><b>Bewegung:</b> ${motionStr}</div>
+                        <div><b>Geschwindigkeit:</b> ${speedStr}</div>
+                        <div><b>Höhe:</b> ${altStr}</div>
+                        <div><b>Kurs:</b> ${courseStr}</div>
+                        <div><b>Genauigkeit:</b> ${accStr}</div>
+                    </div>
+                </details>
+            `;
+
             html += `<tr>
                 <td>${entry.time_str}</td>
                 <td><code>${entry.identifier}</code></td>
-                <td>${Number(entry.lat).toFixed(5)}, ${Number(entry.lon).toFixed(5)}</td>
+                <td>${payloadDetails}</td>
                 <td><span class="badge ${badgeClass}">${entry.status}</span></td>
             </tr>`;
         }
