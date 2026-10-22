@@ -557,7 +557,7 @@
                 const battStr = (team.batteryLevel !== null && team.batteryLevel !== undefined) ? `${Number(team.batteryLevel).toFixed(1)} %` : '<i>k. A.</i>';
                 const chargeStr = (team.charge !== null && team.charge !== undefined) ? ` (${team.charge ? 'Lädt' : 'Entlädt'})` : '';
                 const motionStr = (team.motion !== null && team.motion !== undefined) ? (team.motion ? 'Ja' : 'Nein') : '<i>k. A.</i>';
-                const speedStr = (team.speed !== null && team.speed !== undefined) ? `${Number(team.speed).toFixed(2)} m/s` : '<i>k. A.</i>';
+                const speedStr = (team.speed !== null && team.speed !== undefined) ? `${(Number(team.speed) * 3.6).toFixed(1)} km/h` : '<i>k. A.</i>';
                 const altStr = (team.altitude !== null && team.altitude !== undefined) ? `${Number(team.altitude).toFixed(1)} m` : '<i>k. A.</i>';
                 const courseStr = (team.course !== null && team.course !== undefined) ? `${Math.round(team.course)}°` : '<i>k. A.</i>';
                 const accStr = (team.accuracy !== null && team.accuracy !== undefined) ? `${Number(team.accuracy).toFixed(1)} m` : '<i>k. A.</i>';

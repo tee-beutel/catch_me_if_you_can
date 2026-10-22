@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Traccar Diagnose & E2E-Test</title>
+    <title>Traccar Diagnose & Systemstatus</title>
     <style>
         :root {
             --bg: #0f172a;
@@ -99,33 +99,18 @@
         .badge-err { background: rgba(239, 68, 68, 0.2); color: var(--red); }
         .badge-warn { background: rgba(245, 158, 11, 0.2); color: var(--amber); }
 
-        .step-list { list-style: none; margin-top: 16px; }
-        .step-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 12px;
-            padding: 10px 12px;
-            border-radius: 6px;
-            background: rgba(0,0,0,0.2);
-            margin-bottom: 8px;
-            border-left: 4px solid var(--border);
-        }
-        .step-item.ok { border-left-color: var(--green); }
-        .step-item.fail { border-left-color: var(--red); }
-        .step-title { font-weight: 700; font-size: 0.95rem; }
-        .step-detail { font-size: 0.85rem; color: var(--muted); margin-top: 2px; word-break: break-word; }
-
         table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-top: 10px; }
         th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
         th { color: var(--muted); font-weight: 600; }
         code { background: rgba(0,0,0,0.35); padding: 2px 6px; border-radius: 4px; font-size: 0.82rem; }
         .empty { color: var(--muted); font-style: italic; padding: 12px 0; }
+        details summary { cursor: pointer; color: var(--blue); font-weight: 600; }
     </style>
 </head>
 <body>
 <div class="container">
     <header>
-        <h1>🛰️ Traccar Diagnose & End-to-End Test</h1>
+        <h1>🛰️ Traccar Diagnose & Systemstatus</h1>
         <div style="display: flex; gap: 10px;">
             <button class="btn btn-secondary" onclick="loadStatus()">🔄 Status aktualisieren</button>
             <a class="btn btn-secondary" href="/adminconsole-{{ admin_url }}">⬅️ Zurück zum Admin-Panel</a>
@@ -162,9 +147,9 @@
             </div>
         </div>
 
-        <!-- System- & Prozess-Status (NEU) -->
+        <!-- Traccar Prozess Status -->
         <div class="card">
-            <h2>System- & Programm-Status</h2>
+            <h2>Traccar Prozess-Status</h2>
             <div class="status-row">
                 <span>Traccar Java-Prozess</span>
                 <span id="st-proc" class="badge badge-warn">Prüfe...</span>
@@ -187,9 +172,9 @@
             </div>
         </div>
 
-        <!-- Allgemeiner System- & Spielstatus (NEU) -->
+        <!-- Allgemeiner System- & Spielstatus -->
         <div class="card">
-            <h2>Allgemeiner System- & Spielstatus</h2>
+            <h2>Allgemeiner Spielstatus</h2>
             <div class="status-row">
                 <span>Spieldatenbank (game.db)</span>
                 <span id="st-gamedb" class="badge badge-ok">Prüfe...</span>
@@ -211,24 +196,63 @@
                 <code id="st-python">-</code>
             </div>
         </div>
-
-        <!-- E2E Test -->
+        
+        <!-- Hardware & System Metriken -->
         <div class="card">
-            <h2>2. Koblenz Loopback-Test (End-to-End)</h2>
-            <p style="font-size: 0.88rem; color: var(--muted); margin-bottom: 14px;">
-                Erstellt einen temporären Test-User in Traccar, sendet die Koordinaten vom
-                <strong>Deutschen Eck in Koblenz (50.3644, 7.6061)</strong> an Port 5055 und prüft,
-                ob Traccar diese per Webhook an Python (<code>/api/traccar</code>) weiterleitet.
-            </p>
-            <button id="btn-test" class="btn btn-green" style="width: 100%; justify-content: center;" onclick="runE2ETest()">
-                🚀 End-to-End Test (Koblenz) jetzt starten
-            </button>
-            <ul id="test-steps" class="step-list"></ul>
+            <h2>Hardware & System Metriken</h2>
+            <div class="status-row">
+                <span>Betriebssystem</span>
+                <strong id="st-os">-</strong>
+            </div>
+            <div class="status-row">
+                <span>CPU Auslastung</span>
+                <span id="st-cpu" class="badge badge-warn">Prüfe...</span>
+            </div>
+            <div class="status-row">
+                <span>RAM Auslastung</span>
+                <span id="st-ram" class="badge badge-warn">Prüfe...</span>
+            </div>
+            <div class="status-row">
+                <span>Festplatte (Root)</span>
+                <span id="st-disk" class="badge badge-warn">Prüfe...</span>
+            </div>
+            <div class="status-row">
+                <span>Akku (Laptop)</span>
+                <span id="st-batt" class="badge badge-warn">Prüfe...</span>
+            </div>
+            <div class="status-row">
+                <span>Netzwerk / WLAN</span>
+                <span id="st-wlan" class="badge badge-warn">Prüfe...</span>
+            </div>
+            
+            <!-- NEU: Ausklappbare Zusatzmetriken -->
+            <div style="margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; display: flex; flex-direction: column; gap: 10px;">
+                <details id="det-net">
+                    <summary>🌐 Netzwerk-Traffic (Gesamt)</summary>
+                    <div id="content-net" style="margin-top: 6px; font-size: 0.85rem; background: rgba(0,0,0,0.35); padding: 8px 10px; border-radius: 4px;">
+                        Lade Traffic...
+                    </div>
+                </details>
+
+                <details id="det-temps">
+                    <summary>🌡️ Temperaturen & Lüfter</summary>
+                    <div id="content-temps" style="margin-top: 6px; font-size: 0.85rem; background: rgba(0,0,0,0.35); padding: 8px 10px; border-radius: 4px;">
+                        Lade Sensoren...
+                    </div>
+                </details>
+
+                <details id="det-procs">
+                    <summary>⚙️ Top Prozesse (nach RAM)</summary>
+                    <div id="content-procs" style="margin-top: 6px; font-size: 0.82rem; background: rgba(0,0,0,0.35); padding: 8px 10px; border-radius: 4px;">
+                        Lade Prozesse...
+                    </div>
+                </details>
+            </div>
         </div>
 
         <!-- Logging & Export -->
         <div class="card">
-            <h2>3. Logging & Diagnose-Export</h2>
+            <h2>Logging & Diagnose-Export</h2>
             <div class="status-row">
                 <span>Traccar API in log.json schreiben</span>
                 <label style="position: relative; display: inline-block; width: 48px; height: 24px; cursor: pointer;">
@@ -271,6 +295,12 @@
     const ADMIN_SLUG = "{{ admin_url }}";
 
     async function loadStatus() {
+        // Zustand offener Details-Boxen vor dem Aktualisieren zwischenspeichern
+        const openDetails = {};
+        document.querySelectorAll('details').forEach(el => {
+            if (el.id) openDetails[el.id] = el.open;
+        });
+
         try {
             const res = await fetch(`/api/traccar_debug/${ADMIN_SLUG}/status`);
             const data = await res.json();
@@ -296,7 +326,6 @@
             document.getElementById('st-user').textContent = data.traccar_user || "-";
             document.getElementById('st-dev-count').textContent = data.devices ? data.devices.length : 0;
 
-            // --- NEUE MERKMALE AKTUALISIEREN ---
             const procBadge = document.getElementById('st-proc');
             if (data.process_running) {
                 procBadge.textContent = `LÄUFT (PID: ${data.process_pid})`;
@@ -342,7 +371,6 @@
                 dbBadge.className = "badge badge-warn";
             }
 
-            // --- NEUE ALLGEMEINE MERKMALE AKTUALISIEREN ---
             const gameDbBadge = document.getElementById('st-gamedb');
             gameDbBadge.textContent = data.game_db_size_kb > 0 ? `${data.game_db_size_kb} KB` : "FEHLT";
             gameDbBadge.className = data.game_db_size_kb > 0 ? "badge badge-ok" : "badge badge-err";
@@ -356,11 +384,103 @@
             document.getElementById('st-teams').textContent = data.num_teams !== undefined ? data.num_teams : "-";
             document.getElementById('st-threads').textContent = data.active_threads || "-";
             document.getElementById('st-python').textContent = data.python_version || "-";
+            
+            // --- HARDWARE METRIKEN AKTUALISIEREN ---
+            if (data.sys_info) {
+                document.getElementById('st-os').textContent = data.sys_info.os;
+
+                const cpuBadge = document.getElementById('st-cpu');
+                cpuBadge.textContent = `${data.sys_info.cpu_percent}% (${data.sys_info.cpu_cores} Cores)`;
+                cpuBadge.className = data.sys_info.cpu_percent > 85 ? "badge badge-err" : "badge badge-ok";
+
+                const ramBadge = document.getElementById('st-ram');
+                ramBadge.textContent = `${data.sys_info.ram_percent}% (${data.sys_info.ram_total_gb} GB)`;
+                ramBadge.className = data.sys_info.ram_percent > 85 ? "badge badge-warn" : "badge badge-ok";
+
+                const diskBadge = document.getElementById('st-disk');
+                diskBadge.textContent = `${data.sys_info.disk_percent}% (${data.sys_info.disk_total_gb} GB)`;
+                diskBadge.className = data.sys_info.disk_percent > 90 ? "badge badge-err" : "badge badge-ok";
+
+                const battBadge = document.getElementById('st-batt');
+                if (data.sys_info.battery_percent !== null) {
+                    const status = data.sys_info.battery_plugged ? "⚡ Lädt" : "🔋 Akku";
+                    battBadge.textContent = `${data.sys_info.battery_percent}% (${status})`;
+                    battBadge.className = data.sys_info.battery_percent < 20 && !data.sys_info.battery_plugged ? "badge badge-warn" : "badge badge-ok";
+                } else {
+                    battBadge.textContent = "Kein Akku / Server";
+                    battBadge.className = "badge badge-warn";
+                    battBadge.style.background = "transparent";
+                    battBadge.style.color = "var(--muted)";
+                }
+
+                const wlanBadge = document.getElementById('st-wlan');
+                if (data.sys_info.wifi_ssid !== "Nicht verfügbar") {
+                    wlanBadge.textContent = data.sys_info.wifi_signal 
+                        ? `${data.sys_info.wifi_ssid} (${data.sys_info.wifi_signal})` 
+                        : data.sys_info.wifi_ssid;
+                    wlanBadge.className = "badge badge-ok";
+                    wlanBadge.style.background = "";
+                    wlanBadge.style.color = "";
+                } else {
+                    wlanBadge.textContent = "Nicht verbunden";
+                    wlanBadge.className = "badge badge-warn";
+                    wlanBadge.style.background = "transparent";
+                    wlanBadge.style.color = "var(--muted)";
+                }
+
+                // Netzwerk Traffic befüllen
+                document.getElementById('content-net').innerHTML = `
+                    <div style="margin-bottom: 8px;">
+                        <strong style="color: var(--text);">Nur diese Python-App:</strong><br>
+                        📤 Gesendet: <b>${data.sys_info.net_io.app_sent_mb} MB</b><br>
+                        📥 Empfangen: <b>${data.sys_info.net_io.app_recv_mb} MB</b>
+                    </div>
+                    <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
+                        <strong style="color: var(--text);">Gesamter Server:</strong><br>
+                        📤 Gesendet: <b>${data.sys_info.net_io.sys_sent_mb} MB</b><br>
+                        📥 Empfangen: <b>${data.sys_info.net_io.sys_recv_mb} MB</b>
+                    </div>
+                `;
+
+                // Temperaturen befüllen
+                const tempContainer = document.getElementById('content-temps');
+                if (data.sys_info.temperatures.length > 0 || data.sys_info.fans.length > 0) {
+                    let tHtml = "";
+                    data.sys_info.temperatures.forEach(t => {
+                        tHtml += `<div>• ${t.label}: <b>${t.current}°C</b></div>`;
+                    });
+                    data.sys_info.fans.forEach(f => {
+                        tHtml += `<div>• Lüfter ${f.label}: <b>${f.current} RPM</b></div>`;
+                    });
+                    tempContainer.innerHTML = tHtml;
+                } else {
+                    tempContainer.innerHTML = '<span style="color: var(--muted);">Keine Temperatursensoren verfügbar</span>';
+                }
+
+                // Prozesse befüllen
+                const procContainer = document.getElementById('content-procs');
+                if (data.sys_info.top_processes.length > 0) {
+                    let pHtml = '<table style="margin-top:0;"><thead><tr><th>PID</th><th>Name</th><th>CPU</th><th>RAM</th></tr></thead><tbody>';
+                    data.sys_info.top_processes.forEach(p => {
+                        pHtml += `<tr><td>${p.pid}</td><td>${p.name}</td><td>${p.cpu_percent}%</td><td>${p.memory_percent}%</td></tr>`;
+                    });
+                    pHtml += '</tbody></table>';
+                    procContainer.innerHTML = pHtml;
+                } else {
+                    procContainer.innerHTML = '<span style="color: var(--muted);">Keine Prozessdaten verfügbar</span>';
+                }
+            }
 
             renderDevices(data.devices || []);
             renderWebhooks(data.recent_webhooks || []);
         } catch (err) {
             console.error("Fehler beim Status-Abruf:", err);
+        } finally {
+            // Zustand der offenen Details-Boxen nach dem Rendern wiederherstellen
+            for (const [id, isOpen] of Object.entries(openDetails)) {
+                const el = document.getElementById(id);
+                if (el) el.open = isOpen;
+            }
         }
     }
 
@@ -385,13 +505,20 @@
     }
 
     function renderWebhooks(logs) {
+        // Offene Payload-Details vor dem Neuzeichnen merken
+        const openPayloads = new Set();
+        document.querySelectorAll('#webhooks-container details').forEach((el, index) => {
+            if (el.open) openPayloads.add(index);
+        });
+
         const container = document.getElementById('webhooks-container');
         if (!logs.length) {
             container.innerHTML = '<p class="empty">Noch keine Pakete bei /api/traccar angekommen.</p>';
             return;
         }
         let html = '<table><thead><tr><th>Zeit</th><th>Kennung (ID)</th><th>Inhalt</th><th>Ergebnis</th></tr></thead><tbody>';
-        for (const entry of logs) {
+        for (let i = 0; i < logs.length; i++) {
+            const entry = logs[i];
             const badgeClass = entry.matched ? 'badge-ok' : 'badge-warn';
             const latStr = entry.lat != null ? Number(entry.lat).toFixed(5) : '-';
             const lonStr = entry.lon != null ? Number(entry.lon).toFixed(5) : '-';
@@ -403,8 +530,10 @@
             const courseStr = entry.course != null ? `${Math.round(entry.course)}°` : '-';
             const accStr = entry.accuracy != null ? `${Number(entry.accuracy).toFixed(1)} m` : '-';
 
+            const isOpenAttr = openPayloads.has(i) ? 'open' : '';
+
             const payloadDetails = `
-                <details>
+                <details ${isOpenAttr}>
                     <summary style="cursor: pointer; color: var(--blue); font-weight: 600;">Payload ansehen</summary>
                     <div style="margin-top: 6px; font-size: 0.82rem; background: rgba(0,0,0,0.35); padding: 8px 10px; border-radius: 4px; line-height: 1.6;">
                         <div><b>Koordinaten:</b> ${latStr}, ${lonStr}</div>
@@ -460,39 +589,6 @@
         }
     }
 
-    async function runE2ETest() {
-        const btn = document.getElementById('btn-test');
-        const list = document.getElementById('test-steps');
-        btn.disabled = true;
-        btn.textContent = "⏳ Test läuft (ca. 2–5 Sekunden)...";
-        list.innerHTML = '<li class="step-item"><div class="step-title">Starte End-to-End Test über Koblenz...</div></li>';
-
-        try {
-            const res = await fetch(`/api/traccar_debug/${ADMIN_SLUG}/test`, { method: 'POST' });
-            const data = await res.json();
-
-            list.innerHTML = '';
-            for (const step of (data.steps || [])) {
-                const li = document.createElement('li');
-                li.className = 'step-item ' + (step.ok ? 'ok' : 'fail');
-                li.innerHTML = `
-                    <div>${step.ok ? '✅' : '❌'}</div>
-                    <div>
-                        <div class="step-title">${step.step}</div>
-                        <div class="step-detail">${step.detail}</div>
-                    </div>
-                `;
-                list.appendChild(li);
-            }
-            await loadStatus();
-        } catch (e) {
-            list.innerHTML = `<li class="step-item fail"><div>❌</div><div><div class="step-title">Netzwerkfehler</div><div class="step-detail">${e}</div></div></li>`;
-        } finally {
-            btn.disabled = false;
-            btn.textContent = "🚀 End-to-End Test (Koblenz) erneut starten";
-        }
-    }
-
     async function fetchLogStatus() {
         try {
             const res = await fetch(`/api/traccar_debug/${ADMIN_SLUG}/log_settings`);
@@ -541,9 +637,7 @@
         }
     }
 
-    // Beim Laden der Seite den aktuellen Status abrufen
     fetchLogStatus();
-
     loadStatus();
     setInterval(loadStatus, 5000);
 </script>

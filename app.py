@@ -14,7 +14,6 @@ import atexit
 import zipfile
 import urllib.request
 import sqlite3
-import secrets
 import threading
 from collections import deque
 from datetime import datetime, timedelta, timezone
@@ -22,6 +21,8 @@ from flask import Flask, render_template, request, jsonify, redirect, send_file
 import requests
 from requests.auth import HTTPBasicAuth
 from dotenv import load_dotenv
+import psutil
+import platform
 
 # Lädt die Variablen aus der .env-Datei (falls lokal vorhanden)
 load_dotenv()
@@ -34,6 +35,29 @@ except ImportError:
         return pytz.timezone(tz_str)
 
 app = Flask(__name__)
+
+# --- FLASK TRAFFIC TRACKER ---
+flask_traffic_rx = 0  # Empfangene Bytes
+flask_traffic_tx = 0  # Gesendete Bytes
+traffic_lock = threading.Lock()
+
+@app.before_request
+def count_incoming_traffic():
+    global flask_traffic_rx
+    req_size = (request.content_length or 0) + 300
+    with traffic_lock:
+        flask_traffic_rx += req_size
+
+@app.after_request
+def count_outgoing_traffic(response):
+    global flask_traffic_tx
+    try:
+        resp_size = len(response.get_data()) + 200
+        with traffic_lock:
+            flask_traffic_tx += resp_size
+    except Exception:
+        pass
+    return response
 
 # --- PFADE & KONSTANTEN ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -3748,6 +3772,166 @@ def traccar_debug_status(admin_slug):
         phase = "Fehler beim Lesen"
         num_teams = 0
 
+    # --- SYSTEM-METRIKEN (Robust & Erweitert) ---
+    sys_info = {
+        "os": "Unbekannt",
+        "cpu_percent": 0.0,
+        "cpu_cores": 0,
+        "ram_percent": 0.0,
+        "ram_total_gb": 0.0,
+        "disk_percent": 0.0,
+        "disk_total_gb": 0.0,
+        "battery_percent": None,
+        "battery_plugged": None,
+        "wifi_ssid": "Nicht verfügbar",
+        "wifi_signal": "",
+        "temperatures": [],
+        "fans": [],
+        "net_io": {"sys_sent_mb": 0.0, "sys_recv_mb": 0.0, "app_sent_mb": 0.0, "app_recv_mb": 0.0},
+        "top_processes": []
+    }
+
+    try:
+        sys_info["os"] = f"{platform.system()} {platform.release()}"
+    except Exception:
+        pass
+
+    try:
+        sys_info["cpu_percent"] = psutil.cpu_percent(interval=None)
+        sys_info["cpu_cores"] = psutil.cpu_count(logical=True)
+    except Exception:
+        pass
+
+    try:
+        ram = psutil.virtual_memory()
+        sys_info["ram_percent"] = ram.percent
+        sys_info["ram_total_gb"] = round(ram.total / (1024**3), 2)
+    except Exception:
+        pass
+
+    try:
+        disk = psutil.disk_usage('/')
+        sys_info["disk_percent"] = disk.percent
+        sys_info["disk_total_gb"] = round(disk.total / (1024**3), 2)
+    except Exception:
+        pass
+
+    try:
+        batt = psutil.sensors_battery()
+        if batt:
+            sys_info["battery_percent"] = round(batt.percent, 1)
+            sys_info["battery_plugged"] = batt.power_plugged
+    except Exception:
+        pass
+
+    # Temperaturen & Lüfter
+    try:
+        if hasattr(psutil, "sensors_temperatures"):
+            temps = psutil.sensors_temperatures()
+            for name, entries in temps.items():
+                for entry in entries:
+                    sys_info["temperatures"].append({
+                        "label": entry.label or name,
+                        "current": entry.current,
+                        "high": entry.high
+                    })
+    except Exception:
+        pass
+
+    try:
+        if hasattr(psutil, "sensors_fans"):
+            fans = psutil.sensors_fans()
+            for name, entries in fans.items():
+                for entry in entries:
+                    sys_info["fans"].append({
+                        "label": entry.label or name,
+                        "current": entry.current
+                    })
+    except Exception:
+        pass
+
+    # Netzwerk-Traffic (App-spezifisch vs. System-weit)
+    try:
+        net = psutil.net_io_counters()
+        sys_info["net_io"] = {
+            "sys_sent_mb": round(net.bytes_sent / (1024 ** 2), 1),
+            "sys_recv_mb": round(net.bytes_recv / (1024 ** 2), 1),
+            "app_sent_mb": round(flask_traffic_tx / (1024 ** 2), 3),
+            "app_recv_mb": round(flask_traffic_rx / (1024 ** 2), 3)
+        }
+    except Exception:
+        pass
+
+    # Top 10 Prozesse nach RAM/CPU
+    try:
+        procs = []
+        for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+            try:
+                pinfo = p.info
+                pinfo['cpu_percent'] = p.cpu_percent(interval=None) or 0.0
+                pinfo['memory_percent'] = round(p.memory_percent() or 0.0, 1)
+                procs.append(pinfo)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        procs.sort(key=lambda x: x['memory_percent'], reverse=True)
+        sys_info["top_processes"] = procs[:10]
+    except Exception:
+        pass
+
+    try:
+        if platform.system() == "Linux":
+            env = os.environ.copy()
+            env["LC_ALL"] = "C"
+            env["LANG"] = "C"
+
+            try:
+                out = subprocess.check_output(
+                    ["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL", "dev", "wifi"],
+                    text=True, stderr=subprocess.DEVNULL, env=env, timeout=2
+                )
+                for line in out.splitlines():
+                    if line.lower().startswith(("yes:", "ja:")):
+                        parts = line.rsplit(":", 2)
+                        if len(parts) == 3 and parts[1]:
+                            sys_info["wifi_ssid"] = parts[1].replace("\\:", ":")
+                            sys_info["wifi_signal"] = f"{parts[2]}%"
+                            break
+            except Exception:
+                pass
+
+            if sys_info["wifi_ssid"] == "Nicht verfügbar":
+                try:
+                    ssid = subprocess.check_output(
+                        ["iwgetid", "-r"], text=True, stderr=subprocess.DEVNULL, timeout=2
+                    ).strip()
+                    if ssid:
+                        sys_info["wifi_ssid"] = ssid
+                except Exception:
+                    pass
+
+                if os.path.exists("/proc/net/wireless"):
+                    with open("/proc/net/wireless", "r") as f:
+                        lines = f.readlines()
+                        if len(lines) > 2:
+                            parts = lines[2].split()
+                            if len(parts) >= 3:
+                                qual = float(parts[2].rstrip("."))
+                                pct = min(100, max(0, int((qual / 70.0) * 100)))
+                                sys_info["wifi_signal"] = f"{pct}%"
+                                if sys_info["wifi_ssid"] == "Nicht verfügbar":
+                                    iface = parts[0].rstrip(":")
+                                    sys_info["wifi_ssid"] = f"WLAN ({iface})"
+
+            if sys_info["wifi_ssid"] == "Nicht verfügbar":
+                stats = psutil.net_if_stats()
+                for iface, st in stats.items():
+                    if st.isup and not iface.startswith(("lo", "docker", "veth", "br-", "virbr", "tun", "tap", "wg")):
+                        sys_info["wifi_ssid"] = f"LAN ({iface})"
+                        sys_info["wifi_signal"] = f"{st.speed} Mbit/s" if st.speed > 0 else "Verbunden"
+                        break
+    except Exception:
+        pass
+
     return jsonify({
         "api_online": api_online,
         "api_error": api_error,
@@ -3765,7 +3949,8 @@ def traccar_debug_status(admin_slug):
         "active_threads": active_threads,
         "python_version": python_version,
         "game_phase": phase,
-        "num_teams": num_teams
+        "num_teams": num_teams,
+        "sys_info": sys_info
     })
 
 
@@ -3794,125 +3979,6 @@ def traccar_debug_hard_reset(admin_slug):
 
     return jsonify({'success': False, 'error': f"Java-Server neu gestartet, bootet noch ({traccar_last_error}). Bitte 5s warten."})
 
-
-@app.route('/api/traccar_debug/<admin_slug>/test', methods=['POST'])
-def traccar_debug_e2e_test(admin_slug):
-    if not is_valid_admin_slug(admin_slug):
-        return jsonify({'success': False, 'error': 'Zugriff verweigert'}), 403
-
-    steps = []
-    test_unique_id = f"debug-koblenz-{random.randint(1000, 9999)}"
-    target_lat = round(50.3644 + random.uniform(-0.0005, 0.0005), 6)
-    target_lon = round(7.6061 + random.uniform(-0.0005, 0.0005), 6)
-    created_device_id = None
-
-    with traccar_lock:
-        if not ensure_traccar_credentials():
-            steps.append({
-                "step": "1. Traccar API Login",
-                "ok": False,
-                "detail": f"Login als '{TRACCAR_USER}' fehlgeschlagen ({traccar_last_error})."
-            })
-            return jsonify({"success": False, "steps": steps})
-
-        steps.append({
-            "step": "1. Traccar API Login",
-            "ok": True,
-            "detail": f"Erfolgreich als '{TRACCAR_USER}' am lokalen Java-Traccar authentifiziert."
-        })
-
-    try:
-        with traccar_lock:
-            create_resp = traccar_session.post(
-                TRACCAR_API_URL,
-                json={"name": "Koblenz Debug Testuser", "uniqueId": test_unique_id},
-                timeout=5
-            )
-        if create_resp.status_code not in (200, 201):
-            steps.append({
-                "step": "2. Test-Gerät in Traccar erstellen",
-                "ok": False,
-                "detail": f"Fehler beim Anlegen (HTTP {create_resp.status_code}): {create_resp.text}"
-            })
-            return jsonify({"success": False, "steps": steps})
-
-        created_device_id = create_resp.json().get("id")
-        steps.append({
-            "step": "2. Test-Gerät in Traccar erstellen",
-            "ok": True,
-            "detail": f"Test-User 'Koblenz Debug Testuser' (uniqueId: {test_unique_id}, ID: {created_device_id}) angelegt."
-        })
-
-        debug_test_events.pop(test_unique_id, None)
-        osmand_params = {
-            "id": test_unique_id,
-            "lat": target_lat,
-            "lon": target_lon,
-            "timestamp": int(time.time()),
-            "speed": 5.0
-        }
-        ping_resp = requests.post(TRACCAR_OSMAND_URL, params=osmand_params, timeout=5)
-        if ping_resp.status_code != 200:
-            steps.append({
-                "step": "3. Koblenz-Koordinaten an Traccar (Port 5055) senden",
-                "ok": False,
-                "detail": f"OsmAnd-Port antwortete mit HTTP {ping_resp.status_code}"
-            })
-            return jsonify({"success": False, "steps": steps})
-
-        steps.append({
-            "step": "3. Koblenz-Koordinaten an Traccar (Port 5055) senden",
-            "ok": True,
-            "detail": f"Koordinaten Koblenz ({target_lat}, {target_lon}) erfolgreich an {TRACCAR_OSMAND_URL} übergeben."
-        })
-
-        received = None
-        start_wait = time.time()
-        while time.time() - start_wait < 5.0:
-            if test_unique_id in debug_test_events:
-                received = debug_test_events.pop(test_unique_id)
-                break
-            time.sleep(0.15)
-
-        if received:
-            delay_ms = int((received["timestamp"] - start_wait) * 1000)
-            steps.append({
-                "step": "4. Empfang am Python-Webhook (/api/traccar)",
-                "ok": True,
-                "detail": f"Paket nach ~{max(delay_ms, 5)}ms in Python eingetroffen! Empfangene Pos: ({received['lat']}, {received['lon']})."
-            })
-        else:
-            steps.append({
-                "step": "4. Empfang am Python-Webhook (/api/traccar)",
-                "ok": False,
-                "detail": "Timeout nach 5s: Traccar hat den Ping angenommen, aber er kam nicht bei /api/traccar an."
-            })
-
-    except Exception as e:
-        steps.append({
-            "step": "Unerwarteter Fehler während des Tests",
-            "ok": False,
-            "detail": str(e)
-        })
-    finally:
-        if created_device_id is not None:
-            try:
-                with traccar_lock:
-                    del_resp = traccar_session.delete(f"{TRACCAR_API_URL}/{created_device_id}", timeout=5)
-                steps.append({
-                    "step": "5. Test-Gerät aufräumen",
-                    "ok": del_resp.status_code in (200, 204),
-                    "detail": f"Test-User '{test_unique_id}' wieder aus Traccar entfernt."
-                })
-            except Exception as e:
-                steps.append({
-                    "step": "5. Test-Gerät aufräumen",
-                    "ok": False,
-                    "detail": f"Konnte Test-User nicht löschen: {e}"
-                })
-
-    all_ok = all(s["ok"] for s in steps)
-    return jsonify({"success": all_ok, "steps": steps})
 
 
 if __name__ == '__main__':
