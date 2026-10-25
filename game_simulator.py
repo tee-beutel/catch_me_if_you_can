@@ -365,6 +365,8 @@ class CatchSimulator:
                 stops_req = self.api_get("/api/stops", params={"slug": team['slug']})
                 if stops_req and stops_req.status_code == 200:
                     stops = stops_req.json()
+                    if isinstance(stops, dict):
+                        stops = stops.get("stops", [])
                     if stops:
                         target_stop = random.choice(stops)
 

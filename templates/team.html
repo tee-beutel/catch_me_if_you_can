@@ -37,6 +37,21 @@
             border-bottom: 2px solid #991b1b;
         }
 
+        /* Geofence Warnbanner */
+        .geofence-warn-banner {
+            display: none;
+            background: #dc2626;
+            color: white;
+            padding: 10px 14px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 0.88em;
+            z-index: 1999;
+            line-height: 1.35;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            border-bottom: 2px solid #7f1d1d;
+        }
+
         .role-badge { display: inline-block; padding: 4px 8px; font-size: 0.7em; font-family: 'Roboto', sans-serif; font-weight: 900; text-transform: uppercase; color: white; }
         .role-fänger { background: #EB6502; } 
         .role-läufer { background: #AEC905; color: #333; } 
@@ -78,11 +93,24 @@
         .actual-time-badge { color: #049EAB; font-size: 0.82em; font-weight: bold; }
 
         /* Custom Map Icons */
-        .custom-factor-icon { background: transparent; border: none; }
+        .custom-factor-icon, .custom-bonus-stop-icon { background: transparent; border: none; }
+        @keyframes pulse-bonus {
+            0% { transform: scale(1); box-shadow: 0 0 6px #e11d48; }
+            50% { transform: scale(1.15); box-shadow: 0 0 14px #e11d48; }
+            100% { transform: scale(1); box-shadow: 0 0 6px #e11d48; }
+        }
         .custom-team-icon { background: transparent; border: none; }
     </style>
 </head>
 <body>
+    <!-- SVG Pattern für schraffierte Sperrzonen -->
+    <svg width="0" height="0" style="position:absolute;">
+      <defs>
+        <pattern id="red-hatch" width="10" height="10" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+          <line x1="0" y1="0" x2="0" y2="10" stroke="#e53e3e" stroke-width="3" />
+        </pattern>
+      </defs>
+    </svg>
 
     {% if is_deactivated %}
     <div style="position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; box-sizing: border-box;">
@@ -109,6 +137,11 @@
     <!-- WARNUNG BEI FEHLENDEM GPS SIGNAL (> 2 MINUTEN) -->
     <div class="gps-warn-banner" id="gps-warning-banner">
         <!-- Wird dynamisch über JavaScript befüllt -->
+    </div>
+
+    <!-- WARNUNG BEI SPIELFELDVERSTOSS / SPERRZONE -->
+    <div class="geofence-warn-banner" id="geofence-warning-banner">
+        ⚠️ SPIELFELD VERLASSEN ODER SPERRZONE BETRETEN! Kehrt sofort ins Spielgebiet zurück!
     </div>
 
     <!-- GEWINNER ANZEIGE (Global für beide Rollen sichtbar) -->
@@ -230,6 +263,7 @@
                     <div class="log">
                         <!-- Wird über JavaScript dynamisch aktualisiert -->
                     </div>
+                    <div id="my-pending-requests" style="display: none; margin-top: 20px;"></div>
                 </div>
                 
                <!-- TRACCAR CLIENT DOWNLOAD & CONFIG (FÜR ALLE TEAMS PFLICHT) -->
@@ -283,6 +317,44 @@
 
     <!-- Anleitung-Button -->
     <a href="/rules.html" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#6c757d; color:white; padding:10px 20px; border-radius:4px;">Hier geht's zur Anleitung</a>
+
+    <!-- Replay-Button -->
+    {% if phase in ['pre_game', 'game'] %}
+        {% set now_ms = (now_time | string | replace('Z', '+00:00')) %}
+        {% set mid_ms = (mid_time | string | replace('Z', '+00:00')) %}
+        {% if mid_time and mid_time != 'None' and now_ms >= mid_ms %}
+            <div style="text-align: center; margin-top: 15px; width: 100%;">
+                <a href="/replay" class="btn" style="display:inline-block; width:100%; box-sizing:border-box; text-decoration:none; background:#049EAB; color:white; padding:12px; border-radius:4px; font-weight: bold;">🎬 Replay der 1. Halbzeit</a>
+            </div>
+        {% else %}
+            <div style="text-align: center; margin-top: 15px; width: 100%; border: 1px dashed #ccc; background: #fcfcfc; padding: 10px; border-radius: 4px; box-sizing: border-box;">
+                <p style="color: #888; font-size: 0.85em; margin: 0;">Das Replay ist in der 1. Halbzeit gesperrt und wird zur Halbzeitpause freigeschaltet.</p>
+            </div>
+        {% endif %}
+    {% elif phase == 'post_game' or phase == 'finished' %}
+        <div style="text-align: center; margin-top: 15px; width: 100%;">
+            <a href="/replay" class="btn" style="display:inline-block; width:100%; box-sizing:border-box; text-decoration:none; background:#049EAB; color:white; padding:12px; border-radius:4px; font-weight: 900;">🎬 Komplettes Replay ansehen</a>
+        </div>
+    {% else %}
+        <div style="text-align: center; margin-top: 15px; width: 100%; border: 1px dashed #ccc; background: #fcfcfc; padding: 10px; border-radius: 4px; box-sizing: border-box;">
+            <p style="color: #888; font-size: 0.85em; margin: 0;">Das Replay wird ab der Halbzeitpause freigeschaltet.</p>
+        </div>
+    {% endif %}
+
+    <!-- Team-Einstellungen (Name & PIN ändern) -->
+    <div style="background: white; border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-top: 25px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); text-align: left; width: 100%; box-sizing: border-box;">
+        <h4 style="margin: 0 0 12px 0; color: #049EAB; font-size: 1.05em; border-bottom: 1px solid #eee; padding-bottom: 6px;">⚙️ Team-Einstellungen (Name & PIN ändern)</h4>
+        <label style="font-size: 0.85em; font-weight: bold; color: #555; display: block; margin-bottom: 4px;">Neuer Teamname:</label>
+        <input type="text" id="edit-team-name" value="{{ team_name }}" maxlength="40" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 15px; margin-bottom: 12px;">
+        
+        <label style="font-size: 0.85em; font-weight: bold; color: #555; display: block; margin-bottom: 4px;">Neue PIN / Passwort (optional, leer lassen zum Behalten):</label>
+        <input type="text" id="edit-team-pin" placeholder="Bisherige PIN beibehalten" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 15px; margin-bottom: 12px;">
+        
+        <button type="button" class="btn btn-vcd-green" onclick="saveTeamProfile()" style="margin-top: 0; padding: 12px; border-radius: 4px;">Speichern</button>
+        <p style="font-size: 0.78em; color: #777; margin: 8px 0 0 0; line-height: 1.3;">
+            <i>Hinweis: Bei Änderung der PIN ändert sich auch euer Team-Link und eure Traccar-Geräte-ID.</i>
+        </p>
+    </div>
 </div>
             </div>
         </div>
@@ -290,11 +362,17 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        const teamSlug = "{{ slug }}";
-        const teamId = "{{ team_id }}";
-        const teamName = "{{ team_name }}";
-        const currentPhase = "{{ phase }}";
-        const currentRole = "{{ role }}";
+        const teamSlug = {{ slug | tojson }};
+        const teamId = {{ team_id | tojson }};
+        const teamName = {{ team_name | tojson }};
+        const currentPhase = {{ phase | tojson }};
+        const currentRole = {{ role | tojson }};
+        const baseStopPoints = {{ points_stop_reached | default(2) }};
+
+        function formatStopPoints(factor) {
+            const pts = Number((factor * baseStopPoints).toFixed(2));
+            return `${pts} ${pts === 1 ? 'Punkt' : 'Punkte'}`;
+        }
         
         const serverNowStr = "{{ now_time }}";
         const startStr = "{{ start_time }}";
@@ -397,8 +475,172 @@
         
         let stopMarkers = {};
         let teamLocationsLayer = L.layerGroup().addTo(map);
+        let geofenceLayerGroup = L.layerGroup().addTo(map);
         let teamMarkers = {};
+        let teamAccuracyCircles = {};
         let isFirstMapLoad = true;
+
+        // Locate-Button (topright)
+        const locateControl = L.Control.extend({
+            options: { position: 'topright' },
+            onAdd: function(map) {
+                const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+                const btn = L.DomUtil.create('a', '', container);
+                btn.href = '#';
+                btn.title = 'Meinen Standort zentrieren';
+                btn.innerHTML = '📍';
+                btn.style.fontSize = '18px';
+                btn.style.width = '30px';
+                btn.style.height = '30px';
+                btn.style.lineHeight = '30px';
+                btn.style.textAlign = 'center';
+                btn.style.display = 'block';
+                btn.style.textDecoration = 'none';
+                btn.style.background = 'white';
+                btn.style.color = '#333';
+                btn.style.cursor = 'pointer';
+
+                L.DomEvent.disableClickPropagation(btn);
+                L.DomEvent.disableScrollPropagation(btn);
+                L.DomEvent.disableClickPropagation(container);
+                L.DomEvent.disableScrollPropagation(container);
+
+                L.DomEvent.on(btn, 'click', function(e) {
+                    L.DomEvent.preventDefault(e);
+                    const myLoc = cachedVisibleLocations.find(loc => loc.is_self || loc.id === teamId);
+                    if (myLoc && myLoc.lat && myLoc.lon) {
+                        map.flyTo([myLoc.lat, myLoc.lon], Math.max(map.getZoom(), 16));
+                    } else {
+                        alert("Euer GPS-Standort ist noch nicht bekannt. Bitte prüft, ob Traccar aktiv ist.");
+                    }
+                });
+                return container;
+            }
+        });
+        map.addControl(new locateControl());
+
+        // Inaktive Haltestellen & Switch für Läufer
+        let inactiveStopsLayerGroup = L.layerGroup().addTo(map);
+        let inactiveStopMarkers = {};
+        let allStopsCache = null;
+        let showAllStops = false;
+        let lastActiveStopNames = new Set();
+
+        function renderInactiveStops() {
+            if (!showAllStops || currentPhase === 'inactive' || currentPhase === 'finished' || currentRole !== 'läufer') {
+                inactiveStopsLayerGroup.clearLayers();
+                inactiveStopMarkers = {};
+                return;
+            }
+
+            if (!allStopsCache) {
+                fetch('/api/all_stops')
+                    .then(r => r.json())
+                    .then(data => {
+                        allStopsCache = data;
+                        renderInactiveStops();
+                    })
+                    .catch(e => console.error("Fehler beim Laden aller Haltestellen:", e));
+                return;
+            }
+
+            const visibleInactive = new Set();
+            allStopsCache.forEach(stop => {
+                if (!lastActiveStopNames.has(stop.name)) {
+                    visibleInactive.add(stop.name);
+                    let factorText = '';
+                    if (stop.factor > 1) {
+                        factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span>`;
+                    } else if (stop.factor < 1) {
+                        factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span>`;
+                    }
+
+                    const popupContent = `
+                        <div style="text-align:center; font-family: 'Roboto', sans-serif;">
+                            <b style="font-size: 1.1em; color: #049EAB;">${stop.name}</b><br>
+                            <i style="color: #666; font-size: 0.9em;">(Aktuell nicht aktiv)</i>
+                            ${factorText}
+                        </div>
+                    `;
+
+                    if (inactiveStopMarkers[stop.name]) {
+                        inactiveStopMarkers[stop.name].setPopupContent(popupContent);
+                    } else {
+                        const color = stop.factor > 1 ? '#EB6502' : (stop.factor < 1 ? '#333' : '#6c757d');
+                        const marker = L.circleMarker([stop.lat, stop.lon], {
+                            radius: 5,
+                            fillOpacity: 0.45,
+                            color: color,
+                            fillColor: color,
+                            weight: 1
+                        }).bindPopup(popupContent);
+                        marker.addTo(inactiveStopsLayerGroup);
+                        inactiveStopMarkers[stop.name] = marker;
+                    }
+                }
+            });
+
+            for (const name in inactiveStopMarkers) {
+                if (!visibleInactive.has(name)) {
+                    inactiveStopsLayerGroup.removeLayer(inactiveStopMarkers[name]);
+                    delete inactiveStopMarkers[name];
+                }
+            }
+        }
+
+        if (currentRole === 'läufer') {
+            const allStopsControl = L.Control.extend({
+                options: { position: 'topleft' },
+                onAdd: function(map) {
+                    const container = L.DomUtil.create('div', 'leaflet-bar');
+                    container.style.background = 'white';
+                    container.style.padding = '6px 10px';
+                    container.style.fontSize = '12px';
+                    container.style.boxShadow = '0 1px 5px rgba(0,0,0,0.3)';
+                    container.style.borderRadius = '4px';
+                    container.innerHTML = `
+                        <label style="margin: 0; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;">
+                            <input type="checkbox" id="show-all-stops-toggle" style="margin: 0; cursor: pointer;">
+                            <span style="font-weight: bold; color: #333;">Alle Haltestellen</span>
+                        </label>
+                    `;
+                    L.DomEvent.disableClickPropagation(container);
+                    L.DomEvent.disableScrollPropagation(container);
+                    const checkbox = container.querySelector('#show-all-stops-toggle');
+                    checkbox.addEventListener('change', function(e) {
+                        showAllStops = e.target.checked;
+                        renderInactiveStops();
+                    });
+                    return container;
+                }
+            });
+            map.addControl(new allStopsControl());
+        }
+
+        function renderGeofences(outer, exclusion) {
+            geofenceLayerGroup.clearLayers();
+            if (outer && Array.isArray(outer) && outer.length >= 3) {
+                const outerPoly = L.polygon(outer, {
+                    color: '#EB6502', // VCD Orange
+                    weight: 3,
+                    fill: false
+                }).addTo(geofenceLayerGroup);
+                outerPoly.bindTooltip("Spielfeldbegrenzung", { sticky: true });
+            }
+            if (exclusion && Array.isArray(exclusion) && exclusion.length > 0) {
+                exclusion.forEach(zone => {
+                    if (zone && Array.isArray(zone) && zone.length >= 3) {
+                        const exPoly = L.polygon(zone, {
+                            color: '#e53e3e',
+                            weight: 2,
+                            fillColor: 'url(#red-hatch)',
+                            fillOpacity: 1
+                        }).addTo(geofenceLayerGroup);
+                        exPoly.bindTooltip("Sperrzone", { sticky: true });
+                    }
+                });
+            }
+        }
         
         function loadStopsMap() {
             if (currentPhase === 'finished') {
@@ -406,6 +648,8 @@
                     map.removeLayer(stopMarkers[name]);
                 }
                 stopMarkers = {};
+                inactiveStopsLayerGroup.clearLayers();
+                inactiveStopMarkers = {};
                 return;
             }
 
@@ -419,6 +663,11 @@
                     return r.json();
                 }).then(data => {
                     if (!data) return;
+                    const stops = Array.isArray(data) ? data : (data.stops || []);
+                    const bonusStops = new Set(data.bonus_stops || []);
+                    if (data.geofence_outer || data.geofence_exclusion) {
+                        renderGeofences(data.geofence_outer, data.geofence_exclusion);
+                    }
                     const select = document.getElementById('stop-select');
                     const currentVal = select ? select.value : "";
                     
@@ -426,33 +675,46 @@
                     let bounds = [];
                     const activeStopNames = new Set();
                     
-                    data.forEach(stop => {
+                    stops.forEach(stop => {
                         activeStopNames.add(stop.name);
+                        const isBonus = bonusStops.has(stop.name);
                         optsHTML += `<option value="${stop.name}">${stop.name}</option>`;
                         let btnHTML = "";
                         if (currentPhase === 'game' || currentPhase === 'post_game') {
-                            btnHTML = `<button class="btn btn-vcd-green" style="padding: 10px; font-size: 12px; margin-top:0;" onclick="requestStopFromMap('${stop.name.replace(/'/g, "\\'")}')">Hier eintragen</button>`;
+                            btnHTML = `<button class="btn btn-vcd-green" style="padding: 10px; font-size: 12px; margin-top:0;" onclick="requestStopFromMap('${encodeURIComponent(stop.name)}')">Hier eintragen</button>`;
                         } else {
                             btnHTML = `<div style="font-size:11px; color:#888;">Eintragen noch nicht möglich</div>`;
                         }
                         
                         let factorText = '';
                         if (stop.factor > 1) {
-                            factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span><br>`;
+                            factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span><br>`;
                         } else if (stop.factor < 1) {
-                            factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span><br>`;
+                            factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span><br>`;
+                        }
+
+                        let bonusText = '';
+                        if (isBonus) {
+                            bonusText = `<br><span style="color: #e11d48; font-weight: bold;">🎁 Bonushaltestelle (+2 Extrapunkte!)</span>`;
                         }
 
                         const popupContent = `
                             <div style="text-align:center; font-family: 'Roboto', sans-serif;">
                                 <b style="font-size: 1.1em; color: #049EAB;">${stop.name}</b><br>
-                                ${factorText}<br>
+                                ${factorText}${bonusText}<br>
                                 ${btnHTML}
                             </div>
                         `;
                         
                         let markerOpts = {};
-                        if (stop.factor > 1) {
+                        if (isBonus) {
+                            markerOpts.icon = L.divIcon({
+                                className: 'custom-bonus-stop-icon',
+                                html: '<div style="background-color: #e11d48; width: 28px; height: 28px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px #e11d48, 0 0 5px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; font-size: 15px; animation: pulse-bonus 1.5s infinite;">🎁</div>',
+                                iconSize: [34, 34],
+                                iconAnchor: [17, 17]
+                            });
+                        } else if (stop.factor > 1) {
                             markerOpts.icon = L.divIcon({
                                 className: 'custom-factor-icon',
                                 html: '<div style="background-color: #EB6502; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⭐</div>',
@@ -471,7 +733,11 @@
                         if (stopMarkers[stop.name]) {
                             const marker = stopMarkers[stop.name];
                             marker.setLatLng([stop.lat, stop.lon]);
-                            if (markerOpts.icon) marker.setIcon(markerOpts.icon);
+                            if (markerOpts.icon) {
+                                marker.setIcon(markerOpts.icon);
+                            } else {
+                                marker.setIcon(new L.Icon.Default());
+                            }
                             marker.setPopupContent(popupContent);
                         } else {
                             const marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
@@ -487,6 +753,8 @@
                             delete stopMarkers[name];
                         }
                     }
+                    lastActiveStopNames = activeStopNames;
+                    renderInactiveStops();
                     
                     if(select) { select.innerHTML = optsHTML; select.value = currentVal; }
                     
@@ -505,9 +773,9 @@
                         activeStopNames.add(stop.name);
                         let factorText = '';
                         if (stop.factor > 1) {
-                            factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span>`;
+                            factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span>`;
                         } else if (stop.factor < 1) {
-                            factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span>`;
+                            factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span>`;
                         }
 
                         const popupContent = `
@@ -571,6 +839,7 @@
                 if (currentPhase === 'finished') {
                     teamLocationsLayer.clearLayers();
                     teamMarkers = {};
+                    teamAccuracyCircles = {};
                 }
                 return;
             }
@@ -624,6 +893,32 @@
                     </div>
                 `;
 
+                // Accuracy Kreis rendern / aktualisieren
+                const hasAcc = loc.accuracy && Number(loc.accuracy) > 0;
+                const accRadius = hasAcc ? Number(loc.accuracy) : 0;
+                if (hasAcc) {
+                    if (teamAccuracyCircles[markerKey]) {
+                        teamAccuracyCircles[markerKey].setLatLng([loc.lat, loc.lon]);
+                        teamAccuracyCircles[markerKey].setRadius(accRadius);
+                        teamAccuracyCircles[markerKey].setStyle({ color: bgColor, fillColor: bgColor });
+                    } else {
+                        const circle = L.circle([loc.lat, loc.lon], {
+                            radius: accRadius,
+                            color: bgColor,
+                            fillColor: bgColor,
+                            fillOpacity: 0.15,
+                            weight: 1,
+                            interactive: false
+                        }).addTo(teamLocationsLayer);
+                        teamAccuracyCircles[markerKey] = circle;
+                    }
+                } else {
+                    if (teamAccuracyCircles[markerKey]) {
+                        teamLocationsLayer.removeLayer(teamAccuracyCircles[markerKey]);
+                        delete teamAccuracyCircles[markerKey];
+                    }
+                }
+
                 if (teamMarkers[markerKey]) {
                     const marker = teamMarkers[markerKey];
                     marker.setLatLng([loc.lat, loc.lon]);
@@ -644,13 +939,22 @@
                     delete teamMarkers[key];
                 }
             }
+            for (const key in teamAccuracyCircles) {
+                if (!currentKeys.has(key)) {
+                    teamLocationsLayer.removeLayer(teamAccuracyCircles[key]);
+                    delete teamAccuracyCircles[key];
+                }
+            }
         }
 
         function fetchTeamLiveLocations() {
             if (currentPhase === 'finished') {
                 teamLocationsLayer.clearLayers();
                 teamMarkers = {};
+                teamAccuracyCircles = {};
                 document.getElementById('gps-warning-banner').style.display = 'none';
+                const gfWarn = document.getElementById('geofence-warning-banner');
+                if (gfWarn) gfWarn.style.display = 'none';
                 return;
             }
 
@@ -667,6 +971,20 @@
 
                     cachedVisibleLocations = data.locations || [];
                     renderTeamLocationsOnMap(cachedVisibleLocations);
+
+                    // Geofence-Warnbanner
+                    const gfWarnBanner = document.getElementById('geofence-warning-banner');
+                    if (gfWarnBanner) {
+                        if (data.geofence_violation_active) {
+                            gfWarnBanner.style.display = 'block';
+                        } else {
+                            gfWarnBanner.style.display = 'none';
+                        }
+                    }
+
+                    if (data.geofence_outer || data.geofence_exclusion) {
+                        renderGeofences(data.geofence_outer, data.geofence_exclusion);
+                    }
 
                     // GPS-Warnung mit Unterscheidung nach Zeit (2-5 Minuten vs. ab 5 Minuten)
                     const warnBanner = document.getElementById('gps-warning-banner');
@@ -698,7 +1016,8 @@
         fetchTeamLiveLocations();
         setInterval(fetchTeamLiveLocations, 5000);
         
-        function requestStopFromMap(stopName) {
+        function requestStopFromMap(encodedStopName) {
+            const stopName = decodeURIComponent(encodedStopName);
             map.closePopup();
             if(currentPhase !== 'game' && currentPhase !== 'post_game') { alert("Aktion im aktuellen Status nicht erlaubt."); return; }
             sendStopRequest(stopName);
@@ -807,13 +1126,107 @@
             logContainer.innerHTML = html;
         }
 
+
+        // --- AUSSTEHENDE ANFRAGEN & RÜCKGÄNGIG ---
+        function undoMyRequest(requestId) {
+            if (!confirm("Möchtest du diese Anfrage wirklich zurückziehen?")) return;
+            fetch('/api/undo_request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slug: teamSlug, request_id: requestId })
+            })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) {
+                    fetchTicker();
+                    loadStopsMap();
+                } else {
+                    alert(d.error || 'Fehler beim Zurückziehen der Anfrage.');
+                }
+            })
+            .catch(() => alert('Netzwerkfehler beim Zurückziehen.'));
+        }
+
+        function updateMyPendingRequests(requests) {
+            const container = document.getElementById('my-pending-requests');
+            if (!container) return;
+            if (!requests || requests.length === 0) {
+                container.style.display = 'none';
+                container.innerHTML = '';
+                return;
+            }
+            container.style.display = 'block';
+            let html = `<h4 style="margin-top: 0; color: #049EAB; border-bottom: 1px solid #eee; padding-bottom: 5px;">Ausstehende Anfragen (${requests.length})</h4>`;
+            requests.forEach(req => {
+                let desc = '';
+                if (req.type === 'stop') {
+                    desc = `🚏 Haltestelle: <b>${req.stop}</b>`;
+                } else if (req.type === 'catch') {
+                    desc = `⚔️ Fang: <b>${req.hunter_name || 'Fänger'}</b> hat <b>${req.prey_name || 'Läufer'}</b> gefangen`;
+                } else {
+                    desc = `Anfrage: ${req.type}`;
+                }
+
+                let timeStr = '';
+                if (req.timestamp) {
+                    const d = new Date(req.timestamp);
+                    if (!isNaN(d.getTime())) {
+                        timeStr = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' Uhr';
+                    }
+                }
+
+                html += `
+                    <div style="background: #fff8e1; border: 1px solid #ffe082; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                        <div style="font-size: 0.9em; color: #333; line-height: 1.4;">
+                            <div>${desc}</div>
+                            ${timeStr ? `<span style="font-size: 0.8em; color: #777;">Eingereicht um ${timeStr}</span>` : ''}
+                        </div>
+                        <button type="button" class="btn" style="width: auto; padding: 7px 12px; margin: 0; background: #dc2626; color: white; font-size: 13px; border-radius: 4px; flex-shrink: 0; cursor: pointer;" onclick="undoMyRequest('${req.id}')">Rückgängig</button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        // --- TEAM-PROFIL ÄNDERN ---
+        function saveTeamProfile() {
+            const newName = (document.getElementById('edit-team-name').value || '').trim();
+            const newPin = (document.getElementById('edit-team-pin').value || '').trim();
+
+            if (!newName) {
+                alert("Bitte gib einen Teamnamen ein.");
+                return;
+            }
+            if (newName.length > 40) {
+                alert("Der Teamname darf maximal 40 Zeichen lang sein.");
+                return;
+            }
+
+            fetch('/api/update_team_profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slug: teamSlug, new_name: newName, new_pin: newPin })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Team-Einstellungen erfolgreich gespeichert!");
+                    window.location.href = '/team/' + data.new_slug;
+                } else {
+                    alert(data.error || "Fehler beim Speichern der Team-Einstellungen.");
+                }
+            })
+            .catch(() => alert("Netzwerkfehler beim Speichern der Einstellungen."));
+        }
+
         function fetchTicker() {
-            fetch('/api/ticker_data')
+            fetch('/api/ticker_data?slug=' + encodeURIComponent(teamSlug))
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
                         updateLeaderboard(data.leaderboard);
                         updateLog(data.action_log);
+                        updateMyPendingRequests(data.my_pending_requests || []);
                         
                         // Erzwingt einen Neuladevorgang für die UI, wenn sich die Rolle des eigenen Teams ändert.
                         const myTeam = data.leaderboard.find(t => t.id === teamId);
@@ -831,8 +1244,10 @@
 
         let initialLeaderboard = {{ leaderboard | tojson | safe }};
         let initialLog = {{ log | tojson | safe }};
+        let initialPendingRequests = {{ my_pending_requests | tojson | safe }};
         updateLeaderboard(initialLeaderboard);
         updateLog(initialLog);
+        updateMyPendingRequests(initialPendingRequests);
         
         setInterval(fetchTicker, 10000);
     </script>

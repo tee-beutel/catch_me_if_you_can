@@ -64,7 +64,12 @@
         .manual-catch-col { display: flex; flex-direction: column; }
         
         /* Custom Factor Map Icon */
-        .custom-factor-icon { background: transparent; border: none; }
+        .custom-factor-icon, .custom-bonus-stop-icon { background: transparent; border: none; }
+        @keyframes pulse-bonus {
+            0% { transform: scale(1); box-shadow: 0 0 6px #e11d48; }
+            50% { transform: scale(1.15); box-shadow: 0 0 14px #e11d48; }
+            100% { transform: scale(1); box-shadow: 0 0 6px #e11d48; }
+        }
 
         /* Offline-Details Accordion */
         .offline-details { 
@@ -121,6 +126,14 @@
     </style>
 </head>
 <body>
+    <!-- SVG Pattern für schraffierte Sperrzonen -->
+    <svg width="0" height="0" style="position:absolute;">
+      <defs>
+        <pattern id="red-hatch" width="10" height="10" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+          <line x1="0" y1="0" x2="0" y2="10" stroke="#e53e3e" stroke-width="3" />
+        </pattern>
+      </defs>
+    </svg>
     <div class="header-section">
         <div>
             <h1>Admin Console</h1>
@@ -156,7 +169,7 @@
     </div>
 
     <!-- 2. Rangliste & Team-Status -->
-    <div class="box leaderboard">
+    <div class="box leaderboard" id="admin-leaderboard-box">
         <h3>Rangliste & Team-Status</h3>
         {% for entry in leaderboard %}
         <div class="team-rank">
@@ -184,7 +197,7 @@
                     {% else %}<i>Noch ungeschlagen</i>{% endif %}
                 </div>
                 {% if entry.offline_warnings|length > 0 %}
-                <details class="offline-details">
+                <details class="offline-details" data-team-id="{{ entry.id }}" data-type="offline">
                     <summary>⚠️ Offlinezeiten (Gesamt: {{ (entry.total_offline_seconds / 60) | round | int }} Min.)</summary>
                     <ul>
                     {% for warn in entry.offline_warnings %}
@@ -194,6 +207,23 @@
                                 bis {{ warn.end_time_str }} Uhr
                             {% else %}
                                 <b style="color: #EB6502;">bis jetzt</b>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                    </ul>
+                </details>
+                {% endif %}
+                {% if entry.geofence_violations and entry.geofence_violations|length > 0 %}
+                <details class="offline-details" data-team-id="{{ entry.id }}" data-type="violation" style="margin-top: 5px;">
+                    <summary style="color: #dc2626; font-weight: bold;">🚨 Spielfeldverstöße (Gesamt: {{ (entry.total_violation_seconds / 60) | round | int }} Min.)</summary>
+                    <ul>
+                    {% for warn in entry.geofence_violations %}
+                        <li>
+                            Ab {{ warn.start_time_str }} Uhr: 
+                            {% if warn.end_time_str %}
+                                bis {{ warn.end_time_str }} Uhr
+                            {% else %}
+                                <b style="color: #dc2626;">bis jetzt (aktiv)</b>
                             {% endif %}
                         </li>
                     {% endfor %}
@@ -350,7 +380,6 @@
 
     <div style="text-align: center; margin-top: 20px; margin-bottom: 40px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
         <a href="/adminconsole-{{ admin_url }}/replay" target="_blank" class="btn btn-green" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">🎬 Zum Live-Replay</a>
-        <button type="button" onclick="clearReplayCache()" class="btn btn-orange" style="padding: 15px 30px; font-size: 1em;">🗑️ Replay-Cache leeren</button>
         <a href="/adminconsole-{{ admin_url }}/settings" class="btn btn-petrol" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">⚙️ Zu den Spiel-Einstellungen</a>
         <a href="/traccar_debug-{{ admin_url }}" class="btn btn-neutral" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">🛰️ Traccar Diagnose & Debug</a>
     </div>
@@ -358,6 +387,11 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         const enableSwap = {{ 'true' if enable_swap else 'false' }};
+        const baseStopPoints = {{ points_stop_reached | default(2) }};
+        function formatStopPoints(factor) {
+            const pts = Number((factor * baseStopPoints).toFixed(2));
+            return `${pts} ${pts === 1 ? 'Punkt' : 'Punkte'}`;
+        }
         let serverOffset = 0;
         let startTs = 0, endTs = 0, midTs = 0, postEndTs = 0;
         let reloadedTrigger = false;
@@ -449,6 +483,32 @@
         let allStopsData = [];
         let mapLayerGroup = L.layerGroup().addTo(adminMap);
         let teamLayerGroup = L.layerGroup().addTo(adminMap); // Layer für die Spieler-Standorte
+        let adminGeofenceLayer = L.layerGroup().addTo(adminMap);
+
+        function renderAdminGeofences(outer, exclusion) {
+            adminGeofenceLayer.clearLayers();
+            if (outer && Array.isArray(outer) && outer.length >= 3) {
+                const poly = L.polygon(outer, {
+                    color: '#EB6502', // VCD Orange
+                    weight: 3,
+                    fill: false
+                }).addTo(adminGeofenceLayer);
+                poly.bindTooltip("Spielfeldbegrenzung", { sticky: true });
+            }
+            if (exclusion && Array.isArray(exclusion) && exclusion.length > 0) {
+                exclusion.forEach(zone => {
+                    if (zone && Array.isArray(zone) && zone.length >= 3) {
+                        const poly = L.polygon(zone, {
+                            color: '#e53e3e',
+                            weight: 2,
+                            fillColor: 'url(#red-hatch)',
+                            fillOpacity: 1
+                        }).addTo(adminGeofenceLayer);
+                        poly.bindTooltip("Sperrzone", { sticky: true });
+                    }
+                });
+            }
+        }
 
         fetch('/api/all_stops').then(r => r.json()).then(data => {
             allStopsData = data;
@@ -457,48 +517,85 @@
             if(bounds.length > 0) adminMap.fitBounds(bounds);
             
             const initialActive = {{ active_stops | tojson | safe }};
-            updateAdminMap(initialActive);
+            const initialBonus = {{ bonus_stops | tojson | safe }};
+            updateAdminMap(initialActive, initialBonus);
         });
 
-        function updateAdminMap(activeStops) {
-            mapLayerGroup.clearLayers();
+        let adminStopMarkers = {};
+        let currentBonusStops = new Set();
+        function updateAdminMap(activeStops, bonusStops) {
+            if (!allStopsData) return;
+            if (bonusStops !== undefined) {
+                currentBonusStops = new Set(bonusStops || []);
+            }
 
             allStopsData.forEach(stop => {
                 let factorText = '';
                 if (stop.factor > 1) {
-                    factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span>`;
+                    factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span>`;
                 } else if (stop.factor < 1) {
-                    factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">🔽 Diese Haltestelle gibt ${stop.factor}-fache Punkte!</span>`;
+                    factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span>`;
                 }
                 
-                let popupContent = `<b>${stop.name}</b>${factorText}`;
+                const isActive = activeStops.includes(stop.name);
+                const isBonus = isActive && currentBonusStops.has(stop.name);
 
-                if (activeStops.includes(stop.name)) {
-                    let markerOpts = {};
-                    if (stop.factor > 1) {
-                        markerOpts.icon = L.divIcon({
-                            className: 'custom-factor-icon',
-                            html: '<div style="background-color: #EB6502; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⭐</div>',
-                            iconSize: [30, 30],
-                            iconAnchor: [15, 15]
-                        });
-                    } else if (stop.factor < 1) {
-                        markerOpts.icon = L.divIcon({
-                            className: 'custom-factor-icon',
-                            html: '<div style="background-color: #6c757d; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">🔽</div>',
-                            iconSize: [30, 30],
-                            iconAnchor: [15, 15]
-                        });
-                    }
-                    let marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
-                    mapLayerGroup.addLayer(marker);
+                let bonusText = '';
+                if (isBonus) {
+                    bonusText = `<br><span style="color: #e11d48; font-weight: bold;">🎁 Bonushaltestelle (+2 Extrapunkte!)</span>`;
+                }
+
+                let popupContent = `<b>${stop.name}</b>${factorText}${bonusText}`;
+
+                if (adminStopMarkers[stop.name] && adminStopMarkers[stop.name]._isActive === isActive && adminStopMarkers[stop.name]._isBonus === isBonus) {
+                    adminStopMarkers[stop.name].setPopupContent(popupContent);
                 } else {
-                    let color = stop.factor > 1 ? '#EB6502' : (stop.factor < 1 ? '#333' : '#6c757d');
-                    let radius = stop.factor !== 1 ? 6 : 4;
-                    let marker = L.circleMarker([stop.lat, stop.lon], {
-                        color: color, fillColor: color, fillOpacity: 0.5, radius: radius, weight: 1
-                    }).bindPopup(popupContent);
+                    const wasOpen = adminStopMarkers[stop.name] ? adminStopMarkers[stop.name].isPopupOpen() : false;
+                    if (adminStopMarkers[stop.name]) {
+                        mapLayerGroup.removeLayer(adminStopMarkers[stop.name]);
+                    }
+
+                    let marker;
+                    if (isActive) {
+                        let markerOpts = {};
+                        if (isBonus) {
+                            markerOpts.icon = L.divIcon({
+                                className: 'custom-bonus-stop-icon',
+                                html: '<div style="background-color: #e11d48; width: 28px; height: 28px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px #e11d48, 0 0 5px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; font-size: 15px; animation: pulse-bonus 1.5s infinite;">🎁</div>',
+                                iconSize: [34, 34],
+                                iconAnchor: [17, 17]
+                            });
+                        } else if (stop.factor > 1) {
+                            markerOpts.icon = L.divIcon({
+                                className: 'custom-factor-icon',
+                                html: '<div style="background-color: #EB6502; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⭐</div>',
+                                iconSize: [30, 30],
+                                iconAnchor: [15, 15]
+                            });
+                        } else if (stop.factor < 1) {
+                            markerOpts.icon = L.divIcon({
+                                className: 'custom-factor-icon',
+                                html: '<div style="background-color: #6c757d; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">🔽</div>',
+                                iconSize: [30, 30],
+                                iconAnchor: [15, 15]
+                            });
+                        }
+                        marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
+                    } else {
+                        let color = stop.factor > 1 ? '#EB6502' : (stop.factor < 1 ? '#333' : '#6c757d');
+                        let radius = stop.factor !== 1 ? 6 : 4;
+                        marker = L.circleMarker([stop.lat, stop.lon], {
+                            color: color, fillColor: color, fillOpacity: 0.5, radius: radius, weight: 1
+                        }).bindPopup(popupContent);
+                    }
+
+                    marker._isActive = isActive;
+                    marker._isBonus = isBonus;
                     mapLayerGroup.addLayer(marker);
+                    adminStopMarkers[stop.name] = marker;
+                    if (wasOpen) {
+                        marker.openPopup();
+                    }
                 }
             });
         }
@@ -648,18 +745,131 @@
                     renderHistory(data.action_log);
                     if (data.now_time) serverOffset = new Date(data.now_time).getTime() - Date.now();
                     if (data.active_stops) {
-                        updateAdminMap(data.active_stops);
+                        updateAdminMap(data.active_stops, data.bonus_stops);
                         updateActiveStopsDropdown(data.active_stops);
                     }
                     if (data.team_locations) {
                         lastTeamLocations = data.team_locations;
                         updateTeamMap(lastTeamLocations);
                     }
+                    if (data.geofence_outer || data.geofence_exclusion) {
+                        renderAdminGeofences(data.geofence_outer, data.geofence_exclusion);
+                    }
+                    if (data.leaderboard) {
+                        renderAdminLeaderboard(data.leaderboard, data.team_names_map, data.phase, data.enable_swap, data.roles_swapped);
+                    }
                 }
             }).catch(err => console.error("Update fehlgeschlagen:", err));
         }
         loadAdminData();
         setInterval(loadAdminData, 5000);
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function renderAdminLeaderboard(leaderboard, teamNamesMap, phase, enableSwap, rolesSwapped) {
+            const container = document.getElementById('admin-leaderboard-box');
+            if (!container || !leaderboard) return;
+
+            const openDetails = new Set();
+            container.querySelectorAll('details.offline-details').forEach(el => {
+                if (el.open) {
+                    const teamId = el.getAttribute('data-team-id');
+                    const type = el.getAttribute('data-type');
+                    if (teamId && type) {
+                        openDetails.add(`${teamId}_${type}`);
+                    }
+                }
+            });
+
+            let html = `<h3>Rangliste & Team-Status</h3>`;
+            leaderboard.forEach((entry, idx) => {
+                const badgeClass = entry.role === 'fänger' ? 'badge-catcher' : (entry.role === 'läufer' ? 'badge-runner' : 'badge-keine');
+                
+                let deactBadge = entry.deactivated ? `<span style="color:red; font-size: 0.7em;">(DEAKTIVIERT)</span>` : '';
+                
+                let nextRoleBadge = '';
+                if (enableSwap && (phase === 'pre_game' || phase === 'game') && !rolesSwapped && !entry.deactivated && entry.next_role && entry.next_role !== 'keine') {
+                    nextRoleBadge = `<span style="font-size: 0.6em; color: #888; font-weight: normal; margin-left: 5px; text-transform: uppercase;">(Danach: ${escapeHtml(entry.next_role)})</span>`;
+                }
+
+                let stopsText = (entry.stops && entry.stops.length > 0) ? entry.stops.map(escapeHtml).join(', ') : '<i>Keine</i>';
+
+                let caughtText = '<i>Niemanden</i>';
+                if (entry.caught && entry.caught.length > 0) {
+                    caughtText = entry.caught.map(c => escapeHtml((teamNamesMap && teamNamesMap[c]) || c)).join(', ');
+                }
+
+                let caughtByText = '<i>Noch ungeschlagen</i>';
+                if (entry.caught_by && entry.caught_by.length > 0) {
+                    caughtByText = entry.caught_by.map(c => escapeHtml((teamNamesMap && teamNamesMap[c]) || c)).join(', ');
+                }
+
+                let offlineDetailsHtml = '';
+                if (entry.offline_warnings && entry.offline_warnings.length > 0) {
+                    const isOpen = openDetails.has(`${entry.id}_offline`) ? ' open' : '';
+                    const totalMin = Math.round((entry.total_offline_seconds || 0) / 60);
+                    let listItems = '';
+                    entry.offline_warnings.forEach(warn => {
+                        const endText = warn.end_time_str ? `bis ${escapeHtml(warn.end_time_str)} Uhr` : `<b style="color: #EB6502;">bis jetzt</b>`;
+                        listItems += `<li>Ab ${escapeHtml(warn.start_time_str)} Uhr: ${endText}</li>`;
+                    });
+                    offlineDetailsHtml = `
+                        <details class="offline-details" data-team-id="${escapeHtml(entry.id)}" data-type="offline"${isOpen}>
+                            <summary>⚠️ Offlinezeiten (Gesamt: ${totalMin} Min.)</summary>
+                            <ul>${listItems}</ul>
+                        </details>`;
+                }
+
+                let violationDetailsHtml = '';
+                if (entry.geofence_violations && entry.geofence_violations.length > 0) {
+                    const isOpen = openDetails.has(`${entry.id}_violation`) ? ' open' : '';
+                    const totalMin = Math.round((entry.total_violation_seconds || 0) / 60);
+                    let listItems = '';
+                    entry.geofence_violations.forEach(warn => {
+                        const endText = warn.end_time_str ? `bis ${escapeHtml(warn.end_time_str)} Uhr` : `<b style="color: #dc2626;">bis jetzt (aktiv)</b>`;
+                        listItems += `<li>Ab ${escapeHtml(warn.start_time_str)} Uhr: ${endText}</li>`;
+                    });
+                    violationDetailsHtml = `
+                        <details class="offline-details" data-team-id="${escapeHtml(entry.id)}" data-type="violation" style="margin-top: 5px;"${isOpen}>
+                            <summary style="color: #dc2626; font-weight: bold;">🚨 Spielfeldverstöße (Gesamt: ${totalMin} Min.)</summary>
+                            <ul>${listItems}</ul>
+                        </details>`;
+                }
+
+                let manualPointsHtml = '';
+                if (entry.manual_points !== undefined && entry.manual_points !== 0) {
+                    const ptsStr = entry.manual_points > 0 ? `+${entry.manual_points}` : `${entry.manual_points}`;
+                    manualPointsHtml = `<div><b>Manuelle Korrektur:</b> ${ptsStr} Punkte</div>`;
+                }
+
+                html += `
+                <div class="team-rank">
+                    <div class="team-score">
+                        ${idx + 1}. ${escapeHtml(entry.display_name)} ${deactBadge} — ${entry.score} Punkte
+                        <span class="role-badge ${badgeClass}">${escapeHtml(entry.role)}</span>
+                        ${nextRoleBadge}
+                    </div>
+                    <div class="team-details">
+                        <div><b>Erreichte Haltestellen:</b> ${stopsText}</div>
+                        <div><b>Andere Teams gefangen:</b> ${caughtText}</div>
+                        <div><b>Gefangen worden von:</b> ${caughtByText}</div>
+                        ${offlineDetailsHtml}
+                        ${violationDetailsHtml}
+                        ${manualPointsHtml}
+                    </div>
+                </div>`;
+            });
+
+            container.innerHTML = html;
+        }
 
         function renderNotifications(requests) {
             const container = document.getElementById('notifications-container');
@@ -767,13 +977,13 @@
         }
         
         function resolveReq(id, action) {
-            fetch('/api/resolve_request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id, action: action })
+            fetch('/api/resolve_request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_slug: "{{ admin_url }}", id: id, action: action })
             }).then(() => location.reload()).catch(() => alert('Netzwerkfehler!'));
         }
 
         function undoAction(id) {
             if(!confirm("Möchtest du diese Aktion wirklich rückgängig machen?")) return;
-            fetch('/api/undo_action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id })
+            fetch('/api/undo_action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_slug: "{{ admin_url }}", id: id })
             }).then(() => location.reload()).catch(() => alert('Netzwerkfehler!'));
         }
 
@@ -800,7 +1010,7 @@
             fetch('/api/toggle', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: stopName, team_id: teamId })
+                body: JSON.stringify({ admin_slug: "{{ admin_url }}", name: stopName, team_id: teamId })
             }).then(r => r.json()).then(d => {
                 if (d.success) {
                     location.reload();
@@ -819,7 +1029,7 @@
         function catchStop(stopName, selectId, btn) {
             const teamSelect = document.getElementById(selectId);
             btn.disabled = true; btn.innerText = "Lädt...";
-            fetch('/api/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: stopName, team_id: teamSelect.value })
+            fetch('/api/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_slug: "{{ admin_url }}", name: stopName, team_id: teamSelect.value })
             }).then(r => r.json()).then(d => {
                 if (d.success) location.reload(); else { alert('Fehler!'); btn.disabled = false; btn.innerText = "Austauschen"; }
             }).catch(() => { alert('Netzwerkfehler!'); btn.disabled = false; btn.innerText = "Austauschen"; });
@@ -835,7 +1045,7 @@
             if (hunter === prey) return alert('Ein Team kann sich nicht selbst fangen.');
             if (!confirm(`Hat "${hunterLabel}" wirklich "${preyLabel}" gefangen?`)) return;
             
-            fetch('/api/catch_team', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hunter: hunter, prey: prey })
+            fetch('/api/catch_team', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_slug: "{{ admin_url }}", hunter: hunter, prey: prey })
             }).then(r => r.json()).then(d => {
                 if (d.success) location.reload(); else alert(d.error || 'Fehler beim Eintragen!');
             }).catch(() => alert('Netzwerkfehler!'));
@@ -853,22 +1063,11 @@
             fetch('/api/add_manual_points', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ team_id: teamId, points: points })
+                body: JSON.stringify({ admin_slug: "{{ admin_url }}", team_id: teamId, points: points })
             }).then(r => r.json()).then(d => {
                 if (d.success) location.reload();
                 else alert(d.error || 'Fehler beim Eintragen!');
             }).catch(() => alert('Netzwerkfehler!'));
-        }
-
-        function clearReplayCache() {
-            if (!confirm("Möchtest du den Replay-Cache wirklich manuell leeren?")) return;
-            fetch('/adminconsole-{{ admin_url }}/clear_replay_cache', { method: 'POST' })
-                .then(r => r.json())
-                .then(d => {
-                    if (d.success) alert(d.message || "Replay-Cache wurde erfolgreich geleert.");
-                    else alert(d.error || "Fehler beim Leeren des Caches.");
-                })
-                .catch(() => alert("Netzwerkfehler beim Leeren des Replay-Caches!"));
         }
 
         // Initiale Renderung der Historie nach dem Laden

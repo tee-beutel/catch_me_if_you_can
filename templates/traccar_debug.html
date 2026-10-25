@@ -170,6 +170,7 @@
                 <span>H2-Datenbank (lokal)</span>
                 <span id="st-db" class="badge badge-warn">Prüfe...</span>
             </div>
+            <button id="btn-restart-services" class="btn btn-orange">🔄 Flask & Traccar neustarten</button>
         </div>
 
         <!-- Allgemeiner System- & Spielstatus -->
@@ -637,9 +638,28 @@
         }
     }
 
+
+
     fetchLogStatus();
     loadStatus();
     setInterval(loadStatus, 5000);
 </script>
+
+<script>
+document.getElementById('btn-restart-services').addEventListener('click', async () => {
+    if (!confirm("Möchten Sie die Dienste wirklich neustarten?")) return;
+
+    try {
+        // Flask neustarten
+        await fetch('/adminconsole-{{ admin_url }}/api/restart_flask', { method: 'POST' });
+
+        alert("Neustartbefehl gesendet. Seite wird in 5 Sekunden neu geladen...");
+        setTimeout(() => { location.reload(); }, 5000);
+    } catch (err) {
+        alert("Fehler beim Neustarten.");
+    }
+});
+</script>
+
 </body>
 </html>

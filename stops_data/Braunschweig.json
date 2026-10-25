@@ -25,9 +25,15 @@
         "lon": 10.52792
     },
     "Hondelage, Hegerdorfstraße": {
-        "factor": 2,
         "lat": 52.312006,
-        "lon": 10.604471
+        "lon": 10.604471,
+        "factor": 2,
+        "alternative": {
+            "name": "Hondelage, Dammstraße",
+            "lat": 52.314577,
+            "lon": 10.607851,
+            "factor": 2
+        }
     },
     "Innenstadt, Friedrich-Wilhelm-Platz": {
         "alternative": {
@@ -39,6 +45,17 @@
         "factor": 0.5,
         "lat": 52.260371,
         "lon": 10.519283
+    },
+    "Innenstand, Rathaus": {
+        "alternative": {
+            "factor": 0,
+            "lat": 52.26188,
+            "lon": 10.525785,
+            "name": "Innenstand, Schloss"
+        },
+        "factor": 0,
+        "lat": 52.264942,
+        "lon": 10.526414
     },
     "Kanzlerfeld, Paracelsusstraße": {
         "factor": 1,
@@ -77,22 +94,28 @@
         "lon": 10.565993
     },
     "Mascherode, Hinter den Hainen": {
-        "lat": 52.225178,
-        "lon": 10.568486,
-        "factor": 1.5,
         "alternative": {
-            "name": "Mascherode, Am Kalkwerk",
+            "factor": 1.5,
             "lat": 52.221805,
             "lon": 10.565798,
-            "factor": 1.5
-        }
+            "name": "Mascherode, Am Kalkwerk"
+        },
+        "factor": 1.5,
+        "lat": 52.225178,
+        "lon": 10.568486
     },
     "Melverode, Trakehnenstraße": {
         "factor": 1,
         "lat": 52.222326,
         "lon": 10.523482
     },
-    "Querum, Essener Straße ": {
+    "Querum, Essener Straße": {
+        "alternative": {
+            "factor": 1,
+            "lat": 52.304889,
+            "lon": 10.569717,
+            "name": "Querum, Peterskamp"
+        },
         "factor": 1,
         "lat": 52.290037,
         "lon": 10.561455
@@ -127,7 +150,13 @@
         "lat": 52.290855,
         "lon": 10.518743
     },
-    "Siegfriedviertel, Siegfriedstraße ": {
+    "Siegfriedviertel, Siegfriedstraße": {
+        "alternative": {
+            "factor": 1,
+            "lat": 52.28782,
+            "lon": 10.527042,
+            "name": "Siegfriedviertel, Nibelungenplatz"
+        },
         "factor": 1,
         "lat": 52.286929,
         "lon": 10.538746
@@ -146,6 +175,17 @@
         "factor": 1,
         "lat": 52.233952,
         "lon": 10.55887
+    },
+    "Thune, Am Kanal": {
+        "alternative": {
+            "factor": 2,
+            "lat": 52.337418,
+            "lon": 10.508923,
+            "name": "Thune, Krugplatz"
+        },
+        "factor": 2,
+        "lat": 52.332806,
+        "lon": 10.510361
     },
     "Timmerlah, Georg-Althaus-Straße": {
         "factor": 2.5,
@@ -168,9 +208,15 @@
         "lon": 10.535026
     },
     "Volkmarode, Grenzweg": {
-        "factor": 1,
         "lat": 52.284949,
-        "lon": 10.583787
+        "lon": 10.583787,
+        "factor": 1,
+        "alternative": {
+            "name": "Volkmarode, Ziegelwiese",
+            "lat": 52.290738,
+            "lon": 10.593824,
+            "factor": 1.5
+        }
     },
     "Waggum, Breitenhop": {
         "alternative": {
@@ -213,11 +259,6 @@
         "lat": 52.246038,
         "lon": 10.512087
     },
-    "Weststadt, Isarstraße ": {
-        "factor": 1,
-        "lat": 52.242671,
-        "lon": 10.479952
-    },
     "Wolfenbüttel, Ahlumer Straße": {
         "factor": 1.5,
         "lat": 52.164853,
@@ -243,6 +284,188 @@
         "lat": 52.174772,
         "lon": 10.539271
     },
+    "_geofence_outer": [
+        [
+            52.331457,
+            10.566444
+        ],
+        [
+            52.328097,
+            10.583954
+        ],
+        [
+            52.32584,
+            10.59082
+        ],
+        [
+            52.322322,
+            10.600176
+        ],
+        [
+            52.319264,
+            10.614166
+        ],
+        [
+            52.314327,
+            10.620003
+        ],
+        [
+            52.30876,
+            10.625496
+        ],
+        [
+            52.304243,
+            10.626526
+        ],
+        [
+            52.300986,
+            10.625153
+        ],
+        [
+            52.295628,
+            10.618458
+        ],
+        [
+            52.290689,
+            10.619144
+        ],
+        [
+            52.284593,
+            10.622406
+        ],
+        [
+            52.281861,
+            10.626698
+        ],
+        [
+            52.279023,
+            10.64043
+        ],
+        [
+            52.273661,
+            10.64043
+        ],
+        [
+            52.265923,
+            10.637512
+        ],
+        [
+            52.251831,
+            10.663948
+        ],
+        [
+            52.236472,
+            10.665665
+        ],
+        [
+            52.211423,
+            10.656738
+        ],
+        [
+            52.194575,
+            10.644379
+        ],
+        [
+            52.176457,
+            10.640945
+        ],
+        [
+            52.16592,
+            10.628929
+        ],
+        [
+            52.155591,
+            10.61142
+        ],
+        [
+            52.140199,
+            10.567131
+        ],
+        [
+            52.137246,
+            10.547218
+        ],
+        [
+            52.14041,
+            10.533485
+        ],
+        [
+            52.144838,
+            10.516319
+        ],
+        [
+            52.147158,
+            10.50499
+        ],
+        [
+            52.150953,
+            10.488853
+        ],
+        [
+            52.158753,
+            10.475807
+        ],
+        [
+            52.168449,
+            10.475807
+        ],
+        [
+            52.188256,
+            10.457611
+        ],
+        [
+            52.21416,
+            10.445251
+        ],
+        [
+            52.22658,
+            10.440788
+        ],
+        [
+            52.242363,
+            10.439758
+        ],
+        [
+            52.268628,
+            10.428257
+        ],
+        [
+            52.297848,
+            10.430832
+        ],
+        [
+            52.309614,
+            10.433578
+        ],
+        [
+            52.312345,
+            10.468941
+        ],
+        [
+            52.324843,
+            10.456409
+        ],
+        [
+            52.331773,
+            10.466022
+        ],
+        [
+            52.335448,
+            10.498981
+        ],
+        [
+            52.341746,
+            10.505676
+        ],
+        [
+            52.34374,
+            10.519409
+        ],
+        [
+            52.334398,
+            10.527821
+        ]
+    ],
     "Ölper, Am Mühlengraben": {
         "factor": 1,
         "lat": 52.28457,
@@ -252,5 +475,27 @@
         "factor": 1,
         "lat": 52.264234,
         "lon": 10.551638
+    },
+    "Weststadt, Isarstraße": {
+        "lat": 52.242671,
+        "lon": 10.479952,
+        "factor": 1,
+        "alternative": {
+            "name": "Weststadt, Rheinring",
+            "lat": 52.24854,
+            "lon": 10.472353,
+            "factor": 1
+        }
+    },
+    "Zuckerberg, Bebelhof": {
+        "lat": 52.24422,
+        "lon": 10.535501,
+        "factor": 1,
+        "alternative": {
+            "name": "Zuckerberg, Richmondweg",
+            "lat": 52.24067,
+            "lon": 10.527779,
+            "factor": 1
+        }
     }
 }

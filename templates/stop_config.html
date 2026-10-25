@@ -11,6 +11,9 @@
     <!-- Leaflet CSS & JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet-Geoman (Geofencing Editor) -->
+<link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
+<script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
 
     <style>
         /* Basis VCD-Typografie und Farben */
@@ -361,6 +364,14 @@
     </style>
 </head>
 <body>
+    <!-- SVG Pattern für schraffierte Sperrzonen -->
+    <svg width="0" height="0" style="position:absolute;">
+      <defs>
+        <pattern id="red-hatch" width="10" height="10" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+          <line x1="0" y1="0" x2="0" y2="10" stroke="#e53e3e" stroke-width="3" />
+        </pattern>
+      </defs>
+    </svg>
 
     <!-- Header mit VCD-Logo oben rechts -->
     <header class="header">
@@ -430,6 +441,35 @@
                 <div id="stops-list" class="stops-list-container">
                     <div style="padding: 15px; color: #777; text-align: center; font-size: 0.85em;">Keine Haltestellen geladen</div>
                 </div>
+            </div>
+
+            <!-- Sektion Geofencing (Spielfeldbegrenzung & Sperrzonen) -->
+            <div class="card-box" style="border-left: 4px solid var(--vcd-petrol);">
+                <h3>Spielfeld & Sperrzonen (Geofencing)</h3>
+                <div class="help-text" style="margin-bottom: 12px;">
+                    Definiere die äußere Grenze des Spielfelds sowie Sperrzonen. Nach Klick auf einen Zeichen-Button auf die Karte klicken, um Eckpunkte zu setzen.
+                </div>
+
+                <div style="display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;">
+                    <button type="button" id="btn-draw-outer" class="btn btn-petrol" style="flex: 1; min-width: 170px; font-size: 11.5px; padding: 9px 10px;">
+                        ⬡ Spielfeldbegrenzung zeichnen
+                    </button>
+                    <button type="button" id="btn-draw-exclusion" class="btn btn-orange" style="flex: 1; min-width: 170px; font-size: 11.5px; padding: 9px 10px;">
+                        ⛔ Sperrzone zeichnen
+                    </button>
+                </div>
+
+                <div id="geofence-status-box" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 3px; padding: 10px; font-size: 0.85em; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span><b>Spielfeldbegrenzung:</b> <span id="outer-status-text" style="color: #666;">Nicht definiert</span></span>
+                        <button type="button" id="btn-delete-outer" class="btn btn-orange" style="display:none; padding: 3px 8px; font-size: 10px; width: auto; margin: 0;">Löschen</button>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span><b>Sperrzonen:</b> <span id="exclusion-count-text">0 definiert</span></span>
+                        <button type="button" id="btn-delete-all-exclusion" class="btn btn-orange" style="display:none; padding: 3px 8px; font-size: 10px; width: auto; margin: 0;">Alle löschen</button>
+                    </div>
+                </div>
+                <div id="geofence-action-hint" class="help-text" style="color: var(--vcd-petrol); font-weight: 500; display: none; background: #eef8f8; padding: 6px 10px; border-radius: 3px;"></div>
             </div>
 
             <!-- Sektion 2: Formular (Bearbeiten / Anlegen) -->
@@ -561,6 +601,12 @@
     <div id="status-toast"></div>
 
     <script>
+        const baseStopPoints = {{ points_stop_reached | default(2) }};
+        function formatStopPoints(factor) {
+            const pts = Number((factor * baseStopPoints).toFixed(2));
+            return `${pts} ${pts === 1 ? 'Punkt' : 'Punkte'}`;
+        }
+
         // --- ANWENDUNGS-STATE ---
         let currentDatasetFilename = "";
         let stopsData = {}; // Format: { "Stadtteil, Name": { lat: ..., lon: ..., factor: ... } }
@@ -576,7 +622,9 @@
 
         const stopsLayerGroup = L.layerGroup().addTo(map);
         const gtfsSearchLayerGroup = L.layerGroup().addTo(map);
+        const geofenceLayerGroup = L.layerGroup().addTo(map);
         let tempClickMarker = null;
+        let currentGeomanMode = null; // 'outer' | 'exclusion' | null
 
         // --- MARKER ICONS NACH VCD CORPORATE DESIGN ---
         function getVcdStopIcon(factor) {
@@ -625,6 +673,7 @@
 
         // --- KARTEN-KLICK: TEMPORÄREN PIN SETZEN & KOORDINATEN ÜBERNEHMEN ---
         map.on('click', function(e) {
+            if (currentGeomanMode) return; // Geoman zeichnet gerade Polygone
             const lat = parseFloat(e.latlng.lat.toFixed(6));
             const lon = parseFloat(e.latlng.lng.toFixed(6));
 
@@ -853,7 +902,7 @@
             const stopsListEl = document.getElementById('stops-list');
             stopsListEl.innerHTML = "";
 
-            const keys = Object.keys(stopsData);
+            const keys = Object.keys(stopsData).filter(k => !k.startsWith('_'));
             document.getElementById('stops-counter').textContent = keys.length;
 
             if (keys.length === 0) {
@@ -884,7 +933,7 @@
                     marker.bindPopup(`
                         <div style="font-family: 'Roboto', sans-serif;">
                             <b style="color: #049EAB; font-size: 1.1em;">${key}</b><br>
-                            Faktor: <b>${factor}</b><br>
+                            Faktor: <b>${factor}</b> (Punkte im Spiel: <b>${formatStopPoints(factor)}</b>)<br>
                             Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}<br>
                             <button onclick="window.editStopFromPopup('${encodeURIComponent(key)}')" class="btn btn-petrol" style="padding: 4px 8px; font-size: 11px; margin-top: 6px; width: 100%;">
                                 Im Formular bearbeiten
@@ -921,7 +970,7 @@
                                 <span style="font-size: 0.8em; color: #4E8293; font-weight: bold;">ALTERNATIV-HALTESTELLE</span><br>
                                 <b style="color: #049EAB; font-size: 1.05em;">${stop.alternative.name || 'Alternative'}</b><br>
                                 Hauptziel: <b>${key}</b><br>
-                                Faktor: <b>${altFactor}</b><br>
+                                Faktor: <b>${altFactor}</b> (Punkte im Spiel: <b>${formatStopPoints(altFactor)}</b>)<br>
                                 Lat: ${altLat.toFixed(5)}, Lon: ${altLon.toFixed(5)}<br>
                                 <button onclick="window.editStopFromPopup('${encodeURIComponent(key)}')" class="btn btn-petrol" style="padding: 4px 8px; font-size: 11px; margin-top: 6px; width: 100%;">
                                     Haupthaltestelle bearbeiten
@@ -1080,6 +1129,178 @@
             showToast(`Haltestelle "${finalKey}" übernommen!`);
         });
 
+        // --- GEOFENCING LOGIK (LEAFLET-GEOMAN) ---
+        function renderGeofences() {
+            geofenceLayerGroup.clearLayers();
+
+            const outer = stopsData['_geofence_outer'];
+            const outerStatusText = document.getElementById('outer-status-text');
+            const btnDeleteOuter = document.getElementById('btn-delete-outer');
+
+            if (Array.isArray(outer) && outer.length >= 3) {
+                outerStatusText.innerHTML = `<span style="color: #EB6502; font-weight: bold;">Definiert (${outer.length} Punkte)</span>`;
+                btnDeleteOuter.style.display = 'inline-block';
+
+                const outerPoly = L.polygon(outer, {
+                    color: '#EB6502',
+                    weight: 3,
+                    fill: false
+                }).addTo(geofenceLayerGroup);
+
+                outerPoly.bindTooltip("Spielfeldbegrenzung", { sticky: true });
+                outerPoly.bindPopup(`
+                    <div style="font-family: 'Roboto', sans-serif;">
+                        <b style="color: #EB6502;">Spielfeldbegrenzung</b><br>
+                        ${outer.length} Eckpunkte<br>
+                        <button onclick="window.removeOuterBoundary()" class="btn btn-orange" style="padding: 4px 8px; font-size: 11px; margin-top: 6px; width: 100%;">
+                            Begrenzung löschen
+                        </button>
+                    </div>
+                `);
+            } else {
+                outerStatusText.innerHTML = '<span style="color: #888;">Nicht definiert</span>';
+                btnDeleteOuter.style.display = 'none';
+            }
+
+            const exclusions = stopsData['_geofence_exclusion'];
+            const exclusionCountText = document.getElementById('exclusion-count-text');
+            const btnDeleteAllExclusion = document.getElementById('btn-delete-all-exclusion');
+
+            if (Array.isArray(exclusions) && exclusions.length > 0) {
+                exclusionCountText.innerHTML = `<span style="color: #EB6502; font-weight: bold;">${exclusions.length} aktiv</span>`;
+                btnDeleteAllExclusion.style.display = 'inline-block';
+
+                exclusions.forEach((zone, idx) => {
+                    if (Array.isArray(zone) && zone.length >= 3) {
+                        const exPoly = L.polygon(zone, {
+                            color: '#e53e3e',
+                            weight: 2,
+                            fillColor: 'url(#red-hatch)',
+                            fillOpacity: 1
+                        }).addTo(geofenceLayerGroup);
+
+                        exPoly.bindTooltip(`Sperrzone ${idx + 1}`, { sticky: true });
+                        exPoly.bindPopup(`
+                            <div style="font-family: 'Roboto', sans-serif;">
+                                <b style="color: #e53e3e;">Sperrzone ${idx + 1}</b><br>
+                                ${zone.length} Eckpunkte<br>
+                                <button onclick="window.removeExclusionZone(${idx})" class="btn btn-orange" style="padding: 4px 8px; font-size: 11px; margin-top: 6px; width: 100%;">
+                                    Diese Sperrzone löschen
+                                </button>
+                            </div>
+                        `);
+                    }
+                });
+            } else {
+                exclusionCountText.innerHTML = '<span style="color: #888;">0 definiert</span>';
+                btnDeleteAllExclusion.style.display = 'none';
+            }
+        }
+
+        window.removeOuterBoundary = function() {
+            if (confirm("Spielfeldbegrenzung wirklich löschen?")) {
+                delete stopsData['_geofence_outer'];
+                unsavedChanges = true;
+                updateSaveIndicator();
+                renderGeofences();
+                showToast("Spielfeldbegrenzung gelöscht.");
+            }
+        };
+
+        window.removeExclusionZone = function(index) {
+            if (confirm(`Sperrzone ${index + 1} wirklich löschen?`)) {
+                if (Array.isArray(stopsData['_geofence_exclusion'])) {
+                    stopsData['_geofence_exclusion'].splice(index, 1);
+                    if (stopsData['_geofence_exclusion'].length === 0) {
+                        delete stopsData['_geofence_exclusion'];
+                    }
+                }
+                unsavedChanges = true;
+                updateSaveIndicator();
+                renderGeofences();
+                showToast(`Sperrzone ${index + 1} gelöscht.`);
+            }
+        };
+
+        document.getElementById('btn-delete-outer').addEventListener('click', window.removeOuterBoundary);
+        document.getElementById('btn-delete-all-exclusion').addEventListener('click', function() {
+            if (confirm("Wirklich ALLE Sperrzonen löschen?")) {
+                delete stopsData['_geofence_exclusion'];
+                unsavedChanges = true;
+                updateSaveIndicator();
+                renderGeofences();
+                showToast("Alle Sperrzonen gelöscht.");
+            }
+        });
+
+        document.getElementById('btn-draw-outer').addEventListener('click', function() {
+            currentGeomanMode = 'outer';
+            const hint = document.getElementById('geofence-action-hint');
+            hint.style.display = 'block';
+            hint.textContent = '✏️ Spielfeldbegrenzung: Klicke auf die Karte, um Eckpunkte zu setzen. Klicke auf den ersten Punkt, um das Polygon abzuschließen.';
+            map.pm.enableDraw('Polygon', {
+                snappable: true,
+                pathOptions: {
+                    color: '#EB6502',
+                    weight: 3,
+                    fill: false,
+                    fillOpacity: 0
+                }
+            });
+            showToast('Zeichne Spielfeldbegrenzung...');
+        });
+
+        document.getElementById('btn-draw-exclusion').addEventListener('click', function() {
+            currentGeomanMode = 'exclusion';
+            const hint = document.getElementById('geofence-action-hint');
+            hint.style.display = 'block';
+            hint.textContent = '✏️ Sperrzone: Klicke auf die Karte, um Eckpunkte zu setzen. Klicke auf den ersten Punkt, um das Polygon abzuschließen.';
+            map.pm.enableDraw('Polygon', {
+                snappable: true,
+                pathOptions: {
+                    color: '#e53e3e',
+                    weight: 2,
+                    fillColor: 'url(#red-hatch)',
+                    fillOpacity: 1
+                }
+            });
+            showToast('Zeichne Sperrzone...');
+        });
+
+        map.on('pm:create', function(e) {
+            const layer = e.layer;
+            const rawLatLngs = layer.getLatLngs();
+            const latlngsArray = (Array.isArray(rawLatLngs[0]) ? rawLatLngs[0] : rawLatLngs);
+            const latlngs = latlngsArray.map(pt => [
+                parseFloat(pt.lat.toFixed(6)),
+                parseFloat(pt.lng.toFixed(6))
+            ]);
+
+            map.removeLayer(layer);
+
+            if (currentGeomanMode === 'outer') {
+                stopsData['_geofence_outer'] = latlngs;
+                showToast('✓ Spielfeldbegrenzung erfasst!');
+            } else if (currentGeomanMode === 'exclusion') {
+                if (!Array.isArray(stopsData['_geofence_exclusion'])) {
+                    stopsData['_geofence_exclusion'] = [];
+                }
+                stopsData['_geofence_exclusion'].push(latlngs);
+                showToast(`✓ Sperrzone ${stopsData['_geofence_exclusion'].length} erfasst!`);
+            }
+
+            currentGeomanMode = null;
+            document.getElementById('geofence-action-hint').style.display = 'none';
+            unsavedChanges = true;
+            updateSaveIndicator();
+            renderGeofences();
+        });
+
+        map.on('pm:drawend', function() {
+            currentGeomanMode = null;
+            document.getElementById('geofence-action-hint').style.display = 'none';
+        });
+
         // --- DATASET LADEN & VERWALTEN ---
         async function loadAvailableDatasets(selectFilename = null) {
             try {
@@ -1131,6 +1352,7 @@
                 clearForm();
                 gtfsSearchLayerGroup.clearLayers();
                 renderStops();
+                renderGeofences();
                 showToast(`Datensatz "${filename}" geladen.`);
             } catch (err) {
                 alert(`Fehler beim Laden des Datensatzes "${filename}": ${err.message}`);
@@ -1225,7 +1447,7 @@
                 const res = await fetch('/api/search_gtfs', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ stadt, stadtteil, name })
+                    body: JSON.stringify({ admin_slug: "{{ admin_url }}", stadt, stadtteil, name })
                 });
 
                 const data = await res.json();
@@ -1351,6 +1573,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        admin_slug: "{{ admin_url }}",
                         filename: currentDatasetFilename,
                         data: stopsData
                     })
@@ -1401,6 +1624,7 @@
             updateKeyPreview();
             updateFactorBadge();
             updateAltKeyPreview();
+            renderGeofences();
         });
     </script>
 </body>

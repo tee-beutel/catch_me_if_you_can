@@ -393,7 +393,12 @@
 
         .custom-factor-icon { background: transparent; border: none; }
 
+        @media (max-width: 768px) {
+            .toast-container { display: none !important; }
+        }
+
         @media (max-width: 600px) {
+            .toast-container { display: none !important; }
             .replay-header { padding: 6px 12px; }
             .header-title { font-size: 1.05em; }
             .header-logo { height: 26px; }
@@ -405,6 +410,14 @@
     </style>
 </head>
 <body>
+    <!-- SVG Pattern für schraffierte Sperrzonen -->
+    <svg width="0" height="0" style="position:absolute;">
+      <defs>
+        <pattern id="red-hatch" width="10" height="10" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+          <line x1="0" y1="0" x2="0" y2="10" stroke="#e53e3e" stroke-width="3" />
+        </pattern>
+      </defs>
+    </svg>
 
     <!-- Header -->
     <header class="replay-header">
@@ -424,7 +437,7 @@
             </h1>
         </div>
         <div class="header-right">
-            <a href="/" class="btn-nav">🏠 Startseite</a>
+            <button type="button" onclick="goBack()" class="btn-nav" style="cursor: pointer;">⬅️ Zurück</button>
         </div>
     </header>
 
@@ -499,6 +512,22 @@
     <script>
         const isAdmin = {{ 'true' if is_admin else 'false' }};
         const currentPhase = "{{ phase }}";
+        const baseStopPoints = {{ points_stop_reached | default(2) }};
+
+        function formatStopPoints(factor) {
+            const pts = Number((factor * baseStopPoints).toFixed(2));
+            return `${pts} ${pts === 1 ? 'Punkt' : 'Punkte'}`;
+        }
+
+        function goBack() {
+            if (window.history.length > 1 && document.referrer && document.referrer.indexOf(window.location.host) !== -1) {
+                window.history.back();
+            } else if (document.referrer) {
+                window.location.href = document.referrer;
+            } else {
+                window.location.href = '/';
+            }
+        }
 
         // --- GLOBALE VARIABLEN & STATUS ---
         let replayData = null;
@@ -520,6 +549,7 @@
         let teamTrails = {}; // Polyline für Bewegungsspuren
         let stopMarkers = {};
         let activeEventPopup = null;
+        let activeEventPopupTimeout = null;
 
         // Verfolgte getriggerte Events für Toast / Leaflet-Popup
         const triggeredEvents = new Set();
@@ -547,6 +577,34 @@
         }
 
         // --- MAP SETUP (ANALOG ZU TEAM.HTML) ---
+        let geofenceLayerGroup;
+
+        function renderReplayGeofences(outer, exclusion) {
+            if (!geofenceLayerGroup) return;
+            geofenceLayerGroup.clearLayers();
+            if (outer && Array.isArray(outer) && outer.length >= 3) {
+                const poly = L.polygon(outer, {
+                    color: '#EB6502', // VCD Orange
+                    weight: 3,
+                    fill: false
+                }).addTo(geofenceLayerGroup);
+                poly.bindTooltip("Spielfeldbegrenzung", { sticky: true });
+            }
+            if (exclusion && Array.isArray(exclusion) && exclusion.length > 0) {
+                exclusion.forEach(zone => {
+                    if (zone && Array.isArray(zone) && zone.length >= 3) {
+                        const poly = L.polygon(zone, {
+                            color: '#e53e3e',
+                            weight: 2,
+                            fillColor: 'url(#red-hatch)',
+                            fillOpacity: 1
+                        }).addTo(geofenceLayerGroup);
+                        poly.bindTooltip("Sperrzone", { sticky: true });
+                    }
+                });
+            }
+        }
+
         function initMap() {
             map = L.map('map', { zoomControl: false }).setView([52.248874, 10.526770], 12);
             L.control.zoom({ position: 'topright' }).addTo(map);
@@ -556,6 +614,7 @@
             }).addTo(map);
 
             stopsLayerGroup = L.layerGroup().addTo(map);
+            geofenceLayerGroup = L.layerGroup().addTo(map);
         }
 
         // Lädt statische Haltestellen via /api/all_stops analog zu team.html
@@ -569,7 +628,7 @@
                         let markerOpts = {};
 
                         if (stop.factor > 1) {
-                            factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ ${stop.factor}-fache Punkte!</span>`;
+                            factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span>`;
                             markerOpts.icon = L.divIcon({
                                 className: 'custom-factor-icon',
                                 html: '<div style="background-color: #EB6502; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 11px;">⭐</div>',
@@ -577,7 +636,7 @@
                                 iconAnchor: [13, 13]
                             });
                         } else if (stop.factor < 1) {
-                            factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ ${stop.factor}-fache Punkte!</span>`;
+                            factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span>`;
                             markerOpts.icon = L.divIcon({
                                 className: 'custom-factor-icon',
                                 html: '<div style="background-color: #6c757d; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 11px;">⚠️</div>',
@@ -624,6 +683,10 @@
                     replayData = data;
                     startTs = Number(data.start_ts);
                     endTs = Number(data.end_ts);
+
+                    if (data.geofence_outer || data.geofence_exclusion) {
+                        renderReplayGeofences(data.geofence_outer, data.geofence_exclusion);
+                    }
 
                     if (!startTs || !endTs || startTs >= endTs) {
                         document.getElementById('current-time-label').innerText = "Keine gültigen Zeitpunkte gefunden.";
@@ -823,7 +886,14 @@
                     if (ev.ts > time) break;
 
                     if (ev.type === 'manual_points') {
-                        if (ev.team && currentTeamStates[ev.team]) currentTeamStates[ev.team].score += parseFloat(ev.desc) || 0;
+                        if (ev.team && currentTeamStates[ev.team]) {
+                            let pts = parseFloat(ev.stop);
+                            if (isNaN(pts)) {
+                                const m = String(ev.desc).match(/([+-]?\d+(?:\.\d+)?)/);
+                                pts = m ? parseFloat(m[1]) : 0;
+                            }
+                            currentTeamStates[ev.team].score += pts || 0;
+                        }
                     } else if (ev.type === 'stop') {
                         if (ev.team && currentTeamStates[ev.team]) {
                             let factor = 1.0;
@@ -992,6 +1062,7 @@
                     </div>
                 `;
 
+                if (activeEventPopupTimeout) clearTimeout(activeEventPopupTimeout);
                 if (activeEventPopup) {
                     map.closePopup(activeEventPopup);
                 }
@@ -1000,10 +1071,18 @@
                     .setLatLng([ev.lat, ev.lon])
                     .setContent(popupHtml)
                     .openOn(map);
+
+                activeEventPopupTimeout = setTimeout(() => {
+                    if (activeEventPopup) {
+                        map.closePopup(activeEventPopup);
+                        activeEventPopup = null;
+                    }
+                }, 3000);
             }
         }
 
         function showToast(ev) {
+            if (window.innerWidth <= 768) return;
             const container = document.getElementById('toast-container');
             if (!container) return;
 
@@ -1024,12 +1103,12 @@
 
             container.appendChild(card);
 
-            // Nach 6 Sekunden ausblenden
+            // Nach 3 Sekunden ausblenden
             setTimeout(() => {
                 card.style.opacity = '0';
                 card.style.transform = 'translateX(100%)';
                 setTimeout(() => card.remove(), 400);
-            }, 6000);
+            }, 3000);
         }
 
         // --- WIEDERGABESTEUERUNG & ANIMATIONSLOOP ---
