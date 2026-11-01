@@ -48,6 +48,13 @@ def count_incoming_traffic():
     with traffic_lock:
         flask_traffic_rx += req_size
 
+    if LOG_SETTINGS.get("requests", False):
+        write_debug_log("requests", {
+            "method": request.method,
+            "path": request.path,
+            "remote_addr": request.remote_addr
+        })
+
 @app.after_request
 def count_outgoing_traffic(response):
     global flask_traffic_tx
@@ -109,7 +116,10 @@ DEFAULT_CONFIG = {
     "auto_approve_stops": False,
     "stop_radius_meters": 75,
     "auto_calculate_stops": True,
-    "enable_geofences": False
+    "enable_geofences": False,
+    "telegram_enabled": bool(os.getenv("TELEGRAM_ENABLED", "false").lower() in ("true", "1", "yes")),
+    "telegram_bot_token": os.getenv("TELEGRAM_TOKEN", ""),
+    "telegram_chat_ids": os.getenv("TELEGRAM_CHAT_ID", "")
 }
 
 stops_data = {}
@@ -199,41 +209,55 @@ TRACCAR_API_URL = f"{TRACCAR_BASE_URL}/devices"
 TRACCAR_USER = os.getenv("TRACCAR_API_USER", "admin").strip()
 TRACCAR_PASS = os.getenv("TRACCAR_API_PASSWORD", "admin").strip()
 
-# --- TRACCAR LOGGING KONFIGURATION ---
-TRACCAR_LOG_ENABLED = False
+# --- DEBUG LOGGING KONFIGURATION ---
+LOG_SETTINGS = {
+    "traccar_api": False,
+    "gps_background_worker": False,
+    "requests": False,
+    "game_actions": False,
+    "server_status": False
+}
 TRACCAR_LOG_FILE = os.path.join(BASE_DIR, 'log.json')
 traccar_log_lock = threading.Lock()
 
-def write_traccar_api_log(data):
-    """Schreibt Traccar-API-Anfragen thread-sicher in die log.json."""
-    if not TRACCAR_LOG_ENABLED:
+
+def write_debug_log(category, payload):
+    """Schreibt Debug-Logs nach Kategorien getrennt thread-sicher in die log.json."""
+    if not LOG_SETTINGS.get(category, False):
         return
-    
+
     with traccar_log_lock:
         try:
-            logs = []
+            logs_dict = {}
             if os.path.exists(TRACCAR_LOG_FILE):
                 with open(TRACCAR_LOG_FILE, 'r', encoding='utf-8') as f:
                     try:
-                        logs = json.load(f)
-                        if not isinstance(logs, list):
-                            logs = []
+                        loaded = json.load(f)
+                        # Abwärtskompatibilität, falls noch eine alte Liste existiert
+                        if isinstance(loaded, dict):
+                            logs_dict = loaded
                     except json.JSONDecodeError:
-                        logs = []
-            
-            # Maximal 1000 Einträge im Log behalten, um die Datei nicht explodieren zu lassen
-            if len(logs) >= 1000:
-                logs = logs[-999:]
-                
-            logs.append({
+                        logs_dict = {}
+
+            if category not in logs_dict or not isinstance(logs_dict[category], list):
+                logs_dict[category] = []
+
+            # Maximal 1000 Einträge pro Kategorie behalten
+            if len(logs_dict[category]) >= 1000:
+                logs_dict[category] = logs_dict[category][-999:]
+
+            logs_dict[category].append({
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "payload": data
+                "payload": payload
             })
-            
+
             with open(TRACCAR_LOG_FILE, 'w', encoding='utf-8') as f:
-                json.dump(logs, f, indent=2, ensure_ascii=False)
+                json.dump(logs_dict, f, indent=2, ensure_ascii=False)
         except Exception as e:
             app.logger.error(f"Fehler beim Schreiben der log.json: {e}")
+
+def write_traccar_api_log(data):
+    write_debug_log("traccar_api", data)
 
 traccar_lock = threading.RLock()
 install_lock = threading.Lock()
@@ -595,22 +619,6 @@ def is_port_in_use(port):
         return s.connect_ex(('127.0.0.1', port)) == 0
 
 
-def stop_legacy_docker_container():
-    if shutil.which("docker"):
-        for prefix in ([], ["sudo", "-n"]):
-            try:
-                res = subprocess.run(
-                    prefix + ["docker", "ps", "-q", "-f", "name=traccar-server"],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=3
-                )
-                if res.stdout.strip():
-                    print("🧹 Alter Docker-Container 'traccar-server' erkannt. Stoppe und entferne ihn...")
-                    subprocess.run(prefix + ["docker", "rm", "-f", "traccar-server"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    time.sleep(1)
-            except Exception:
-                pass
-
-
 def get_java_executable():
     sys_java = shutil.which("java")
     if sys_java:
@@ -726,8 +734,6 @@ atexit.register(stop_traccar_process)
 
 def start_traccar_server():
     global traccar_process, traccar_last_error
-
-    stop_legacy_docker_container()
 
     if not ensure_traccar_installed():
         traccar_last_error = "Traccar-Download in ./traccar_runtime fehlgeschlagen"
@@ -1003,6 +1009,12 @@ def check_game_gps_rules():
 
     telegram_messages = []
     now_utc = datetime.now(timezone.utc)
+    summary_actions = {
+        "auto_approvals": [],
+        "new_gps_warnings": [],
+        "resolved_gps_warnings": [],
+        "geofence_violations": []
+    }
 
     try:
         with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
@@ -1042,6 +1054,7 @@ def check_game_gps_rules():
                             )
                             state_changed = True
                             t_name = req.get("team_name", req["team"])
+                            summary_actions["auto_approvals"].append({"team": t_name, "stop": req["stop"], "distance": round(min_dist, 1)})
                             telegram_messages.append(
                                 f"✅ AUTO-GPS-FREIGABE (Nachprüfung): Team '{t_name}' hat Haltestelle '{req['stop']}' ({int(min_dist)}m) erreicht."
                             )
@@ -1106,6 +1119,7 @@ def check_game_gps_rules():
                             if not open_outage:
                                 c.execute("INSERT INTO gps_outages (team_id, offline_from) VALUES (?, ?)", (t_id, ref_dt.isoformat()))
                                 t_name = t_data.get("display_name", t_id)
+                                summary_actions["new_gps_warnings"].append({"team_id": t_id, "team_name": t_name})
                                 state["action_log"].insert(0, {
                                     "id": str(uuid.uuid4()), "type": "gps_warning", "team": t_id, "team_name": t_name,
                                     "timestamp": ref_dt.isoformat(), "actual_timestamp": None, "desc": "Offline-Phase",
@@ -1119,6 +1133,7 @@ def check_game_gps_rules():
                                     if log.get("type") == "gps_warning" and log.get("team") == t_id and log.get("actual_timestamp") is None:
                                         log["actual_timestamp"] = now_utc.isoformat()
                                         break
+                                summary_actions["resolved_gps_warnings"].append(t_id)
                                 state_changed = True
 
                     # --- Geofence-Prüfung direkt in Python ---
@@ -1152,6 +1167,7 @@ def check_game_gps_rules():
                                 if is_violation:
                                     if not open_gv:
                                         c.execute("INSERT INTO geofence_violations (team_id, violation_from) VALUES (?, ?)", (t_id, t_violation_ts))
+                                        summary_actions["geofence_violations"].append(t_id)
                                 else:
                                     if open_gv:
                                         c.execute("UPDATE geofence_violations SET violation_until = ? WHERE id = ?", (t_updated, open_gv["id"]))
@@ -1175,11 +1191,41 @@ def check_game_gps_rules():
     for msg in telegram_messages:
         send_telegram_msg(msg)
 
+    if LOG_SETTINGS.get("gps_background_worker", False):
+        total_actions = (len(summary_actions["auto_approvals"]) +
+                         len(summary_actions["new_gps_warnings"]) +
+                         len(summary_actions["resolved_gps_warnings"]) +
+                         len(summary_actions["geofence_violations"]))
+        write_debug_log("gps_background_worker", {
+            "summary": f"{len(summary_actions['auto_approvals'])} Auto-Approvals, {len(summary_actions['new_gps_warnings'])} Warnungen neu, {len(summary_actions['resolved_gps_warnings'])} Warnungen behoben, {len(summary_actions['geofence_violations'])} Geofence-Verstöße",
+            "total_actions": total_actions,
+            "actions": summary_actions
+        })
+
 
 def game_rules_background_worker():
     while True:
         time.sleep(5)
         check_game_gps_rules()
+
+
+def server_status_logger_worker():
+    """Hintergrund-Thread: Sammelt alle 2 Sekunden Systemmetriken, falls server_status aktiv ist."""
+    while True:
+        time.sleep(2)
+        try:
+            if LOG_SETTINGS.get("server_status", False):
+                cpu_percent = psutil.cpu_percent(interval=None)
+                ram = psutil.virtual_memory()
+                metrics = {
+                    "cpu_percent": cpu_percent,
+                    "ram_percent": ram.percent,
+                    "ram_used_mb": round((ram.total - ram.available) / (1024 ** 2), 1),
+                    "ram_total_gb": round(ram.total / (1024 ** 3), 2)
+                }
+                write_debug_log("server_status", metrics)
+        except Exception as e:
+            app.logger.error(f"Fehler in server_status_logger_worker: {e}")
 
 
 def traccar_background_worker():
@@ -1239,15 +1285,58 @@ def traccar_background_worker():
 
 # --- HILFSFUNKTIONEN FÜR STATUS UND AKTIONEN ---
 def send_telegram_msg(text):
-    TOKEN = os.getenv("TELEGRAM_TOKEN")
-    CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-    if not TOKEN or not CHAT_ID:
-        return
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     try:
-        requests.post(url, data={'chat_id': CHAT_ID, 'text': text}, timeout=5)
+        with sqlite3.connect(DB_FILE, timeout=5) as conn:
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute("SELECT key, value FROM settings WHERE key IN ('config', 'telegram_enabled', 'telegram_bot_token', 'telegram_chat_ids')")
+            rows = {r['key']: r['value'] for r in c.fetchall()}
+
+        enabled = False
+        token = ""
+        chat_ids_raw = ""
+
+        if 'config' in rows and rows['config']:
+            try:
+                cfg = json.loads(rows['config'])
+                enabled = bool(cfg.get("telegram_enabled", False))
+                token = str(cfg.get("telegram_bot_token", "")).strip()
+                chat_ids_raw = str(cfg.get("telegram_chat_ids", "")).strip()
+            except Exception:
+                pass
+
+        if 'telegram_enabled' in rows and rows['telegram_enabled'] is not None:
+            val = str(rows['telegram_enabled']).strip().lower()
+            enabled = val in ('1', 'true', 'yes')
+        if 'telegram_bot_token' in rows and rows['telegram_bot_token']:
+            token = str(rows['telegram_bot_token']).strip()
+        if 'telegram_chat_ids' in rows and rows['telegram_chat_ids']:
+            chat_ids_raw = str(rows['telegram_chat_ids']).strip()
+
+        # Fallbacks auf Umgebungsvariablen falls in DB noch nicht gesetzt
+        if not token:
+            token = os.getenv("TELEGRAM_TOKEN", "").strip()
+        if not chat_ids_raw:
+            chat_ids_raw = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+
+        if not enabled:
+            return
+
+        if not token or not chat_ids_raw:
+            return
+
+        chat_ids = [cid.strip() for cid in re.split(r'[,;\s]+', chat_ids_raw) if cid.strip()]
+        if not chat_ids:
+            return
+
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        for chat_id in chat_ids:
+            try:
+                requests.post(url, data={'chat_id': chat_id, 'text': text}, timeout=5)
+            except Exception as e:
+                print(f"Telegram error for chat_id {chat_id}: {e}")
     except Exception as e:
-        print(f'Telegram error: {e}')
+        print(f"Telegram send error: {e}")
 
 
 def generate_slug(display_name, pin):
@@ -1283,6 +1372,10 @@ def save_state(conn, state):
     c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('roles_swapped', ?)", (1 if state.get('roles_swapped') else 0,))
     if 'active_stops_dataset' in state:
         c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('active_stops_dataset', ?)", (state['active_stops_dataset'],))
+
+    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('telegram_enabled', ?)", ('1' if state['config'].get('telegram_enabled') else '0',))
+    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('telegram_bot_token', ?)", (str(state['config'].get('telegram_bot_token', '')),))
+    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('telegram_chat_ids', ?)", (str(state['config'].get('telegram_chat_ids', '')),))
 
     c.execute("DELETE FROM active_stops")
     for stop in state.get('active_stops', []):
@@ -1609,6 +1702,14 @@ def get_state(conn):
         if k not in state["config"]:
             state["config"][k] = v
 
+    if "telegram_enabled" in settings_dict and "telegram_enabled" not in state["config"]:
+        v = str(settings_dict["telegram_enabled"]).strip().lower()
+        state["config"]["telegram_enabled"] = v in ('1', 'true', 'yes')
+    if "telegram_bot_token" in settings_dict and "telegram_bot_token" not in state["config"]:
+        state["config"]["telegram_bot_token"] = settings_dict["telegram_bot_token"]
+    if "telegram_chat_ids" in settings_dict and "telegram_chat_ids" not in state["config"]:
+        state["config"]["telegram_chat_ids"] = settings_dict["telegram_chat_ids"]
+
     return state
 
 
@@ -1836,6 +1937,19 @@ def execute_stop_catch(state, stop_name, team_id, is_late=False, submitted_ts=No
             "is_late": is_late,
             "admin_only": False
         })
+
+    write_debug_log("game_actions", {
+        "action": "stop_catch",
+        "stop": stop_name,
+        "team": team_id if not is_neutral else None,
+        "team_name": display_name,
+        "is_bonus": is_bonus,
+        "is_neutral": is_neutral,
+        "auto_approved": auto_approved,
+        "is_late": is_late,
+        "submitted_ts": sub_iso,
+        "actual_ts": act_iso
+    })
     return True
 
 
@@ -1860,6 +1974,17 @@ def execute_team_catch(state, hunter_id, prey_id, is_late=False, submitted_ts=No
             "id": str(uuid.uuid4()), "type": "catch", "hunter": hunter_id, "prey": prey_id,
             "hunter_name": hunter_name, "prey_name": prey_name,
             "timestamp": sub_iso, "actual_timestamp": act_iso, "desc": desc, "is_late": is_late
+        })
+
+        write_debug_log("game_actions", {
+            "action": "team_catch",
+            "hunter": hunter_id,
+            "prey": prey_id,
+            "hunter_name": hunter_name,
+            "prey_name": prey_name,
+            "is_late": is_late,
+            "submitted_ts": sub_iso,
+            "actual_ts": act_iso
         })
         return True
     return False
@@ -2378,6 +2503,9 @@ def admin_settings(admin_slug):
         config["auto_approve_stops"] = bool(data.get("auto_approve_stops", config.get("auto_approve_stops", False)))
         config["stop_radius_meters"] = float(data.get("stop_radius_meters", config.get("stop_radius_meters", 100)))
         config["enable_geofences"] = bool(data.get("enable_geofences", config.get("enable_geofences", False)))
+        config["telegram_enabled"] = bool(data.get("telegram_enabled", False))
+        config["telegram_bot_token"] = str(data.get("telegram_bot_token", "")).strip()
+        config["telegram_chat_ids"] = str(data.get("telegram_chat_ids", "")).strip()
 
         if old_start != config["start_time"] or old_end != config["end_time"] or old_swap != config["enable_mid_game_swap"]:
             state["roles_swapped"] = False
@@ -3678,7 +3806,7 @@ def traccar_webhook():
         "form": request.form.to_dict(),
         "json": payload
     }
-    write_traccar_api_log(log_data)
+    write_debug_log("traccar_api", log_data)
 
     identifier = (
         request.args.get('id')
@@ -4149,14 +4277,26 @@ def traccar_debug_log_settings(admin_slug):
     if not is_valid_admin_slug(admin_slug):
         return jsonify({'success': False, 'error': 'Zugriff verweigert'}), 403
     
-    global TRACCAR_LOG_ENABLED
+    global LOG_SETTINGS
     if request.method == 'POST':
         data = request.get_json(silent=True) or {}
-        TRACCAR_LOG_ENABLED = bool(data.get('enabled', False))
+        new_settings = data.get('settings')
+        if isinstance(new_settings, dict):
+            for k in LOG_SETTINGS:
+                if k in new_settings:
+                    LOG_SETTINGS[k] = bool(new_settings[k])
+        elif 'category' in data and 'enabled' in data:
+            cat = data['category']
+            if cat in LOG_SETTINGS:
+                LOG_SETTINGS[cat] = bool(data['enabled'])
+        else:
+            for k in LOG_SETTINGS:
+                if k in data:
+                    LOG_SETTINGS[k] = bool(data[k])
     
     return jsonify({
         'success': True,
-        'enabled': TRACCAR_LOG_ENABLED,
+        'settings': LOG_SETTINGS,
         'file_exists': os.path.exists(TRACCAR_LOG_FILE)
     })
 
@@ -4247,7 +4387,8 @@ def traccar_debug_status(admin_slug):
         "temperatures": [],
         "fans": [],
         "net_io": {"sys_sent_mb": 0.0, "sys_recv_mb": 0.0, "app_sent_mb": 0.0, "app_recv_mb": 0.0},
-        "top_processes": []
+        "top_processes_ram": [],
+        "top_processes_cpu": []
     }
 
     try:
@@ -4321,7 +4462,7 @@ def traccar_debug_status(admin_slug):
     except Exception:
         pass
 
-    # Top 10 Prozesse nach RAM/CPU
+    # Top 10 Prozesse nach RAM und CPU
     try:
         procs = []
         for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
@@ -4332,8 +4473,8 @@ def traccar_debug_status(admin_slug):
                 procs.append(pinfo)
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
-        procs.sort(key=lambda x: x['memory_percent'], reverse=True)
-        sys_info["top_processes"] = procs[:10]
+        sys_info["top_processes_ram"] = sorted(procs, key=lambda x: x['memory_percent'], reverse=True)[:10]
+        sys_info["top_processes_cpu"] = sorted(procs, key=lambda x: x['cpu_percent'], reverse=True)[:10]
     except Exception:
         pass
 
@@ -4478,5 +4619,6 @@ if __name__ == '__main__':
     print(f"🛰️ Traccar-Debug: http://127.0.0.1:5000/traccar_debug-{ADMIN_SLUG}")
     threading.Thread(target=traccar_background_worker, daemon=True).start()
     threading.Thread(target=game_rules_background_worker, daemon=True).start()
+    threading.Thread(target=server_status_logger_worker, daemon=True).start()
 
     app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)

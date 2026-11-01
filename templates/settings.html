@@ -254,6 +254,25 @@
             </div>
         </div>
 
+        <h3>Telegram-Benachrichtigungen</h3>
+        <p class="help-text" style="margin-bottom: 15px;">Konfiguriere hier die Benachrichtigungen per Telegram-Bot für Spielanfragen und Ereignisse.</p>
+        <div class="form-group" style="background: #eef8f8; padding: 18px; border-left: 4px solid #049EAB; margin-bottom: 20px;">
+            <label class="checkbox-label" style="margin-bottom: 15px;">
+                <input type="checkbox" id="telegram_enabled" {% if config.get('telegram_enabled', False) %}checked{% endif %}>
+                <b>Telegram-Benachrichtigungen global aktivieren</b>
+            </label>
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label for="telegram_bot_token" style="font-weight: 500;">Telegram Bot-ID / Token:</label>
+                <input type="text" id="telegram_bot_token" value="{{ config.get('telegram_bot_token', '') }}" placeholder="z. B. 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ">
+                <div class="help-text">Das API-Token deines Telegram-Bots (von @BotFather).</div>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="telegram_chat_ids" style="font-weight: 500;">Telegram Chat-IDs (z. B. kommagetrennt):</label>
+                <input type="text" id="telegram_chat_ids" value="{{ config.get('telegram_chat_ids', '') }}" placeholder="z. B. 123456789, -987654321">
+                <div class="help-text">Eine oder mehrere Chat-IDs, getrennt durch Komma. Nachrichten werden iterativ an alle hinterlegten IDs versendet.</div>
+            </div>
+        </div>
+
         <div class="btn-container">
             <a href="/adminconsole-{{ admin_url }}" class="btn btn-back">Abbrechen</a>
             <button class="btn btn-save" onclick="saveSettings()">Einstellungen Speichern</button>
@@ -348,6 +367,10 @@
             const stopRadiusMeters = parseFloat(document.getElementById('stop_radius_meters').value) || 100;
             const enableGeofences = document.getElementById('enable_geofences').checked;
 
+            const telegramEnabled = document.getElementById('telegram_enabled').checked;
+            const telegramBotToken = document.getElementById('telegram_bot_token').value.trim();
+            const telegramChatIds = document.getElementById('telegram_chat_ids').value.trim();
+
             const teamRows = document.querySelectorAll('.team-row');
             const teamsList = [];
 
@@ -377,7 +400,10 @@
                 shuffle_stops_on_swap: shuffleOnSwap,
                 auto_approve_stops: autoApproveStops,
                 stop_radius_meters: stopRadiusMeters,
-                enable_geofences: enableGeofences
+                enable_geofences: enableGeofences,
+                telegram_enabled: telegramEnabled,
+                telegram_bot_token: telegramBotToken,
+                telegram_chat_ids: telegramChatIds
             };
 
             fetch('/adminconsole-{{ admin_url }}/settings', {

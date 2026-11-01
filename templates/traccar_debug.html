@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Traccar Diagnose & Systemstatus</title>
+    <!-- Chart.js zur Darstellung der CPU- und RAM-Verlaufsgraphen -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --bg: #0f172a;
@@ -56,6 +58,7 @@
         .btn-secondary { background: var(--border); }
         .btn-green { background: var(--green); color: #052e16; }
         .btn-red { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid var(--red); }
+        .btn-orange { background: #ea580c; color: #fff; }
 
         .grid {
             display: grid;
@@ -105,6 +108,30 @@
         code { background: rgba(0,0,0,0.35); padding: 2px 6px; border-radius: 4px; font-size: 0.82rem; }
         .empty { color: var(--muted); font-style: italic; padding: 12px 0; }
         details summary { cursor: pointer; color: var(--blue); font-weight: 600; }
+
+        .chart-container {
+            margin-top: 16px;
+            border-top: 1px solid var(--border);
+            padding-top: 14px;
+        }
+        .chart-box {
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            padding: 8px 10px;
+            margin-bottom: 12px;
+            height: 80px;
+            position: relative;
+        }
+        .chart-title {
+            font-size: 0.78rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            font-weight: 700;
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
     </style>
 </head>
 <body>
@@ -170,7 +197,7 @@
                 <span>H2-Datenbank (lokal)</span>
                 <span id="st-db" class="badge badge-warn">Prüfe...</span>
             </div>
-            <button id="btn-restart-services" class="btn btn-orange">🔄 Flask & Traccar neustarten</button>
+            <button id="btn-restart-services" class="btn btn-orange" style="width: 100%; justify-content: center; margin-top: 14px;">🔄 Flask & Traccar neustarten</button>
         </div>
 
         <!-- Allgemeiner System- & Spielstatus -->
@@ -225,9 +252,22 @@
                 <span>Netzwerk / WLAN</span>
                 <span id="st-wlan" class="badge badge-warn">Prüfe...</span>
             </div>
+
+            <!-- Verlaufsgraphen für CPU und RAM -->
+            <div class="chart-container">
+                <div class="chart-title"><span>CPU Verlauf</span><span id="chart-cpu-val">- %</span></div>
+                <div class="chart-box">
+                    <canvas id="cpuChart"></canvas>
+                </div>
+                
+                <div class="chart-title" style="margin-top: 8px;"><span>RAM Verlauf</span><span id="chart-ram-val">- %</span></div>
+                <div class="chart-box">
+                    <canvas id="ramChart"></canvas>
+                </div>
+            </div>
             
-            <!-- NEU: Ausklappbare Zusatzmetriken -->
-            <div style="margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; display: flex; flex-direction: column; gap: 10px;">
+            <!-- Ausklappbare Zusatzmetriken -->
+            <div style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; display: flex; flex-direction: column; gap: 10px;">
                 <details id="det-net">
                     <summary>🌐 Netzwerk-Traffic (Gesamt)</summary>
                     <div id="content-net" style="margin-top: 6px; font-size: 0.85rem; background: rgba(0,0,0,0.35); padding: 8px 10px; border-radius: 4px;">
@@ -243,9 +283,15 @@
                 </details>
 
                 <details id="det-procs">
-                    <summary>⚙️ Top Prozesse (nach RAM)</summary>
-                    <div id="content-procs" style="margin-top: 6px; font-size: 0.82rem; background: rgba(0,0,0,0.35); padding: 8px 10px; border-radius: 4px;">
-                        Lade Prozesse...
+                    <summary>⚙️ Top Prozesse</summary>
+                    <div style="margin-top: 6px; font-size: 0.82rem; background: rgba(0,0,0,0.35); padding: 8px 10px; border-radius: 4px;">
+                        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                            <button id="btn-proc-ram" type="button" class="btn" style="padding: 3px 10px; font-size: 0.78rem; background: var(--blue);" onclick="setProcessSort('ram')">Nach RAM</button>
+                            <button id="btn-proc-cpu" type="button" class="btn btn-secondary" style="padding: 3px 10px; font-size: 0.78rem; background: var(--border);" onclick="setProcessSort('cpu')">Nach CPU</button>
+                        </div>
+                        <div id="content-procs">
+                            Lade Prozesse...
+                        </div>
                     </div>
                 </details>
             </div>
@@ -255,15 +301,44 @@
         <div class="card">
             <h2>Logging & Diagnose-Export</h2>
             <div class="status-row">
-                <span>Traccar API in log.json schreiben</span>
-                <label style="position: relative; display: inline-block; width: 48px; height: 24px; cursor: pointer;">
-                    <input type="checkbox" id="log-toggle" onchange="toggleLogging()" style="opacity: 0; width: 0; height: 0;">
-                    <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .2s; border-radius: 24px;" id="log-slider"></span>
-                    <span style="position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%;" id="log-circle"></span>
+                <span>Traccar API (traccar_api)</span>
+                <label style="position: relative; display: inline-block; width: 44px; height: 22px; cursor: pointer;">
+                    <input type="checkbox" id="log-toggle-traccar_api" onchange="toggleLogging('traccar_api')" style="opacity: 0; width: 0; height: 0;">
+                    <span id="log-slider-traccar_api" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .2s; border-radius: 22px;"></span>
+                    <span id="log-circle-traccar_api" style="position: absolute; content: ''; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%;"></span>
                 </label>
             </div>
-            <div class="status-row" style="margin-top: 10px; border-bottom: none;">
-                <span id="log-status-text" style="font-size: 0.85rem; color: var(--muted);">Status: Deaktiviert (Standard)</span>
+            <div class="status-row">
+                <span>GPS Hintergrund-Worker (gps_background_worker)</span>
+                <label style="position: relative; display: inline-block; width: 44px; height: 22px; cursor: pointer;">
+                    <input type="checkbox" id="log-toggle-gps_background_worker" onchange="toggleLogging('gps_background_worker')" style="opacity: 0; width: 0; height: 0;">
+                    <span id="log-slider-gps_background_worker" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .2s; border-radius: 22px;"></span>
+                    <span id="log-circle-gps_background_worker" style="position: absolute; content: ''; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%;"></span>
+                </label>
+            </div>
+            <div class="status-row">
+                <span>HTTP Requests (requests)</span>
+                <label style="position: relative; display: inline-block; width: 44px; height: 22px; cursor: pointer;">
+                    <input type="checkbox" id="log-toggle-requests" onchange="toggleLogging('requests')" style="opacity: 0; width: 0; height: 0;">
+                    <span id="log-slider-requests" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .2s; border-radius: 22px;"></span>
+                    <span id="log-circle-requests" style="position: absolute; content: ''; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%;"></span>
+                </label>
+            </div>
+            <div class="status-row">
+                <span>Spielaktionen (game_actions)</span>
+                <label style="position: relative; display: inline-block; width: 44px; height: 22px; cursor: pointer;">
+                    <input type="checkbox" id="log-toggle-game_actions" onchange="toggleLogging('game_actions')" style="opacity: 0; width: 0; height: 0;">
+                    <span id="log-slider-game_actions" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .2s; border-radius: 22px;"></span>
+                    <span id="log-circle-game_actions" style="position: absolute; content: ''; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%;"></span>
+                </label>
+            </div>
+            <div class="status-row">
+                <span>Server-Status Metriken (server_status)</span>
+                <label style="position: relative; display: inline-block; width: 44px; height: 22px; cursor: pointer;">
+                    <input type="checkbox" id="log-toggle-server_status" onchange="toggleLogging('server_status')" style="opacity: 0; width: 0; height: 0;">
+                    <span id="log-slider-server_status" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .2s; border-radius: 22px;"></span>
+                    <span id="log-circle-server_status" style="position: absolute; content: ''; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%;"></span>
+                </label>
             </div>
             <div style="margin-top: 14px;">
                 <a id="btn-download-log" class="btn btn-secondary" style="width: 100%; justify-content: center;" href="/api/traccar_debug/{{ admin_url }}/download_log">
@@ -295,8 +370,119 @@
 <script>
     const ADMIN_SLUG = "{{ admin_url }}";
 
+    // --- CHART.JS SETUP & HISTORIE ---
+    const maxDataPoints = 30;
+    const baseChartConfig = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 0 },
+        scales: {
+            x: { display: false },
+            y: {
+                min: 0,
+                max: 100,
+                grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                ticks: { display: false }
+            }
+        },
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: false }
+        }
+    };
+
+    const cpuChart = new Chart(document.getElementById('cpuChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: Array(maxDataPoints).fill(''),
+            datasets: [{
+                data: Array(maxDataPoints).fill(0),
+                borderColor: '#38bdf8',
+                backgroundColor: 'rgba(56, 189, 248, 0.2)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                borderWidth: 1.5
+            }]
+        },
+        options: baseChartConfig
+    });
+
+    const ramChart = new Chart(document.getElementById('ramChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: Array(maxDataPoints).fill(''),
+            datasets: [{
+                data: Array(maxDataPoints).fill(0),
+                borderColor: '#22c55e',
+                backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                borderWidth: 1.5
+            }]
+        },
+        options: baseChartConfig
+    });
+
+    function updateLiveCharts(cpu, ram) {
+        document.getElementById('chart-cpu-val').textContent = `${cpu}%`;
+        document.getElementById('chart-ram-val').textContent = `${ram}%`;
+
+        cpuChart.data.datasets[0].data.shift();
+        cpuChart.data.datasets[0].data.push(cpu);
+        cpuChart.update();
+
+        ramChart.data.datasets[0].data.shift();
+        ramChart.data.datasets[0].data.push(ram);
+        ramChart.update();
+    }
+
+    let currentProcessSort = 'ram';
+    let lastSysInfo = null;
+
+    function setProcessSort(sortBy) {
+        currentProcessSort = sortBy;
+        const btnRam = document.getElementById('btn-proc-ram');
+        const btnCpu = document.getElementById('btn-proc-cpu');
+        if (btnRam && btnCpu) {
+            if (sortBy === 'ram') {
+                btnRam.style.background = 'var(--blue)';
+                btnRam.classList.remove('btn-secondary');
+                btnCpu.style.background = 'var(--border)';
+                btnCpu.classList.add('btn-secondary');
+            } else {
+                btnRam.style.background = 'var(--border)';
+                btnRam.classList.add('btn-secondary');
+                btnCpu.style.background = 'var(--blue)';
+                btnCpu.classList.remove('btn-secondary');
+            }
+        }
+        if (lastSysInfo) {
+            renderTopProcesses(lastSysInfo);
+        }
+    }
+
+    function renderTopProcesses(sysInfo) {
+        const procContainer = document.getElementById('content-procs');
+        if (!procContainer || !sysInfo) return;
+        const procs = (currentProcessSort === 'cpu')
+            ? (sysInfo.top_processes_cpu || [])
+            : (sysInfo.top_processes_ram || []);
+
+        if (procs.length > 0) {
+            let pHtml = '<table style="margin-top:0;"><thead><tr><th>PID</th><th>Name</th><th>CPU</th><th>RAM</th></tr></thead><tbody>';
+            procs.forEach(p => {
+                pHtml += `<tr><td>${p.pid}</td><td>${p.name}</td><td>${p.cpu_percent}%</td><td>${p.memory_percent}%</td></tr>`;
+            });
+            pHtml += '</tbody></table>';
+            procContainer.innerHTML = pHtml;
+        } else {
+            procContainer.innerHTML = '<span style="color: var(--muted);">Keine Prozessdaten verfügbar</span>';
+        }
+    }
+
     async function loadStatus() {
-        // Zustand offener Details-Boxen vor dem Aktualisieren zwischenspeichern
         const openDetails = {};
         document.querySelectorAll('details').forEach(el => {
             if (el.id) openDetails[el.id] = el.open;
@@ -429,6 +615,9 @@
                     wlanBadge.style.color = "var(--muted)";
                 }
 
+                // Graphen füttern
+                updateLiveCharts(data.sys_info.cpu_percent, data.sys_info.ram_percent);
+
                 // Netzwerk Traffic befüllen
                 document.getElementById('content-net').innerHTML = `
                     <div style="margin-bottom: 8px;">
@@ -459,17 +648,8 @@
                 }
 
                 // Prozesse befüllen
-                const procContainer = document.getElementById('content-procs');
-                if (data.sys_info.top_processes.length > 0) {
-                    let pHtml = '<table style="margin-top:0;"><thead><tr><th>PID</th><th>Name</th><th>CPU</th><th>RAM</th></tr></thead><tbody>';
-                    data.sys_info.top_processes.forEach(p => {
-                        pHtml += `<tr><td>${p.pid}</td><td>${p.name}</td><td>${p.cpu_percent}%</td><td>${p.memory_percent}%</td></tr>`;
-                    });
-                    pHtml += '</tbody></table>';
-                    procContainer.innerHTML = pHtml;
-                } else {
-                    procContainer.innerHTML = '<span style="color: var(--muted);">Keine Prozessdaten verfügbar</span>';
-                }
+                lastSysInfo = data.sys_info;
+                renderTopProcesses(data.sys_info);
             }
 
             renderDevices(data.devices || []);
@@ -477,7 +657,6 @@
         } catch (err) {
             console.error("Fehler beim Status-Abruf:", err);
         } finally {
-            // Zustand der offenen Details-Boxen nach dem Rendern wiederherstellen
             for (const [id, isOpen] of Object.entries(openDetails)) {
                 const el = document.getElementById(id);
                 if (el) el.open = isOpen;
@@ -506,7 +685,6 @@
     }
 
     function renderWebhooks(logs) {
-        // Offene Payload-Details vor dem Neuzeichnen merken
         const openPayloads = new Set();
         document.querySelectorAll('#webhooks-container details').forEach((el, index) => {
             if (el.open) openPayloads.add(index);
@@ -567,12 +745,12 @@
     }
 
     async function hardResetTraccar() {
-        if (!confirm("Möchtest du den Traccar-Docker-Container und dessen interne Datenbank wirklich komplett zurücksetzen und mit den .env-Zugangsdaten neu initialisieren?")) {
+        if (!confirm("Möchtest du den Traccar-Server und dessen interne H2-Datenbank wirklich komplett zurücksetzen und mit den .env-Zugangsdaten neu initialisieren?")) {
             return;
         }
         const btn = document.getElementById('btn-reset');
         btn.disabled = true;
-        btn.textContent = "⏳ Container & DB werden neu aufgebaut (ca. 10–15s)...";
+        btn.textContent = "⏳ Server & DB werden neu aufgebaut (ca. 10–15s)...";
         try {
             const res = await fetch(`/api/traccar_debug/${ADMIN_SLUG}/hard_reset`, { method: 'POST' });
             const data = await res.json();
@@ -580,7 +758,7 @@
             if (data.success) {
                 alert("✅ Traccar wurde frisch zurückgesetzt, mit den .env-Daten eingerichtet und synchronisiert!");
             } else {
-                alert("⚠️ Hinweis: " + (data.error || "Container startet noch."));
+                alert("⚠️ Hinweis: " + (data.error || "Server startet noch."));
             }
         } catch (e) {
             alert("Fehler beim Reset: " + e);
@@ -590,76 +768,88 @@
         }
     }
 
+    const LOG_CATEGORIES = ['traccar_api', 'gps_background_worker', 'requests', 'game_actions', 'server_status'];
+
+    function updateSwitchUI(category, enabled) {
+        const slider = document.getElementById(`log-slider-${category}`);
+        const circle = document.getElementById(`log-circle-${category}`);
+        if (!slider || !circle) return;
+
+        if (enabled) {
+            slider.style.backgroundColor = 'var(--green)';
+            circle.style.transform = 'translateX(22px)';
+        } else {
+            slider.style.backgroundColor = '#334155';
+            circle.style.transform = 'translateX(0)';
+        }
+    }
+
     async function fetchLogStatus() {
         try {
             const res = await fetch(`/api/traccar_debug/${ADMIN_SLUG}/log_settings`);
             const data = await res.json();
-            if (data.success) {
-                const checkbox = document.getElementById('log-toggle');
-                checkbox.checked = data.enabled;
-                updateSwitchUI(data.enabled);
+            if (data.success && data.settings) {
+                LOG_CATEGORIES.forEach(cat => {
+                    const enabled = Boolean(data.settings[cat]);
+                    const checkbox = document.getElementById(`log-toggle-${cat}`);
+                    if (checkbox) checkbox.checked = enabled;
+                    updateSwitchUI(cat, enabled);
+                });
             }
         } catch (e) {
             console.error("Fehler beim Laden des Log-Status", e);
         }
     }
 
-    async function toggleLogging() {
-        const checkbox = document.getElementById('log-toggle');
-        const enabled = checkbox.checked;
-        updateSwitchUI(enabled);
+    async function toggleLogging(category) {
+        if (category) {
+            const checkbox = document.getElementById(`log-toggle-${category}`);
+            const enabled = checkbox ? checkbox.checked : false;
+            updateSwitchUI(category, enabled);
+        }
+
+        const currentSettings = {};
+        LOG_CATEGORIES.forEach(cat => {
+            const cb = document.getElementById(`log-toggle-${cat}`);
+            currentSettings[cat] = cb ? cb.checked : false;
+            if (!category) updateSwitchUI(cat, currentSettings[cat]);
+        });
 
         try {
-            await fetch(`/api/traccar_debug/${ADMIN_SLUG}/log_settings`, {
+            const res = await fetch(`/api/traccar_debug/${ADMIN_SLUG}/log_settings`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application' + '/json' },
-                body: JSON.stringify({ enabled: enabled })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ settings: currentSettings, category: category, enabled: category ? currentSettings[category] : undefined })
             });
+            const data = await res.json();
+            if (data.success && data.settings) {
+                LOG_CATEGORIES.forEach(cat => {
+                    const isSet = Boolean(data.settings[cat]);
+                    const cb = document.getElementById(`log-toggle-${cat}`);
+                    if (cb) cb.checked = isSet;
+                    updateSwitchUI(cat, isSet);
+                });
+            }
         } catch (e) {
-            alert("Fehler beim Speichern der Log-Einstellung!");
+            alert("Fehler beim Speichern der Log-Einstellung: " + e);
         }
     }
 
-    function updateSwitchUI(enabled) {
-        const slider = document.getElementById('log-slider');
-        const circle = document.getElementById('log-circle');
-        const statusText = document.getElementById('log-status-text');
+    document.getElementById('btn-restart-services').addEventListener('click', async () => {
+        if (!confirm("Möchten Sie die Dienste wirklich neustarten?")) return;
 
-        if (enabled) {
-            slider.style.backgroundColor = 'var(--green)';
-            circle.style.transform = 'translateX(24px)';
-            statusText.textContent = "Status: Aktiv (Schreibt API-Anfragen in log.json)";
-            statusText.style.color = 'var(--green)';
-        } else {
-            slider.style.backgroundColor = '#334155';
-            circle.style.transform = 'translateX(0)';
-            statusText.textContent = "Status: Deaktiviert (Standard)";
-            statusText.style.color = 'var(--muted)';
+        try {
+            await fetch('/adminconsole-{{ admin_url }}/api/restart_flask', { method: 'POST' });
+            alert("Neustartbefehl gesendet. Seite wird in 5 Sekunden neu geladen...");
+            setTimeout(() => { location.reload(); }, 5000);
+        } catch (err) {
+            alert("Fehler beim Neustarten.");
         }
-    }
-
-
+    });
 
     fetchLogStatus();
     loadStatus();
     setInterval(loadStatus, 5000);
 </script>
-
-<script>
-document.getElementById('btn-restart-services').addEventListener('click', async () => {
-    if (!confirm("Möchten Sie die Dienste wirklich neustarten?")) return;
-
-    try {
-        // Flask neustarten
-        await fetch('/adminconsole-{{ admin_url }}/api/restart_flask', { method: 'POST' });
-
-        alert("Neustartbefehl gesendet. Seite wird in 5 Sekunden neu geladen...");
-        setTimeout(() => { location.reload(); }, 5000);
-    } catch (err) {
-        alert("Fehler beim Neustarten.");
-    }
-});
-</script>
-
 </body>
 </html>

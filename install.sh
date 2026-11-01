@@ -11,18 +11,47 @@ TRACCAR_DIR="$PROJECT_DIR/traccar_runtime"
 TRACCAR_VERSION="5.12"
 echo "Aktuelles Projektverzeichnis: $PROJECT_DIR"
 
-# 2. System aktualisieren & Basis-Pakete installieren (Python, Venv, Java, Unzip)
+# 2. Interaktive Abfragen für Zugangsdaten & .env Generierung
+echo ""
+echo "=== Konfiguration der Zugangsdaten (.env) ==="
+ENV_FILE="$PROJECT_DIR/.env"
+
+DEFAULT_ADMIN="admin123"
+DEFAULT_TRACCAR_USER="admin"
+DEFAULT_TRACCAR_PASS="admin"
+
+if [ -f "$ENV_FILE" ]; then
+    EXISTING_ADMIN=$(grep -E '^ADMIN_PASSWORD=' "$ENV_FILE" | head -n1 | cut -d '=' -f2- || true)
+    EXISTING_TUSER=$(grep -E '^TRACCAR_API_USER=' "$ENV_FILE" | head -n1 | cut -d '=' -f2- || true)
+    EXISTING_TPASS=$(grep -E '^TRACCAR_API_PASSWORD=' "$ENV_FILE" | head -n1 | cut -d '=' -f2- || true)
+    [ -n "$EXISTING_ADMIN" ] && DEFAULT_ADMIN="$EXISTING_ADMIN"
+    [ -n "$EXISTING_TUSER" ] && DEFAULT_TRACCAR_USER="$EXISTING_TUSER"
+    [ -n "$EXISTING_TPASS" ] && DEFAULT_TRACCAR_PASS="$EXISTING_TPASS"
+fi
+
+read -p "Admin-Passwort für die Konsole (ADMIN_PASSWORD) [$DEFAULT_ADMIN]: " INPUT_ADMIN_PW
+ADMIN_PASSWORD="${INPUT_ADMIN_PW:-$DEFAULT_ADMIN}"
+
+read -p "Traccar API-Benutzername (TRACCAR_API_USER) [$DEFAULT_TRACCAR_USER]: " INPUT_TRACCAR_USER
+TRACCAR_API_USER="${INPUT_TRACCAR_USER:-$DEFAULT_TRACCAR_USER}"
+
+read -p "Traccar API-Passwort (TRACCAR_API_PASSWORD) [$DEFAULT_TRACCAR_PASS]: " INPUT_TRACCAR_PASS
+TRACCAR_API_PASSWORD="${INPUT_TRACCAR_PASS:-$DEFAULT_TRACCAR_PASS}"
+
+echo "Erstelle .env-Datei..."
+cat <<EOF > "$ENV_FILE"
+ADMIN_PASSWORD=$ADMIN_PASSWORD
+TRACCAR_API_USER=$TRACCAR_API_USER
+TRACCAR_API_PASSWORD=$TRACCAR_API_PASSWORD
+EOF
+chmod 600 "$ENV_FILE"
+echo "✅ .env-Datei erfolgreich erstellt."
+
+# 3. System aktualisieren & Basis-Pakete installieren (Python, Venv, Java, Unzip)
+echo ""
 echo "Aktualisiere Paketlisten und installiere Abhängigkeiten (inkl. Java)..."
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y python3 python3-pip python3-venv git curl unzip default-jre-headless psmisc
-
-# 3. Alte Docker-Container stoppen, falls vorhanden (verhindert Port-Blockaden auf 8082/5055)
-if command -v docker >/dev/null 2>&1; then
-    if sudo docker ps -a --format '{{.Names}}' | grep -q "^traccar-server$"; then
-        echo "Stoppe und entferne alten Docker-Container 'traccar-server'..."
-        sudo docker rm -f traccar-server || true
-    fi
-fi
 
 # 4. Portables Traccar (traccar-other) lokal in $PROJECT_DIR/traccar_runtime herunterladen & entpacken
 if [ ! -f "$TRACCAR_DIR/tracker-server.jar" ]; then
@@ -82,6 +111,36 @@ EOF"
 sudo systemctl daemon-reload
 sudo systemctl enable catchme.service
 sudo systemctl restart catchme.service
+
+# 7. Tailscale & Funneling
+echo ""
+echo "=== Tailscale & Funneling ==="
+read -p "Soll Tailscale installiert und eingerichtet werden? (j/n): " INSTALL_TAILSCALE
+if [[ "$INSTALL_TAILSCALE" =~ ^[jJyY] ]]; then
+    if ! command -v tailscale >/dev/null 2>&1; then
+        echo "Installiere Tailscale..."
+        curl -fsSL https://tailscale.com/install.sh | sh
+    else
+        echo "Tailscale ist bereits installiert."
+    fi
+
+    echo "Tailscale Authentifizierung:"
+    read -p "Bitte Tailscale Auth-Key eingeben (Enter drücken für interaktiven Web-Login via URL): " TS_AUTHKEY
+    if [ -n "$TS_AUTHKEY" ]; then
+        sudo tailscale up --authkey="$TS_AUTHKEY"
+    else
+        sudo tailscale up
+    fi
+
+    echo "Richte Tailscale Funnel ein..."
+    # Flask (lokal 5000 -> öffentlich 443)
+    sudo tailscale funnel --bg --https=443 --yes 5000 || echo "⚠️ Hinweis: Tailscale Funnel für Port 443 konnte nicht aktiviert werden. Bitte Funnel-Berechtigungen im Tailscale-Admin prüfen."
+    # Traccar (lokal 8082 -> öffentlich 10000)
+    sudo tailscale funnel --bg --https=10000 --yes 8082 || echo "⚠️ Hinweis: Tailscale Funnel für Port 10000 konnte nicht aktiviert werden. Bitte Funnel-Berechtigungen im Tailscale-Admin prüfen."
+
+    echo "Aktueller Tailscale Funnel Status:"
+    sudo tailscale funnel status || true
+fi
 
 echo "=== Einrichtung erfolgreich abgeschlossen! ==="
 echo "Alle Dateien liegen isoliert in: $PROJECT_DIR"
