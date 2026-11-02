@@ -11,3 +11,4 @@ game.db
 /stops_data/stops.txt
 /log.txt
 /log.json
+/skills/system/run-workflow/SKILL.md

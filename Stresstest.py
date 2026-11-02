@@ -271,40 +271,56 @@ class StressDashboard(tk.Tk):
         running = False
         self.destroy()
         sys.exit(0)
-        
+
     def show_summary(self):
-        """Öffnet ein Fenster mit der Abschlusstabelle und dem CSV Export Button."""
+        """Öffnet ein Fenster mit der Abschlusstabelle, Flaschenhals-Analyse und CSV Button."""
         win = tk.Toplevel(self)
         win.title("Stresstest Auswertung & Flaschenhals-Analyse")
-        win.geometry("850x450")
-        
-        header = ttk.Label(win, text="Endpunkt Analyse (Sortiert nach längster durchschnittlicher Dauer)", font=("Helvetica", 12, "bold"))
-        header.pack(pady=10)
-        
+        win.geometry("1000x550")  # Breiter gegen Überlappung
+
+        # Bereite Daten für die Tabelle vor und sortiere nach Durchschnittszeit
+        ep_data = []
+        for ep, d in metrics["endpoints"].items():
+            avg = d["total_time"] / d["count"] if d["count"] > 0 else 0
+            ep_data.append((ep, d["count"], d["errors"], avg, d.get("max_time", 0.0)))
+        ep_data.sort(key=lambda x: x[3], reverse=True)
+
+        # Flaschenhals-Metriken berechnen
+        max_cpu = max(hist_cpu) if hist_cpu else 0
+        max_ram = max(hist_ram) if hist_ram else 0
+        max_dl = max(hist_net_dl) if hist_net_dl else 0
+        worst_ep = ep_data[0][0] if ep_data else "Keine Daten"
+        worst_lat = ep_data[0][3] if ep_data else 0
+
+        summary_text = (
+            f"🔥 FLASCHENHALS-ANALYSE:\n"
+            f"• CPU-Spitze: {max_cpu:.1f}% | RAM-Spitze: {max_ram:.1f}%\n"
+            f"• Netzwerk-Spitze: {max_dl:.1f} MB (Download)\n"
+            f"• Stärkster Rückstau: '{worst_ep}' (Ø Latenz: {worst_lat:.2f}s)\n"
+            f"• HTTP-Fehler: {metrics['total_errors']} (Hohe Fehler deuten meist auf blockierte SQLite-Datenbank hin)"
+        )
+
+        lbl_bottleneck = ttk.Label(win, text=summary_text, font=("Helvetica", 11, "bold"), foreground="#b71c1c",
+                                   justify=tk.LEFT)
+        lbl_bottleneck.pack(pady=10, padx=20, anchor="w")
+
         cols = ('Endpoint', 'Aufrufe', 'Fehler', 'Ø Latenz (s)', 'Max Latenz (s)')
         tree = ttk.Treeview(win, columns=cols, show='headings')
         for col in cols:
             tree.heading(col, text=col)
-            
-        tree.column('Endpoint', width=200)
+
+        # Breitere Spalte für den Endpunkt-Namen
+        tree.column('Endpoint', width=300)
         tree.column('Aufrufe', width=100, anchor=tk.E)
         tree.column('Fehler', width=100, anchor=tk.E)
         tree.column('Ø Latenz (s)', width=100, anchor=tk.E)
         tree.column('Max Latenz (s)', width=100, anchor=tk.E)
 
-        # Bereite Daten für die Tabelle vor und sortiere nach Durchschnittszeit (Flaschenhälse zuerst)
-        ep_data = []
-        for ep, d in metrics["endpoints"].items():
-            avg = d["total_time"] / d["count"] if d["count"] > 0 else 0
-            ep_data.append((ep, d["count"], d["errors"], avg, d.get("max_time", 0.0)))
-            
-        ep_data.sort(key=lambda x: x[3], reverse=True) # Höchste Ø Zeit zuerst
-        
         for item in ep_data:
             tree.insert("", "end", values=(item[0], item[1], item[2], f"{item[3]:.3f}", f"{item[4]:.3f}"))
-            
+
         tree.pack(fill=tk.BOTH, expand=True, padx=20, pady=5)
-        
+
         btn_export = ttk.Button(win, text="Log & Report herunterladen (CSV)", command=self.export_csv)
         btn_export.pack(pady=15)
 

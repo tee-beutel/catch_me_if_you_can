@@ -138,7 +138,8 @@
 <div class="container">
     <header>
         <h1>🛰️ Traccar Diagnose & Systemstatus</h1>
-        <div style="display: flex; gap: 10px;">
+        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+            <span id="st-last-update" style="color: var(--muted); font-size: 0.9rem; font-family: monospace;">Letztes Update: -</span>
             <button class="btn btn-secondary" onclick="loadStatus()">🔄 Status aktualisieren</button>
             <a class="btn btn-secondary" href="/adminconsole-{{ admin_url }}">⬅️ Zurück zum Admin-Panel</a>
         </div>
@@ -499,6 +500,21 @@
         }
     }
 
+    let lastUpdateTime = null;
+
+    function updateCountup() {
+        const el = document.getElementById('st-last-update');
+        if (!el) return;
+        if (lastUpdateTime === null) {
+            el.textContent = "Letztes Update: -";
+            return;
+        }
+        const diffSeconds = Math.max(0, Math.floor((Date.now() - lastUpdateTime) / 1000));
+        const m = Math.floor(diffSeconds / 60);
+        const s = diffSeconds % 60;
+        el.textContent = `Letztes Update: ${m}m ${s}s`;
+    }
+
     async function loadStatus() {
         const openDetails = {};
         document.querySelectorAll('details').forEach(el => {
@@ -674,6 +690,8 @@
 
             renderDevices(data.devices || []);
             renderWebhooks(data.recent_webhooks || []);
+            lastUpdateTime = Date.now();
+            updateCountup();
         } catch (err) {
             console.error("Fehler beim Status-Abruf:", err);
         } finally {
@@ -908,6 +926,7 @@
     fetchLogStatus();
     loadStatus();
     setInterval(loadStatus, 5000);
+    setInterval(updateCountup, 1000);
 </script>
 </body>
 </html>
