@@ -198,6 +198,19 @@
                 <span id="st-db" class="badge badge-warn">Prüfe...</span>
             </div>
             <button id="btn-restart-services" class="btn btn-orange" style="width: 100%; justify-content: center; margin-top: 14px;">🔄 Flask & Traccar neustarten</button>
+            
+            <!-- NEU: Update-Button und Konsolen-Fenster -->
+            <button id="btn-run-update" class="btn btn-blue" style="width: 100%; justify-content: center; margin-top: 10px; background-color: var(--blue);" onclick="runUpdateScript()">
+                📥 update.py ausführen
+            </button>
+
+            <div id="update-console-container" style="display: none; margin-top: 14px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 6px; border: 1px solid var(--border);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 0.85rem; color: var(--muted); font-weight: bold;">Konsolenoutput (update.py)</span>
+                    <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 0.75rem;" onclick="document.getElementById('update-console-container').style.display='none'">X</button>
+                </div>
+                <pre id="update-console-output" style="font-size: 0.8rem; color: #10b981; overflow-x: auto; max-height: 300px; white-space: pre-wrap; margin: 0; font-family: monospace;"></pre>
+            </div>
         </div>
 
         <!-- Allgemeiner System- & Spielstatus -->
@@ -228,6 +241,10 @@
         <!-- Hardware & System Metriken -->
         <div class="card">
             <h2>Hardware & System Metriken</h2>
+            <div class="status-row">
+                <span>Hostname (platform.node)</span>
+                <strong id="st-node">-</strong>
+            </div>
             <div class="status-row">
                 <span>Betriebssystem</span>
                 <strong id="st-os">-</strong>
@@ -574,6 +591,9 @@
             
             // --- HARDWARE METRIKEN AKTUALISIEREN ---
             if (data.sys_info) {
+                if (document.getElementById('st-node')) {
+                    document.getElementById('st-node').textContent = data.sys_info.node || "-";
+                }
                 document.getElementById('st-os').textContent = data.sys_info.os;
 
                 const cpuBadge = document.getElementById('st-cpu');
@@ -846,6 +866,44 @@
             alert("Fehler beim Neustarten.");
         }
     });
+
+    async function runUpdateScript() {
+        if (!confirm("Möchtest du update.py jetzt ausführen?")) return;
+
+        const btn = document.getElementById('btn-run-update');
+        const container = document.getElementById('update-console-container');
+        const output = document.getElementById('update-console-output');
+
+        btn.disabled = true;
+        btn.textContent = "⏳ update.py wird ausgeführt...";
+        container.style.display = 'block';
+        output.textContent = "Starte Skript... bitte warten (dies kann einen Moment dauern).\n";
+        output.style.color = 'var(--muted)';
+
+        try {
+            const res = await fetch(`/api/traccar_debug/${ADMIN_SLUG}/run_update`, { method: 'POST' });
+            const data = await res.json();
+
+            if (data.success) {
+                // Bei Erfolg oder fehlerfreiem Skriptablauf den Output anzeigen
+                output.style.color = data.returncode === 0 ? '#10b981' : '#ef4444'; 
+                output.textContent = data.output || "Kein Output generiert.";
+                
+                if (data.returncode !== 0) {
+                    output.textContent += `\n\nBeendet mit Fehlercode: ${data.returncode}`;
+                }
+            } else {
+                output.style.color = '#ef4444';
+                output.textContent = `Fehler: ${data.error}`;
+            }
+        } catch (e) {
+            output.style.color = '#ef4444';
+            output.textContent = `Fehler beim Request: ${e}`;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = "📥 update.py ausführen";
+        }
+    }
 
     fetchLogStatus();
     loadStatus();

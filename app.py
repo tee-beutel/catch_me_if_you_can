@@ -3539,7 +3539,7 @@ def api_stops():
         if team_data.get("role") != "läufer":
             return jsonify({'error': 'Nicht berechtigt'}), 403
 
-        if phase == "inactive":
+        if phase in ["inactive", "roles_assigned", "pre_game"] or phase not in ["game", "post_game"]:
             return jsonify({'error': 'Haltestellen sind noch nicht freigeschaltet'}), 403
 
         points_stop_reached = state["config"].get("points_stop_reached", 2)
@@ -4373,6 +4373,7 @@ def traccar_debug_status(admin_slug):
 
     # --- SYSTEM-METRIKEN (Robust & Erweitert) ---
     sys_info = {
+        "node": "Unbekannt",
         "os": "Unbekannt",
         "cpu_percent": 0.0,
         "cpu_cores": 0,
@@ -4390,6 +4391,11 @@ def traccar_debug_status(admin_slug):
         "top_processes_ram": [],
         "top_processes_cpu": []
     }
+
+    try:
+        sys_info["node"] = platform.node() or "Unbekannt"
+    except Exception:
+        pass
 
     try:
         sys_info["os"] = f"{platform.system()} {platform.release()}"
@@ -4614,11 +4620,40 @@ def api_restart_flask(admin_slug):
     return jsonify({'success': True, 'message': 'Flask startet neu...'})
 
 
+@app.route(f'/api/traccar_debug/<admin_slug>/run_update', methods=['POST'])
+def api_run_update(admin_slug):
+    if not is_valid_admin_slug(admin_slug):
+        return jsonify({'success': False, 'error': 'Verboten'}), 403
+
+    update_script_path = os.path.join(BASE_DIR, 'update.py')
+    
+    if not os.path.exists(update_script_path):
+        return jsonify({'success': False, 'error': f"Die Datei {update_script_path} wurde nicht gefunden."})
+
+    try:
+        # Führt die update.py aus und fängt den Output (stdout + stderr) ab
+        result = subprocess.run(
+            [sys.executable, update_script_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=BASE_DIR,
+            timeout=300 # Maximal 5 Minuten Ausführungszeit
+        )
+        return jsonify({'success': True, 'output': result.stdout, 'returncode': result.returncode})
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': False, 'error': 'Das Skript hat zu lange gebraucht und wurde abgebrochen (Timeout).'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+
+# Hintergrund-Worker auf Modul-Ebene starten (für Gunicorn & Flask-Entwicklungsserver)
+threading.Thread(target=traccar_background_worker, daemon=True).start()
+threading.Thread(target=game_rules_background_worker, daemon=True).start()
+threading.Thread(target=server_status_logger_worker, daemon=True).start()
+
+
 if __name__ == '__main__':
     print(f"🔑 Admin-Konsole: http://127.0.0.1:5000/adminconsole-{ADMIN_SLUG}")
     print(f"🛰️ Traccar-Debug: http://127.0.0.1:5000/traccar_debug-{ADMIN_SLUG}")
-    threading.Thread(target=traccar_background_worker, daemon=True).start()
-    threading.Thread(target=game_rules_background_worker, daemon=True).start()
-    threading.Thread(target=server_status_logger_worker, daemon=True).start()
-
     app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)

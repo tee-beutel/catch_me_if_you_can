@@ -3,3 +3,5 @@ requests
 filelock
 pytz
 python-dotenv
+psutil
+gunicorn

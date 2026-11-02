@@ -212,12 +212,14 @@
 
                 {% if role == 'läufer' %}
                     <!-- LÄUFER KONTROLLEN -->
+                    {% if phase == 'game' or phase == 'post_game' %}
                     <h3>Haltestelle eintragen</h3>
                     <p style="font-size: 0.85em; color:#666; margin-top: 0; margin-bottom: 15px;">Hinweis: Du kannst Haltestellen auch direkt auf der Karte antippen.</p>
-                    <select id="stop-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
+                    <select id="stop-select">
                         <option value="">-- Haltestelle auswählen --</option>
                     </select>
-                    <button class="btn btn-vcd-green" onclick="requestStop()" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Haltestelle melden</button>
+                    <button class="btn btn-vcd-green" onclick="requestStop()">Haltestelle melden</button>
+                    {% endif %}
                     
                     <h3 style="margin-top: 40px; border-bottom-color: #EB6502; color: #EB6502;">Gefangen worden?</h3>
                     <select id="caught-by-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
@@ -527,7 +529,7 @@
         let lastActiveStopNames = new Set();
 
         function renderInactiveStops() {
-            if (!showAllStops || currentPhase === 'inactive' || currentPhase === 'finished' || currentRole !== 'läufer') {
+            if (!showAllStops || (currentPhase !== 'game' && currentPhase !== 'post_game') || currentRole !== 'läufer') {
                 inactiveStopsLayerGroup.clearLayers();
                 inactiveStopMarkers = {};
                 return;
@@ -588,6 +590,7 @@
             }
         }
 
+        {% if role == 'läufer' and (phase == 'game' or phase == 'post_game') %}
         if (currentRole === 'läufer') {
             const allStopsControl = L.Control.extend({
                 options: { position: 'topleft' },
@@ -616,6 +619,7 @@
             });
             map.addControl(new allStopsControl());
         }
+        {% endif %}
 
         function renderGeofences(outer, exclusion) {
             geofenceLayerGroup.clearLayers();
@@ -653,38 +657,32 @@
                 return;
             }
 
-            // Läufer bekommen in der Vorbereitungsphase (inactive) ebenfalls alle Haltestellen angezeigt
-            if (currentRole === 'läufer' && currentPhase !== 'inactive') {
-                fetch('/api/stops?slug=' + teamSlug).then(r => {
-                    if (r.status === 403) {
-                        window.location.reload(); // Sofortiger Neuladevorgang beim Rollenwechsel
-                        return null;
-                    }
-                    return r.json();
-                }).then(data => {
-                    if (!data) return;
-                    const stops = Array.isArray(data) ? data : (data.stops || []);
-                    const bonusStops = new Set(data.bonus_stops || []);
-                    if (data.geofence_outer || data.geofence_exclusion) {
-                        renderGeofences(data.geofence_outer, data.geofence_exclusion);
-                    }
-                    const select = document.getElementById('stop-select');
-                    const currentVal = select ? select.value : "";
-                    
-                    let optsHTML = '<option value="">-- Haltestelle auswählen --</option>';
-                    let bounds = [];
-                    const activeStopNames = new Set();
-                    
-                    stops.forEach(stop => {
-                        activeStopNames.add(stop.name);
-                        const isBonus = bonusStops.has(stop.name);
-                        optsHTML += `<option value="${stop.name}">${stop.name}</option>`;
-                        let btnHTML = "";
-                        if (currentPhase === 'game' || currentPhase === 'post_game') {
-                            btnHTML = `<button class="btn btn-vcd-green" style="padding: 10px; font-size: 12px; margin-top:0;" onclick="requestStopFromMap('${encodeURIComponent(stop.name)}')">Hier eintragen</button>`;
-                        } else {
-                            btnHTML = `<div style="font-size:11px; color:#888;">Eintragen noch nicht möglich</div>`;
+            if (currentRole === 'läufer') {
+                if (currentPhase === 'game' || currentPhase === 'post_game') {
+                    fetch('/api/stops?slug=' + teamSlug).then(r => {
+                        if (r.status === 403) {
+                            return null;
                         }
+                        return r.json();
+                    }).then(data => {
+                        if (!data) return;
+                        const stops = Array.isArray(data) ? data : (data.stops || []);
+                        const bonusStops = new Set(data.bonus_stops || []);
+                        if (data.geofence_outer || data.geofence_exclusion) {
+                            renderGeofences(data.geofence_outer, data.geofence_exclusion);
+                        }
+                        const select = document.getElementById('stop-select');
+                        const currentVal = select ? select.value : "";
+                        
+                        let optsHTML = '<option value="">-- Haltestelle auswählen --</option>';
+                        let bounds = [];
+                        const activeStopNames = new Set();
+                        
+                        stops.forEach(stop => {
+                            activeStopNames.add(stop.name);
+                            const isBonus = bonusStops.has(stop.name);
+                            optsHTML += `<option value="${stop.name}">${stop.name}</option>`;
+                            let btnHTML = `<button class="btn btn-vcd-green" style="padding: 10px; font-size: 12px; margin-top:0;" onclick="requestStopFromMap('${encodeURIComponent(stop.name)}')">Hier eintragen</button>`;
                         
                         let factorText = '';
                         if (stop.factor > 1) {
@@ -764,8 +762,17 @@
                     }
                 });
             } else {
-                // Fänger und Läufer in 'inactive' sehen alle Haltestellen
-                fetch('/api/all_stops').then(r => r.json()).then(data => {
+                // Vor Spielbeginn (oder nach Spielende) sehen Läufer keine Haltestellen
+                for (const name in stopMarkers) {
+                    map.removeLayer(stopMarkers[name]);
+                }
+                stopMarkers = {};
+                inactiveStopsLayerGroup.clearLayers();
+                inactiveStopMarkers = {};
+            }
+        } else {
+            // Fänger sehen immer alle Haltestellen
+            fetch('/api/all_stops').then(r => r.json()).then(data => {
                     let bounds = [];
                     const activeStopNames = new Set();
                     
