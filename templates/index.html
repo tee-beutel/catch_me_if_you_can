@@ -256,6 +256,16 @@
 
         setInterval(updateTimer, 1000); updateTimer();
 
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         // --- LIVE TICKER & LEADERBOARD LOGIK ---
         let actionLog = {{ action_log | tojson | safe if action_log else '[]' }};
         
@@ -264,7 +274,13 @@
 
             logs.forEach(log => {
                 if (log.type === 'stop' || log.type === 'catch' || (log.type === 'system' && (log.desc.includes('HALBZEIT') || log.desc.includes('Rollen wurden zugewiesen')))) {
-                    tickerEvents.push({ ts: new Date(log.timestamp).getTime(), text: log.desc, type: log.type });
+                    const effTs = new Date(log.actual_timestamp || log.timestamp).getTime();
+                    tickerEvents.push({
+                        ts: effTs,
+                        text: log.desc,
+                        type: log.type,
+                        hasActual: Boolean(log.actual_timestamp)
+                    });
                 }
             });
             
@@ -274,10 +290,10 @@
                 const now = Date.now() + serverOffset;
                 
                 if (now >= preStartTs) {
-                    tickerEvents.push({ ts: preStartTs, text: "🏃 LÄUFER STARTEN! Die Läufer dürfen jetzt loslaufen.", type: "system" });
+                    tickerEvents.push({ ts: preStartTs, text: "🏃 LÄUFER STARTEN! Die Läufer dürfen jetzt loslaufen.", type: "system", hasActual: false });
                 }
                 if (now >= catchersStartTs) {
-                    tickerEvents.push({ ts: catchersStartTs, text: "⚔️ FÄNGER STARTEN! Die Fänger dürfen jetzt die Verfolgung aufnehmen.", type: "system" });
+                    tickerEvents.push({ ts: catchersStartTs, text: "⚔️ FÄNGER STARTEN! Die Fänger dürfen jetzt die Verfolgung aufnehmen.", type: "system", hasActual: false });
                 }
             }
             
@@ -291,9 +307,10 @@
             } else {
                 tickerEvents.forEach(ev => {
                     const date = new Date(ev.ts);
-                    const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' Uhr';
                     let textClass = ev.type === 'system' ? 'ticker-system' : '';
-                    html += `<div class="ticker-entry"><span class="ticker-time">[${timeStr}]</span> <span class="${textClass}">${ev.text}</span></div>`;
+                    let timeColor = ev.hasActual ? '#16a34a' : '#111';
+                    html += `<div class="ticker-entry"><span class="ticker-time" style="color: ${timeColor}; font-weight: bold;">[${timeStr}]</span> <span class="${textClass}">${escapeHtml(ev.text)}</span></div>`;
                 });
             }
             container.innerHTML = html;
@@ -309,7 +326,7 @@
                 leaderboardData.forEach((entry, index) => {
                     html += `<tr>
                         <td><b>#${index + 1}</b></td>
-                        <td>${entry.display_name} <span class="role-badge role-${entry.role}">${entry.role}</span></td>
+                        <td>${escapeHtml(entry.display_name)} <span class="role-badge role-${escapeHtml(entry.role)}">${escapeHtml(entry.role)}</span></td>
                         <td class="score">${entry.score}</td>
                     </tr>`;
                 });

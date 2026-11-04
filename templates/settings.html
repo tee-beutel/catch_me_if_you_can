@@ -507,7 +507,7 @@
             const help = document.getElementById('geofence_toggle_help');
             if (!dataset) return;
 
-            fetch('/api/stop_dataset/' + encodeURIComponent(dataset))
+            fetch('/api/stop_dataset/' + encodeURIComponent(dataset) + '?admin_slug={{ admin_url }}')
                 .then(r => r.json())
                 .then(data => {
                     const hasOuter = data && Array.isArray(data._geofence_outer) && data._geofence_outer.length >= 3;

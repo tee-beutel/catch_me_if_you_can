@@ -2,6 +2,7 @@ import asyncio
 import aiohttp
 import time
 import random
+import re
 import sys
 import threading
 import csv
@@ -11,10 +12,17 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from collections import defaultdict
 
+# Windows DPI-Fix: Verhindert verzerrte/überlappende Schriften
+try:
+    import ctypes
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except Exception:
+    pass
+
 # --- KONFIGURATION ---
-SERVER_URL = ""
+SERVER_URL = "https://raspberrypi.tail360b40.ts.net"
 ADMIN_PW = "20045658"
-RUN_TIME_SECONDS = None  
+RUN_TIME_SECONDS = 300
 TEAM_COUNT = 10
 
 # --- GLOBALE METRIKEN & HISTORIE FÜR DIAGRAMME ---
@@ -26,7 +34,6 @@ metrics = {
     "debug_data": {}
 }
 
-# Live-Historie für das GUI (wird auf 120 Einträge limitiert)
 hist_time = []
 hist_rps = []
 hist_latency = []
@@ -35,7 +42,6 @@ hist_ram = []
 hist_net_dl = []
 hist_net_ul = []
 
-# Vollständige Historie für den CSV-Export am Ende
 full_history = []
 
 running = True
@@ -107,7 +113,6 @@ async def admin_browser_worker(session, base_url, admin_pw):
         await asyncio.sleep(random.uniform(4, 7))
 
 async def debug_fetcher_worker(session, base_url, admin_pw):
-    """Fragt die Server-Leistung alle 120 Sekunden ab."""
     while running:
         try:
             async with session.get(f"{base_url}/api/traccar_debug/{admin_pw}/status") as resp:
@@ -118,7 +123,6 @@ async def debug_fetcher_worker(session, base_url, admin_pw):
         await asyncio.sleep(120)
 
 async def metrics_aggregator():
-    """Sammelt jede Sekunde die Datenpunkte für die Diagramme und Logs."""
     last_req_count = 0
     while running:
         await asyncio.sleep(1)
@@ -126,7 +130,6 @@ async def metrics_aggregator():
         rps = current_reqs - last_req_count
         last_req_count = current_reqs
         
-        # Sichert Kopie der Endpunkte gegen Iterationsfehler im Threading
         eps = list(metrics["endpoints"].values())
         total_count = sum(d["count"] for d in eps)
         total_time = sum(d["total_time"] for d in eps)
@@ -141,7 +144,6 @@ async def metrics_aggregator():
         dl_val = net_io.get("sys_recv_mb", 0.0)
         ul_val = net_io.get("sys_sent_mb", 0.0)
         
-        # Für das Live-Diagramm
         hist_time.append(t)
         hist_rps.append(rps)
         hist_latency.append(avg_latency * 1000)
@@ -150,7 +152,6 @@ async def metrics_aggregator():
         hist_net_dl.append(dl_val)
         hist_net_ul.append(ul_val)
         
-        # Für den permanenten Log-Export
         full_history.append({
             "time_s": round(t, 1),
             "rps": rps,
@@ -173,15 +174,80 @@ async def metrics_aggregator():
 # --- SETUP TEAMS ---
 
 async def setup_teams(session, base_url, admin_pw, team_count):
-    teams_list = [{"team_id": f"Team {i}", "new_name": f"Stress Team {i}", "role": "fänger" if i % 2 == 0 else "läufer", "pin": "0000", "active": True} for i in range(1, team_count + 1)]
+    team_slugs = []
+    existing_teams_detected = False
+
+    # 1. Prüfen über /api/admin_data/{admin_pw} anhand des 'leaderboard'
+    try:
+        async with session.get(f"{base_url}/api/admin_data/{admin_pw}") as resp:
+            if resp.status == 200:
+                admin_data = await resp.json()
+                leaderboard = admin_data.get("leaderboard", [])
+                team_names_map = admin_data.get("team_names_map", {})
+                if len(leaderboard) > 0 or len(team_names_map) > 0:
+                    existing_teams_detected = True
+                    print(f"[Setup] Server meldet {max(len(leaderboard), len(team_names_map))} aktive Teams in der Datenbank.")
+    except Exception as e:
+        print(f"[Setup] Fehler beim Prüfen von admin_data: {e}")
+
+    # 2. Slugs aus der gerenderten Admin-Konsole (/adminconsole-{admin_pw}) extrahieren
+    try:
+        async with session.get(f"{base_url}/adminconsole-{admin_pw}") as resp:
+            if resp.status == 200:
+                html = await resp.text()
+                # Findet alle Links im Format /team/<slug>
+                found = re.findall(r'/team/([a-zA-Z0-9_\-]+)', html)
+                for s in found:
+                    if s not in team_slugs:
+                        team_slugs.append(s)
+    except Exception as e:
+        print(f"[Setup] Fehler beim Abrufen der Admin-Konsole: {e}")
+
+    # 3. Falls noch leer: Über Traccar-Debug (/api/traccar_debug/{admin_pw}/status) ergänzen
+    if not team_slugs:
+        try:
+            async with session.get(f"{base_url}/api/traccar_debug/{admin_pw}/status") as resp:
+                if resp.status == 200:
+                    debug_data = await resp.json()
+                    devices = debug_data.get("devices", [])
+                    for dev in devices:
+                        uid = dev.get("uniqueId")
+                        if uid and not uid.startswith("debug-koblenz-") and uid not in team_slugs:
+                            team_slugs.append(uid)
+        except Exception as e:
+            print(f"[Setup] Fehler beim Abrufen der Traccar-Geräte: {e}")
+
+    # 4. Wenn bestehende Teams existieren: Verwenden und Überschreiben VERBIETEN!
+    if existing_teams_detected or team_slugs:
+        if team_slugs:
+            print(f"[Setup] {len(team_slugs)} bestehende Teams gefunden: {team_slugs}")
+            print("[Setup] Bestehende Teams werden direkt bespielt. KEINE neuen Teams angelegt.")
+            return team_slugs
+        else:
+            print("[Setup] WARNUNG: Bestehende Teams erkannt, aber Slugs konnten nicht geladen werden.")
+            print("[Setup] Zum Schutz deiner Daten wird das Überschreiben abgebrochen!")
+            return []
+
+    # 5. Nur wenn die Datenbank WIRKLICH 0 Teams enthält -> Neue anlegen
+    print("[Setup] Datenbank ist komplett leer. Lege neue Stress-Teams an...")
+    teams_list = [
+        {
+            "team_id": f"Team {i}",
+            "new_name": f"Stress Team {i}",
+            "role": "fänger" if i % 2 == 0 else "läufer",
+            "pin": "0000",
+            "active": True
+        }
+        for i in range(1, team_count + 1)
+    ]
     await session.post(f"{base_url}/adminconsole-{admin_pw}/settings", json={"teams_list": teams_list})
     
-    team_slugs = []
     for i in range(1, team_count + 1):
         async with session.post(f"{base_url}/api/login_team", json={"team_id": f"Team {i}", "pin": "0000"}) as resp:
             data = await resp.json()
             if data.get("success"):
                 team_slugs.append(data["slug"])
+
     return team_slugs
 
 # --- ASYNC MAIN LOOP ---
@@ -192,9 +258,15 @@ async def run_stress_test(url, admin_pw, seconds, teams):
     end_time = time.time() + seconds
 
     async with aiohttp.ClientSession() as session:
-        print("[Hintergrund] Initialisiere Stresstest und lege Teams an...")
+        print("[Hintergrund] Initialisiere Stresstest und prüfe Teams...")
         slugs = await setup_teams(session, url, admin_pw, teams)
-        print(f"[Hintergrund] Erfolgreich {len(slugs)} Teams vorbereitet. Starte Traffic...")
+        
+        if not slugs:
+            print("[Hintergrund] ABBRUCH: Keine Teams zum Testen verfügbar.")
+            running = False
+            return
+
+        print(f"[Hintergrund] Starte Traffic für {len(slugs)} Teams...")
         
         tasks = []
         for slug in slugs:
@@ -273,19 +345,17 @@ class StressDashboard(tk.Tk):
         sys.exit(0)
 
     def show_summary(self):
-        """Öffnet ein Fenster mit der Abschlusstabelle, Flaschenhals-Analyse und CSV Button."""
+        """Öffnet ein Fenster mit lesbarer Abschlusstabelle, Flaschenhals-Analyse und CSV Button."""
         win = tk.Toplevel(self)
         win.title("Stresstest Auswertung & Flaschenhals-Analyse")
-        win.geometry("1000x550")  # Breiter gegen Überlappung
+        win.geometry("1050x620")
 
-        # Bereite Daten für die Tabelle vor und sortiere nach Durchschnittszeit
         ep_data = []
         for ep, d in metrics["endpoints"].items():
             avg = d["total_time"] / d["count"] if d["count"] > 0 else 0
             ep_data.append((ep, d["count"], d["errors"], avg, d.get("max_time", 0.0)))
         ep_data.sort(key=lambda x: x[3], reverse=True)
 
-        # Flaschenhals-Metriken berechnen
         max_cpu = max(hist_cpu) if hist_cpu else 0
         max_ram = max(hist_ram) if hist_ram else 0
         max_dl = max(hist_net_dl) if hist_net_dl else 0
@@ -300,32 +370,42 @@ class StressDashboard(tk.Tk):
             f"• HTTP-Fehler: {metrics['total_errors']} (Hohe Fehler deuten meist auf blockierte SQLite-Datenbank hin)"
         )
 
-        lbl_bottleneck = ttk.Label(win, text=summary_text, font=("Helvetica", 11, "bold"), foreground="#b71c1c",
-                                   justify=tk.LEFT)
+        lbl_bottleneck = ttk.Label(win, text=summary_text, font=("Helvetica", 11, "bold"), foreground="#b71c1c", justify=tk.LEFT)
         lbl_bottleneck.pack(pady=10, padx=20, anchor="w")
 
+        # Fix gegen zusammengeschobene Zeilen bei hoher Windows-Skalierung
+        style = ttk.Style(win)
+        style.configure("Treeview", font=("Segoe UI", 10), rowheight=28)
+        style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"), rowheight=30)
+
+        table_frame = ttk.Frame(win)
+        table_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=5)
+
         cols = ('Endpoint', 'Aufrufe', 'Fehler', 'Ø Latenz (s)', 'Max Latenz (s)')
-        tree = ttk.Treeview(win, columns=cols, show='headings')
+        tree = ttk.Treeview(table_frame, columns=cols, show='headings', selectmode='browse')
+
+        v_scroll = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=v_scroll.set)
+
         for col in cols:
             tree.heading(col, text=col)
 
-        # Breitere Spalte für den Endpunkt-Namen
-        tree.column('Endpoint', width=300)
-        tree.column('Aufrufe', width=100, anchor=tk.E)
-        tree.column('Fehler', width=100, anchor=tk.E)
-        tree.column('Ø Latenz (s)', width=100, anchor=tk.E)
-        tree.column('Max Latenz (s)', width=100, anchor=tk.E)
+        tree.column('Endpoint', width=350, anchor=tk.W)
+        tree.column('Aufrufe', width=110, anchor=tk.E)
+        tree.column('Fehler', width=110, anchor=tk.E)
+        tree.column('Ø Latenz (s)', width=130, anchor=tk.E)
+        tree.column('Max Latenz (s)', width=130, anchor=tk.E)
 
         for item in ep_data:
             tree.insert("", "end", values=(item[0], item[1], item[2], f"{item[3]:.3f}", f"{item[4]:.3f}"))
 
-        tree.pack(fill=tk.BOTH, expand=True, padx=20, pady=5)
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        v_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
         btn_export = ttk.Button(win, text="Log & Report herunterladen (CSV)", command=self.export_csv)
         btn_export.pack(pady=15)
 
     def export_csv(self):
-        """Exportiert die Endpunktdaten und den zeitlichen Verlauf in eine CSV-Datei."""
         filepath = filedialog.asksaveasfilename(
             defaultextension=".csv", 
             initialfile="stresstest_report.csv",
@@ -339,7 +419,6 @@ class StressDashboard(tk.Tk):
             with open(filepath, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f, delimiter=';')
                 
-                # Sektion 1: Endpunkte
                 writer.writerow(["--- FLASCHENHALS ZUSAMMENFASSUNG ---"])
                 writer.writerow(['Endpoint', 'Aufrufe', 'Fehler', 'Avg Zeit (s)', 'Max Zeit (s)'])
                 
@@ -354,7 +433,6 @@ class StressDashboard(tk.Tk):
                 
                 writer.writerow([])
                 
-                # Sektion 2: Zeitverlauf für Excel-Graphen
                 writer.writerow(["--- ZEITLICHER VERLAUF ---"])
                 writer.writerow(["Sekunde", "RPS", "Ø Latenz (ms)", "CPU (%)", "RAM (%)", "Download (MB)", "Upload (MB)"])
                 
@@ -422,7 +500,7 @@ if __name__ == "__main__":
     admin_pw = ADMIN_PW or input("Admin Passwort: ").strip()
     seconds_str = str(RUN_TIME_SECONDS) if RUN_TIME_SECONDS else input("Laufzeit in Sekunden: ").strip()
     seconds = int(seconds_str)
-    teams_str = str(TEAM_COUNT) if TEAM_COUNT else input("Anzahl Teams: ").strip()
+    teams_str = str(TEAM_COUNT) if TEAM_COUNT else input("Anzahl Teams (Fallback, nur falls DB leer ist): ").strip()
     teams = int(teams_str)
 
     url = url.rstrip('/')

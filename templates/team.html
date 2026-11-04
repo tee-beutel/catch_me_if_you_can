@@ -212,13 +212,17 @@
 
                 {% if role == 'läufer' %}
                     <!-- LÄUFER KONTROLLEN -->
-                    {% if phase == 'game' or phase == 'post_game' %}
+                    {% if phase == 'pre_game' or phase == 'game' or phase == 'post_game' %}
                     <h3>Haltestelle eintragen</h3>
                     <p style="font-size: 0.85em; color:#666; margin-top: 0; margin-bottom: 15px;">Hinweis: Du kannst Haltestellen auch direkt auf der Karte antippen.</p>
-                    <select id="stop-select">
+                    <select id="stop-select" {% if phase == 'pre_game' %}disabled{% endif %}>
                         <option value="">-- Haltestelle auswählen --</option>
                     </select>
+                    {% if phase == 'pre_game' %}
+                    <button class="btn btn-vcd-green" disabled style="cursor: not-allowed; opacity: 0.7;">Erst ab Spielstart eintragbar</button>
+                    {% else %}
                     <button class="btn btn-vcd-green" onclick="requestStop()">Haltestelle melden</button>
+                    {% endif %}
                     {% endif %}
                     
                     <h3 style="margin-top: 40px; border-bottom-color: #EB6502; color: #EB6502;">Gefangen worden?</h3>
@@ -265,6 +269,7 @@
                     <div class="log">
                         <!-- Wird über JavaScript dynamisch aktualisiert -->
                     </div>
+                    <div id="opponent-pending-catches" style="display: none; margin-top: 20px;"></div>
                     <div id="my-pending-requests" style="display: none; margin-top: 20px;"></div>
                 </div>
                 
@@ -281,7 +286,7 @@
         </div>
 
         <!-- 1. Dynamischer Auto-Config Button (Deep Link) -->
-        <a href="org.traccar.client://config?url=https://{{ host_ip }}:10000&id={{ slug }}&accuracy=high&distance=5&heartbeat=10" class="btn btn-vcd-green" style="display:inline-block; width:100%; text-decoration:none; padding:12px; border-radius:4px; box-sizing: border-box;">1. ⚙ Tracker automatisch einrichten</a>
+        <a href="org.traccar.client://config?url=https://{{ host_ip }}:10000&id={{ slug }}&accuracy=high&distance=5&heartbeat=10&stopDetection=true" class="btn btn-vcd-green" style="display:inline-block; width:100%; text-decoration:none; padding:12px; border-radius:4px; box-sizing: border-box;">1. ⚙ Tracker automatisch einrichten</a>
 
         <!-- 2. NEU: Button für Standortberechtigung "Immer" -->
         <button type="button" onclick="togglePermissionHelp()" class="btn btn-vcd-orange" style="width:100%; padding:12px; border-radius:4px; box-sizing: border-box; margin-top: 8px;">
@@ -374,6 +379,16 @@
         function formatStopPoints(factor) {
             const pts = Number((factor * baseStopPoints).toFixed(2));
             return `${pts} ${pts === 1 ? 'Punkt' : 'Punkte'}`;
+        }
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
         
         const serverNowStr = "{{ now_time }}";
@@ -529,14 +544,14 @@
         let lastActiveStopNames = new Set();
 
         function renderInactiveStops() {
-            if (!showAllStops || (currentPhase !== 'game' && currentPhase !== 'post_game') || currentRole !== 'läufer') {
+            if (!showAllStops || (currentPhase !== 'pre_game' && currentPhase !== 'game' && currentPhase !== 'post_game') || currentRole !== 'läufer') {
                 inactiveStopsLayerGroup.clearLayers();
                 inactiveStopMarkers = {};
                 return;
             }
 
             if (!allStopsCache) {
-                fetch('/api/all_stops')
+                fetch('/api/all_stops?slug=' + encodeURIComponent(teamSlug))
                     .then(r => r.json())
                     .then(data => {
                         allStopsCache = data;
@@ -559,7 +574,7 @@
 
                     const popupContent = `
                         <div style="text-align:center; font-family: 'Roboto', sans-serif;">
-                            <b style="font-size: 1.1em; color: #049EAB;">${stop.name}</b><br>
+                            <b style="font-size: 1.1em; color: #049EAB;">${escapeHtml(stop.name)}</b><br>
                             <i style="color: #666; font-size: 0.9em;">(Aktuell nicht aktiv)</i>
                             ${factorText}
                         </div>
@@ -590,7 +605,7 @@
             }
         }
 
-        {% if role == 'läufer' and (phase == 'game' or phase == 'post_game') %}
+        {% if role == 'läufer' and (phase == 'pre_game' or phase == 'game' or phase == 'post_game') %}
         if (currentRole === 'läufer') {
             const allStopsControl = L.Control.extend({
                 options: { position: 'topleft' },
@@ -658,8 +673,8 @@
             }
 
             if (currentRole === 'läufer') {
-                if (currentPhase === 'game' || currentPhase === 'post_game') {
-                    fetch('/api/stops?slug=' + teamSlug).then(r => {
+                if (currentPhase === 'pre_game' || currentPhase === 'game' || currentPhase === 'post_game') {
+                    fetch('/api/stops?slug=' + encodeURIComponent(teamSlug)).then(r => {
                         if (r.status === 403) {
                             return null;
                         }
@@ -681,8 +696,13 @@
                         stops.forEach(stop => {
                             activeStopNames.add(stop.name);
                             const isBonus = bonusStops.has(stop.name);
-                            optsHTML += `<option value="${stop.name}">${stop.name}</option>`;
-                            let btnHTML = `<button class="btn btn-vcd-green" style="padding: 10px; font-size: 12px; margin-top:0;" onclick="requestStopFromMap('${encodeURIComponent(stop.name)}')">Hier eintragen</button>`;
+                            optsHTML += `<option value="${escapeHtml(stop.name)}">${escapeHtml(stop.name)}</option>`;
+                            let btnHTML = '';
+                            if (currentPhase === 'pre_game') {
+                                btnHTML = `<button class="btn btn-neutral" disabled style="padding: 10px; font-size: 12px; margin-top:0; background: #6c757d; color: white; cursor: not-allowed;">Erst ab Spielstart eintragbar</button>`;
+                            } else {
+                                btnHTML = `<button class="btn btn-vcd-green" style="padding: 10px; font-size: 12px; margin-top:0;" onclick="requestStopFromMap('${encodeURIComponent(stop.name)}')">Hier eintragen</button>`;
+                            }
                         
                         let factorText = '';
                         if (stop.factor > 1) {
@@ -698,7 +718,7 @@
 
                         const popupContent = `
                             <div style="text-align:center; font-family: 'Roboto', sans-serif;">
-                                <b style="font-size: 1.1em; color: #049EAB;">${stop.name}</b><br>
+                                <b style="font-size: 1.1em; color: #049EAB;">${escapeHtml(stop.name)}</b><br>
                                 ${factorText}${bonusText}<br>
                                 ${btnHTML}
                             </div>
@@ -772,7 +792,7 @@
             }
         } else {
             // Fänger sehen immer alle Haltestellen
-            fetch('/api/all_stops').then(r => r.json()).then(data => {
+            fetch('/api/all_stops?slug=' + encodeURIComponent(teamSlug)).then(r => r.json()).then(data => {
                     let bounds = [];
                     const activeStopNames = new Set();
                     
@@ -787,7 +807,7 @@
 
                         const popupContent = `
                             <div style="text-align:center; font-family: 'Roboto', sans-serif;">
-                                <b style="font-size: 1.1em; color: #049EAB;">${stop.name}</b>
+                                <b style="font-size: 1.1em; color: #049EAB;">${escapeHtml(stop.name)}</b>
                                 ${factorText}
                             </div>
                         `;
@@ -890,13 +910,21 @@
                     iconAnchor: [(size + 8) / 2, (size + 8) / 2]
                 });
 
+                let reportCatchBtn = '';
+                if (currentRole === 'fänger' && loc.role === 'läufer' && !isSelf && (currentPhase === 'game' || currentPhase === 'post_game')) {
+                    reportCatchBtn = `
+                        <button class="btn btn-vcd-green" style="padding: 8px 12px; font-size: 12px; margin-top: 8px; width: 100%; border-radius: 4px;" onclick="reportCatchFromMap('${encodeURIComponent(loc.id)}')">🎯 Fang melden</button>
+                    `;
+                }
+
                 const popupContent = `
                     <div style="text-align:center; font-family: 'Roboto', sans-serif; min-width: 145px;">
-                        <b style="font-size: 1.15em; color: #333;">${isSelf ? '📍 Euer Standort (' + loc.name + ')' : loc.name}</b><br>
-                        <span style="font-size: 0.85em; font-weight: bold; color: ${bgColor}; text-transform: uppercase;">${loc.role}</span><br>
+                        <b style="font-size: 1.15em; color: #333;">${isSelf ? '📍 Euer Standort (' + escapeHtml(loc.name) + ')' : escapeHtml(loc.name)}</b><br>
+                        <span style="font-size: 0.85em; font-weight: bold; color: ${bgColor}; text-transform: uppercase;">${escapeHtml(loc.role)}</span><br>
                         <div style="margin-top: 6px; font-size: 0.82em; color: #666; border-top: 1px solid #ccc; padding-top: 4px;">
                             Letztes GPS-Signal:<br><b style="color: ${diffSec > 120 ? '#dc2626' : '#22c55e'};">${timeAgo}</b>
                         </div>
+                        ${reportCatchBtn}
                     </div>
                 `;
 
@@ -1052,6 +1080,37 @@
             }).catch(() => alert('Netzwerkfehler!'));
         }
 
+        function reportCatchFromMap(encodedPreyId) {
+            const preyId = decodeURIComponent(encodedPreyId);
+            map.closePopup();
+            const select = document.getElementById('caught-team-select');
+            if (select) {
+                select.value = preyId;
+            }
+            if (confirm("Möchtest du dieses Läufer-Team als gefangen melden?")) {
+                fetch('/api/report_catch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        reporter_slug: teamSlug,
+                        hunter: teamId,
+                        prey: preyId
+                    })
+                })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success) {
+                        alert(d.message);
+                        if (select) select.value = "";
+                        fetchTicker();
+                    } else {
+                        alert(d.error || 'Fehler beim Senden.');
+                    }
+                })
+                .catch(() => alert('Netzwerkfehler!'));
+            }
+        }
+
         function reportCatch(role) {
             if(currentPhase !== 'game' && currentPhase !== 'post_game') return alert("Aktionen sind nur während des Spiels und kurz danach möglich.");
             
@@ -1091,7 +1150,7 @@
                 }
                 
                 html += `<tr class="${highlight}">
-                    <td>${entry.display_name} <span style="font-size: 0.7em; color: #888; text-transform: uppercase;">(${entry.role})</span></td>
+                    <td>${escapeHtml(entry.display_name)} <span style="font-size: 0.7em; color: #888; text-transform: uppercase;">(${escapeHtml(entry.role)})</span></td>
                     <td style="font-weight: bold; color: #049EAB;">${entry.score}</td>
                 </tr>`;
             });
@@ -1107,27 +1166,33 @@
             if (teamLog.length === 0) {
                 html += `<div class="log-entry">Noch keine Aktionen vorhanden.</div>`;
             } else {
-                teamLog.forEach(entry => {
-                    let text = entry.desc;
+                const sortedLog = [...teamLog].sort((a, b) => {
+                    const tA = new Date(a.actual_timestamp || a.timestamp).getTime();
+                    const tB = new Date(b.actual_timestamp || b.timestamp).getTime();
+                    return tB - tA;
+                });
+
+                sortedLog.forEach(entry => {
+                    let text = escapeHtml(entry.desc || '');
+                    const escapedTeamName = escapeHtml(teamName);
 
                     if (entry.type === 'stop') {
-                        if (entry.team === teamId) text = text.replace(teamName + " hat", "<b>Ihr</b> habt");
+                        if (entry.team === teamId) text = text.replace(escapedTeamName + " hat", "<b>Ihr</b> habt");
                     } else if (entry.type === 'catch') {
-                        if (entry.hunter === teamId) text = text.replace(teamName + " (Fänger) hat", "<b>Ihr</b> (Fänger) habt");
-                        if (entry.prey === teamId) text = text.replace(teamName + " (Läufer)", "<b>euch</b> (Läufer)");
+                        if (entry.hunter === teamId) text = text.replace(escapedTeamName + " (Fänger) hat", "<b>Ihr</b> (Fänger) habt");
+                        if (entry.prey === teamId) text = text.replace(escapedTeamName + " (Läufer)", "<b>euch</b> (Läufer)");
                     }
                     
-                    let actualTimeHtml = '';
-                    if (entry.actual_timestamp) {
-                        const actDate = new Date(entry.actual_timestamp);
-                        if (!isNaN(actDate.getTime())) {
-                            const tStr = actDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                            actualTimeHtml = `<br><span class="actual-time-badge">⏱️ Tatsächliche Zeit: ${tStr} Uhr</span>`;
-                        }
+                    const effDate = new Date(entry.actual_timestamp || entry.timestamp);
+                    let timeStr = '';
+                    if (!isNaN(effDate.getTime())) {
+                        timeStr = effDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' Uhr';
                     }
+                    const timeColor = entry.actual_timestamp ? '#16a34a' : '#111';
+                    let timeBadge = timeStr ? `<span style="font-weight: bold; color: ${timeColor};">[${timeStr}]</span> ` : '';
 
-                    let lateWarn = entry.is_late ? `<br><span class="late-warn">⚠️ (Nachtrag nach Spielende)</span>` : '';
-                    html += `<div class="log-entry">${text} ${actualTimeHtml} ${lateWarn}</div>`;
+                    let lateWarn = entry.is_late ? ` <span class="late-warn">⚠️ (Nachtrag nach Spielende)</span>` : '';
+                    html += `<div class="log-entry">${timeBadge}${text}${lateWarn}</div>`;
                 });
             }
             logContainer.innerHTML = html;
@@ -1136,6 +1201,7 @@
 
         // --- AUSSTEHENDE ANFRAGEN & RÜCKGÄNGIG ---
         function undoMyRequest(requestId) {
+            requestId = decodeURIComponent(requestId);
             if (!confirm("Möchtest du diese Anfrage wirklich zurückziehen?")) return;
             fetch('/api/undo_request', {
                 method: 'POST',
@@ -1154,6 +1220,59 @@
             .catch(() => alert('Netzwerkfehler beim Zurückziehen.'));
         }
 
+        function updateOpponentCatches(requests) {
+            const container = document.getElementById('opponent-pending-catches');
+            if (!container) return;
+            if (!requests || requests.length === 0) {
+                container.style.display = 'none';
+                container.innerHTML = '';
+                return;
+            }
+            container.style.display = 'block';
+            let html = `<h4 style="margin-top: 0; color: #b45309; border-bottom: 1px solid #fde68a; padding-bottom: 5px;">⚠️ Ausstehende Fang-Bestätigung</h4>`;
+            requests.forEach(req => {
+                const hunterName = escapeHtml(req.hunter_name || 'Fänger');
+                const hunterId = req.hunter;
+                const preyId = req.prey || teamId;
+                html += `
+                    <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 6px; padding: 12px; margin-bottom: 10px;">
+                        <div style="font-size: 0.95em; color: #92400e; margin-bottom: 8px; font-weight: 500;">
+                            Team <b>${hunterName}</b> hat gemeldet, euch gefangen zu haben. Stimmt das?
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button type="button" class="btn btn-vcd-green" style="width: auto; padding: 8px 14px; margin: 0; font-size: 13px; font-weight: bold; border-radius: 4px; cursor: pointer;" onclick="confirmOpponentCatch('${encodeURIComponent(hunterId)}', '${encodeURIComponent(preyId)}')">Bestätigen</button>
+                            <button type="button" class="btn btn-neutral" style="width: auto; padding: 8px 14px; margin: 0; background: #6c757d; color: white; font-size: 13px; border-radius: 4px; cursor: pointer;" onclick="this.closest('div[style*=\'background: #fef3c7\']').remove()">Ablehnen (Ignorieren)</button>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function confirmOpponentCatch(hunterId, preyId) {
+            hunterId = decodeURIComponent(hunterId);
+            preyId = decodeURIComponent(preyId);
+            fetch('/api/report_catch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reporter_slug: teamSlug,
+                    hunter: hunterId,
+                    prey: preyId
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message || "Fang erfolgreich bestätigt!");
+                    fetchTicker();
+                } else {
+                    alert(data.error || "Fehler beim Bestätigen.");
+                }
+            })
+            .catch(() => alert("Netzwerkfehler beim Bestätigen."));
+        }
+
         function updateMyPendingRequests(requests) {
             const container = document.getElementById('my-pending-requests');
             if (!container) return;
@@ -1167,11 +1286,11 @@
             requests.forEach(req => {
                 let desc = '';
                 if (req.type === 'stop') {
-                    desc = `🚏 Haltestelle: <b>${req.stop}</b>`;
+                    desc = `🚏 Haltestelle: <b>${escapeHtml(req.stop)}</b>`;
                 } else if (req.type === 'catch') {
-                    desc = `⚔️ Fang: <b>${req.hunter_name || 'Fänger'}</b> hat <b>${req.prey_name || 'Läufer'}</b> gefangen`;
+                    desc = `⚔️ Fang: <b>${escapeHtml(req.hunter_name || 'Fänger')}</b> hat <b>${escapeHtml(req.prey_name || 'Läufer')}</b> gefangen`;
                 } else {
-                    desc = `Anfrage: ${req.type}`;
+                    desc = `Anfrage: ${escapeHtml(req.type)}`;
                 }
 
                 let timeStr = '';
@@ -1188,7 +1307,7 @@
                             <div>${desc}</div>
                             ${timeStr ? `<span style="font-size: 0.8em; color: #777;">Eingereicht um ${timeStr}</span>` : ''}
                         </div>
-                        <button type="button" class="btn" style="width: auto; padding: 7px 12px; margin: 0; background: #dc2626; color: white; font-size: 13px; border-radius: 4px; flex-shrink: 0; cursor: pointer;" onclick="undoMyRequest('${req.id}')">Rückgängig</button>
+                        <button type="button" class="btn" style="width: auto; padding: 7px 12px; margin: 0; background: #dc2626; color: white; font-size: 13px; border-radius: 4px; flex-shrink: 0; cursor: pointer;" onclick="undoMyRequest('${encodeURIComponent(req.id)}')">Rückgängig</button>
                     </div>
                 `;
             });
@@ -1234,6 +1353,7 @@
                         updateLeaderboard(data.leaderboard);
                         updateLog(data.action_log);
                         updateMyPendingRequests(data.my_pending_requests || []);
+                        updateOpponentCatches(data.open_opponent_catches || []);
                         
                         // Erzwingt einen Neuladevorgang für die UI, wenn sich die Rolle des eigenen Teams ändert.
                         const myTeam = data.leaderboard.find(t => t.id === teamId);
@@ -1252,9 +1372,11 @@
         let initialLeaderboard = {{ leaderboard | tojson | safe }};
         let initialLog = {{ log | tojson | safe }};
         let initialPendingRequests = {{ my_pending_requests | tojson | safe }};
+        let initialOpponentCatches = {{ open_opponent_catches | tojson | safe if open_opponent_catches is defined else '[]' }};
         updateLeaderboard(initialLeaderboard);
         updateLog(initialLog);
         updateMyPendingRequests(initialPendingRequests);
+        updateOpponentCatches(initialOpponentCatches);
         
         setInterval(fetchTicker, 10000);
     </script>

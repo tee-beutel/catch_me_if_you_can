@@ -1304,7 +1304,7 @@
         // --- DATASET LADEN & VERWALTEN ---
         async function loadAvailableDatasets(selectFilename = null) {
             try {
-                const res = await fetch('/api/stop_datasets');
+                const res = await fetch('/api/stop_datasets?admin_slug={{ admin_url }}');
                 const datasets = await res.json();
                 const selectEl = document.getElementById('dataset-select');
                 selectEl.innerHTML = "";
@@ -1343,7 +1343,7 @@
             }
 
             try {
-                const res = await fetch(`/api/stop_dataset/${encodeURIComponent(filename)}`);
+                const res = await fetch(`/api/stop_dataset/${encodeURIComponent(filename)}?admin_slug={{ admin_url }}`);
                 if (!res.ok) throw new Error("Fehler beim Laden");
                 stopsData = await res.json();
                 currentDatasetFilename = filename;
