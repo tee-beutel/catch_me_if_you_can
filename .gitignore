@@ -8,7 +8,6 @@ game.db
 /game.db-shm
 /game.db-wal
 /Zwischespeicher
-/stops_data/stops.txt
 /log.txt
 /log.json
 /skills/system/run-workflow/SKILL.md
