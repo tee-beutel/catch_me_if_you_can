@@ -3,74 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Catch Me - Startseite</title>
+    <title>Mister X - Startseite</title>
     <!-- VCD Hausschriften laden -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@700&family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
-    body { font-family: 'Roboto', Arial, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; }
-    .timer-bar { width: 100%; background: #333; color: white; padding: 12px 15px; text-align: center; font-weight: 900; font-family: 'Roboto', sans-serif; font-size: 1.1em; box-sizing: border-box; box-shadow: 0 2px 5px rgba(0,0,0,0.2); margin-bottom: 25px; }
+    body {
+        font-family: 'Roboto', Arial, sans-serif;
+        background-color: #f4f7f6;
+        color: #333;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .timer-bar {
+        width: 100%;
+        background: #333;
+        color: white;
+        padding: 12px 15px;
+        text-align: center;
+        font-weight: 900;
+        font-family: 'Roboto', sans-serif;
+        font-size: 1.05em;
+        box-sizing: border-box;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        margin-bottom: 25px;
+    }
     .timer-alert { background: #EB6502; }
     
-    .container { max-width: 650px; width: 100%; margin-bottom: 30px; padding: 0 20px; box-sizing: border-box; }
-    .box { background: white; padding: 25px; border: 1px solid #ddd; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 25px; }
+    .container {
+        max-width: 650px;
+        width: 100%;
+        margin-bottom: 30px;
+        padding: 0 20px;
+        box-sizing: border-box;
+    }
+    .box {
+        background: white;
+        padding: 25px;
+        border: 1px solid #ddd;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        margin-bottom: 25px;
+        border-radius: 4px;
+    }
     
     h1, h2, h3 { font-family: 'Roboto Slab', serif; font-weight: 700; color: #049EAB; }
-    h1 { text-align: center; margin-bottom: 30px; font-size: 2.2em; }
-    h2 { margin-top: 0; border-bottom: 2px solid #049EAB; padding-bottom: 10px; font-size: 1.5em; }
+    h1 { text-align: center; margin-bottom: 25px; font-size: 2.2em; }
+    h2 { margin-top: 0; border-bottom: 2px solid #049EAB; padding-bottom: 10px; font-size: 1.45em; }
 
     table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     th, td { padding: 12px 10px; text-align: left; border-bottom: 1px solid #eee; }
-    th { background: #f8f9fa; font-weight: 700; font-size: 1.1em; color: #049EAB; border-bottom: 2px solid #049EAB; }
+    th { background: #f8f9fa; font-weight: 700; font-size: 1.05em; color: #049EAB; border-bottom: 2px solid #049EAB; }
     tr:last-child td { border-bottom: none; }
 
-    .role-badge { font-size: 0.7em; padding: 4px 8px; color: white; margin-left: 8px; text-transform: uppercase; font-weight: 900; vertical-align: middle; }
-    .role-fänger { background-color: #EB6502; }
-    .role-läufer { background-color: #AEC905; color: #333; }
-    .role-keine { background-color: #6c757d; color: white; }
-    .score { font-weight: 900; color: #049EAB; font-size: 1.1em; }
+    .score { font-weight: 900; color: #049EAB; font-size: 1.15em; }
 
     .form-group { margin-bottom: 15px; }
     label { display: block; font-weight: 700; margin-bottom: 8px; color: #555; }
-    select, input[type="password"] { width: 100%; padding: 12px; border: 1px solid #ccc; box-sizing: border-box; font-size: 16px; font-family: 'Roboto', sans-serif; }
-    
-    /* Input-Handling für Formulare im Row-Layout */
-    input[type="text"], input[type="number"], input[type="datetime-local"], textarea {
+    select, input[type="password"] {
         width: 100%;
         padding: 12px;
         border: 1px solid #ccc;
         box-sizing: border-box;
-        font-size: 16px;
+        font-size: 15px;
         font-family: 'Roboto', sans-serif;
+        border-radius: 3px;
+    }
+    select:focus, input[type="password"]:focus {
+        outline: none;
+        border-color: #049EAB;
+        box-shadow: 0 0 0 2px rgba(4, 158, 171, 0.15);
     }
 
-    .btn { width: 100%; padding: 14px; border: none; cursor: pointer; font-family: 'Roboto', sans-serif; font-weight: 900; color: white; font-size: 16px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 10px; transition: background 0.2s; }
+    /* Rollen-Umschalter Styles */
+    .role-toggle-group {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+    .role-toggle-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 11px 14px;
+        border: 2px solid #ddd;
+        background: #f8f9fa;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 14.5px;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+        user-select: none;
+        color: #555;
+    }
+    .role-toggle-btn input { display: none; }
+    .role-toggle-btn.active.hunter {
+        background: #049EAB;
+        border-color: #049EAB;
+        color: white;
+    }
+    .role-toggle-btn.active.mister {
+        background: #EB6502;
+        border-color: #EB6502;
+        color: white;
+    }
+
+    .btn {
+        width: 100%;
+        padding: 14px;
+        border: none;
+        cursor: pointer;
+        font-family: 'Roboto', sans-serif;
+        font-weight: 900;
+        color: white;
+        font-size: 15px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 10px;
+        border-radius: 3px;
+        transition: background 0.2s;
+    }
     .btn-petrol { background-color: #049EAB; }
     .btn-petrol:hover { background-color: #038c98; }
     .btn-dark { background-color: #333; }
     .btn-dark:hover { background-color: #111; }
     
-    .admin-section { margin-top: 50px; border-top: 2px solid #ccc; padding-top: 30px; }
+    .admin-section { margin-top: 45px; border-top: 2px solid #ccc; padding-top: 25px; }
 
     .logo-container { text-align: center; margin-bottom: 20px; }
-    .logo-container img { max-width: 300px; height: auto; }
-    
-    /* Flexbox-Row für nebeneinanderstehende Elemente */
-    .row { display: flex; gap: 15px; flex-wrap: wrap; }
-    .row .form-group { flex: 1; min-width: 200px; }
+    .logo-container img { max-width: 280px; height: auto; }
 
     /* Ticker Styles */
-    .ticker-container { max-height: 250px; overflow-y: auto; background: #fdfdfd; padding: 10px; font-size: 0.9em; border: 1px solid #eee; }
-    .ticker-entry { padding: 8px 0; border-bottom: 1px solid #eee; line-height: 1.4; }
+    .ticker-container {
+        max-height: 250px;
+        overflow-y: auto;
+        background: #fdfdfd;
+        padding: 10px 14px;
+        font-size: 0.9em;
+        border: 1px solid #eee;
+        border-radius: 3px;
+    }
+    .ticker-entry { padding: 9px 0; border-bottom: 1px solid #eee; line-height: 1.45; }
     .ticker-entry:last-child { border-bottom: none; }
     .ticker-time { font-weight: 900; color: #049EAB; margin-right: 8px; font-size: 0.85em; }
     .ticker-system { font-weight: bold; color: #EB6502; }
-
-    @media (max-width: 480px) {
-        .row { flex-direction: column; gap: 0; }
-        .row .form-group { min-width: 100%; }
-    }
+    .ticker-catch { font-weight: 500; color: #2c3e50; }
     </style>
 </head>
 <body>
@@ -78,29 +159,34 @@
 
     <div class="container">
         <div class="logo-container">
-            <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo Kreisverband Braunschweig">
+            <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo">
         </div>
         
-        <h1>Catch Me If You Can</h1>
+        <h1>Mister X</h1>
 
-        <!-- GEWINNER ANZEIGE -->
+        <!-- GEWINNER ANZEIGE BEI SPIELENDE -->
         {% if phase == 'finished' %}
             {% set top_score = leaderboard[0].score if leaderboard|length > 0 else 0 %}
             {% set winners = [] %}
             {% for entry in leaderboard %}
-                {% if entry.score == top_score %}
+                {% if entry.score == top_score and entry.score > 0 %}
                     {% set _ = winners.append(entry.display_name) %}
                 {% endif %}
             {% endfor %}
             <div class="box" style="text-align: center; border: 2px solid #049EAB; background-color: #e6f7f8;">
                 <h2 style="border:none; margin-bottom: 5px;">🏆 Spiel beendet! 🏆</h2>
-                <p style="font-size: 1.2em; margin-bottom: 10px;">Die Sieger mit <b>{{ top_score }} Punkten</b>:</p>
-                <h1 style="color: #EB6502; margin-top: 0; font-size: 2.2em;">{{ winners | join(' & ') }}</h1>
+                {% if winners|length > 0 %}
+                <p style="font-size: 1.15em; margin-bottom: 10px;">Die Sieger mit <b>{{ top_score }} {% if top_score == 1 %}Punkt{% else %}Punkten{% endif %}</b>:</p>
+                <h1 style="color: #EB6502; margin-top: 0; font-size: 2.1em;">{{ winners | join(' & ') }}</h1>
+                {% else %}
+                <p style="font-size: 1.1em; color: #555;">Kein Team konnte Mister X fangen. Mister X gewinnt!</p>
+                {% endif %}
             </div>
         {% endif %}
         
+        <!-- FÄNGER-ONLY LEADERBOARD -->
         <div class="box">
-            <h2>Aktuelles Leaderboard</h2>
+            <h2>Aktuelles Leaderboard (Fänger)</h2>
             <table id="leaderboard-table">
                 <tr>
                     <th>Platz</th>
@@ -110,27 +196,37 @@
                 {% for entry in leaderboard %}
                 <tr>
                     <td><b>#{{ loop.index }}</b></td>
-                    <td>
-                        {{ entry.display_name }}
-                        <span class="role-badge role-{{ entry.role }}">{{ entry.role }}</span>
-                    </td>
+                    <td>{{ entry.display_name }}</td>
                     <td class="score">{{ entry.score }}</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="3" style="text-align: center; color: #777;">Noch keine Teams im Spiel.</td></tr>
+                <tr><td colspan="3" style="text-align: center; color: #777; padding: 15px;">Noch keine Fänger-Teams im Spiel.</td></tr>
                 {% endfor %}
             </table>
         </div>
         
+        <!-- TEAM LOGIN MIT ROLLEN-UMSCHALTER -->
         <div class="box">
             <h2>Team Login</h2>
+            
             <div class="form-group">
-                <label for="team-select">Dein Team:</label>
+                <label>Deine Rolle im Spiel:</label>
+                <div class="role-toggle-group">
+                    <label class="role-toggle-btn active hunter" id="btn-role-hunter">
+                        <input type="radio" name="login_role" value="fänger" checked onchange="onRoleChange('fänger')">
+                        🚔 Fänger
+                    </label>
+                    <label class="role-toggle-btn" id="btn-role-mister">
+                        <input type="radio" name="login_role" value="mister_x" onchange="onRoleChange('mister_x')">
+                        🕵️‍♂️ Mister X
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="team-select" id="team-select-label">Dein Team:</label>
                 <select id="team-select">
                     <option value="">-- Bitte wählen --</option>
-                    {% for t in teams %}
-                    <option value="{{ t.id }}">{{ t.name }}</option>
-                    {% endfor %}
                 </select>
             </div>
             <div class="form-group">
@@ -140,6 +236,7 @@
             <button class="btn btn-petrol" onclick="loginTeam()">Zum Team-Dashboard</button>
         </div>
 
+        <!-- LIVE TICKER -->
         <div class="box" id="live-ticker-box">
             <h2>Live Ticker</h2>
             <div id="ticker-content" class="ticker-container">
@@ -147,29 +244,25 @@
             </div>
         </div>
 
-        {% if phase in ['pre_game', 'game'] %}
-            {% set now_ms = (now_time | string | replace('Z', '+00:00')) %}
-            {% set mid_ms = (mid_time | string | replace('Z', '+00:00')) %}
-            
-            {% if mid_time and mid_time != 'None' and now_ms >= mid_ms %}
-                <div class="box" style="text-align: center; border-left: 4px solid #049EAB; background: #e6f7f8;">
-                    <h3 style="margin-top: 0; color: #049EAB;">🎬 Replay der 1. Halbzeit</h3>
-                    <p style="font-size: 0.95em; color: #555;">Die 1. Halbzeit ist abgeschlossen. Ihr könnt euch den bisherigen Spielverlauf jetzt im Replay ansehen.</p>
-                    <a href="/replay" class="btn btn-petrol" style="display:inline-block; width:auto; text-decoration:none; padding:12px 24px; border-radius:4px;">Replay öffnen</a>
-                </div>
-            {% else %}
-                <div class="box" style="text-align: center; border: 1px dashed #ccc; background: #fcfcfc;">
-                    <p style="color: #888; font-size: 0.9em; margin: 0;">Das Replay (Karte des Spielverlaufs) ist in der 1. Halbzeit gesperrt und wird zur Halbzeitpause freigeschaltet.</p>
-                </div>
-            {% endif %}
-        {% elif phase == 'post_game' or phase == 'finished' %}
-        <div style="text-align: center; margin: 25px 0;">
-            <a href="/replay" class="btn btn-petrol" style="display:inline-block; width:auto; text-decoration:none; padding:15px 30px; border-radius:4px; font-size: 1.15em; font-weight: 900; box-shadow: 0 4px 12px rgba(4,158,171,0.3);">🎬 Komplettes Replay ansehen</a>
+        <!-- REPLAY FREISCHALTUNG -->
+        {% if phase == 'finished' %}
+        <div class="box" style="text-align: center; border: 2px solid #049EAB; background: #e6f7f8;">
+            <h3 style="margin-top: 0; color: #049EAB;">🎬 Spiel-Replay freigeschaltet</h3>
+            <p style="font-size: 0.95em; color: #555; margin-bottom: 15px;">Das Spiel ist beendet. Ihr könnt euch den gesamten Spielverlauf, alle Routen und Fänge jetzt auf der interaktiven Replay-Karte ansehen.</p>
+            <a href="/replay" class="btn btn-petrol" style="display:inline-block; width:auto; text-decoration:none; padding:14px 28px; border-radius:4px; font-weight: 900; box-shadow: 0 4px 12px rgba(4,158,171,0.25);">🎬 Replay öffnen</a>
+        </div>
+        {% elif phase == 'game' %}
+        <div class="box" style="text-align: center; border: 1px dashed #ccc; background: #fcfcfc;">
+            <p style="color: #666; font-size: 0.9em; margin: 0;">🗺️ Das Replay (Karte des gesamten Spielverlaufs) wird nach Spielende für alle freigeschaltet.</p>
+        </div>
+        {% else %}
+        <div class="box" style="text-align: center; border: 1px dashed #ccc; background: #fcfcfc;">
+            <p style="color: #888; font-size: 0.9em; margin: 0;">Das Replay wird nach Spielende freigeschaltet.</p>
         </div>
         {% endif %}
 
-        <div style="text-align: center; margin: 40px 0;">
-            <a href="/rules.html" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#6c757d; color:white; padding:12px 24px; border-radius:4px;">Hier geht's zur Anleitung</a>
+        <div style="text-align: center; margin: 35px 0;">
+            <a href="/rules.html" style="display:inline-block; width:auto; text-decoration:none; background:#6c757d; color:white; padding:12px 24px; border-radius:4px; font-family:'Roboto', sans-serif; font-weight:900; text-transform:uppercase; font-size:13px;">Hier geht's zur Anleitung</a>
         </div>
         
         <div class="admin-section">
@@ -185,76 +278,117 @@
         const serverNowStr = "{{ now_time }}";
         const startStr = "{{ start_time }}";
         const endStr = "{{ end_time }}";
-        const midStr = "{{ mid_time }}";
-        const enableSwap = {{ 'true' if enable_swap else 'false' }};
+        const allTeams = {{ teams | tojson | safe if teams else '[]' }};
         
         let serverOffset = 0;
-        let startTs = 0, endTs = 0, midTs = 0, postEndTs = 0;
+        let startTs = 0, endTs = 0;
         let lastKnownPhase = null;
+        let reloadedTrigger = false;
         
         if (serverNowStr && startStr && endStr) {
             const serverNow = new Date(serverNowStr).getTime();
             serverOffset = serverNow - Date.now();
             startTs = new Date(startStr).getTime();
             endTs = new Date(endStr).getTime();
-            postEndTs = endTs + (5 * 60 * 1000);
-            if (midStr && midStr !== "None") midTs = new Date(midStr).getTime();
         }
 
-        let reloadedTrigger = false;
-
+        // --- TIMER & PHASEN LOGIK (inactive, game, finished) ---
         function updateTimer() {
             const timerBar = document.getElementById('top-timer');
-            if (!startTs || !endTs) { timerBar.innerHTML = "Aktuell ist kein Spiel geplant."; return; }
+            if (!startTs || !endTs) {
+                timerBar.innerHTML = "Aktuell ist kein Spiel geplant.";
+                return;
+            }
             
             const now = Date.now() + serverOffset;
-            const preStartTs = startTs - (5 * 60 * 1000);
             
             const formatTime = (diff) => {
-                const s = Math.floor(diff / 1000); const m = Math.floor(s / 60); const h = Math.floor(m / 60);
+                const s = Math.floor(diff / 1000);
+                const m = Math.floor(s / 60);
+                const h = Math.floor(m / 60);
                 return `${h.toString().padStart(2, '0')}:${(m % 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
             };
             
             const startDateFormatted = new Date(startTs).toLocaleString('de-DE', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) + ' Uhr';
 
             let text = "";
-            if (now < preStartTs) {
-                text = "Spiel in Vorbereitung. Start am " + startDateFormatted;
-            } else if (now >= preStartTs && now < startTs) {
-                text = "PRE-GAME! Spiel startet in " + formatTime(startTs - now);
-            } else if (now >= startTs && now <= endTs) {
-                let swapText = "";
-                if (enableSwap && midTs && now < midTs) swapText = " | Rollentausch in " + formatTime(midTs - now);
-                text = "SPIEL LÄUFT! Ende in " + formatTime(endTs - now) + swapText;
-                timerBar.classList.add('timer-alert');
-            } else if (now > endTs && now <= postEndTs) {
-                text = "POST-GAME! Spiel beendet. Auswertung läuft.";
+            let currentLogicalPhase = "inactive";
+
+            if (now < startTs) {
+                currentLogicalPhase = "inactive";
+                text = "Spiel in Vorbereitung. Start am " + startDateFormatted + " (in " + formatTime(startTs - now) + ")";
                 timerBar.classList.remove('timer-alert');
+            } else if (now >= startTs && now <= endTs) {
+                currentLogicalPhase = "game";
+                text = "SPIEL LÄUFT! Ende in " + formatTime(endTs - now);
+                timerBar.classList.add('timer-alert');
             } else {
-                text = "Spielrunde ist vollständig abgeschlossen.";
+                currentLogicalPhase = "finished";
+                text = "Spielrunde ist beendet. Das Replay ist freigeschaltet!";
                 timerBar.classList.remove('timer-alert');
             }
             
             timerBar.innerHTML = text;
 
-            // Sichere Phasen-Reload-Logik
-            let currentLogicalPhase = "inactive";
-            if (now >= (startTs - 30 * 60000) + 2000 && now < preStartTs + 2000) currentLogicalPhase = "roles_assigned";
-            if (now >= preStartTs + 2000 && now < startTs + 2000) currentLogicalPhase = "pre_game";
-            if (now >= startTs + 2000 && now <= endTs + 2000) {
-                currentLogicalPhase = "game_first_half";
-                if (enableSwap && midTs && now >= midTs + 2000) currentLogicalPhase = "game_second_half";
-            }
-            if (now > endTs + 2000 && now <= postEndTs + 2000) currentLogicalPhase = "post_game";
-            if (now > postEndTs + 2000) currentLogicalPhase = "finished";
-
             if (lastKnownPhase !== null && lastKnownPhase !== currentLogicalPhase) {
-                if(!reloadedTrigger) { reloadedTrigger = true; window.location.reload(); }
+                if (!reloadedTrigger) {
+                    reloadedTrigger = true;
+                    window.location.reload();
+                }
             }
             lastKnownPhase = currentLogicalPhase;
         }
 
-        setInterval(updateTimer, 1000); updateTimer();
+        setInterval(updateTimer, 1000);
+        updateTimer();
+
+        // --- ROLLEN-UMSCHALTER & TEAM DROPDOWN ---
+        let currentSelectedRole = 'fänger';
+
+        function onRoleChange(newRole) {
+            currentSelectedRole = newRole;
+            const btnHunter = document.getElementById('btn-role-hunter');
+            const btnMister = document.getElementById('btn-role-mister');
+            const label = document.getElementById('team-select-label');
+
+            btnHunter.classList.remove('active', 'hunter');
+            btnMister.classList.remove('active', 'mister');
+
+            if (newRole === 'fänger') {
+                btnHunter.classList.add('active', 'hunter');
+                btnHunter.querySelector('input').checked = true;
+                label.textContent = "Dein Fänger-Team:";
+            } else {
+                btnMister.classList.add('active', 'mister');
+                btnMister.querySelector('input').checked = true;
+                label.textContent = "Deine Mister X Identität:";
+            }
+
+            populateTeamSelect(newRole);
+        }
+
+        function populateTeamSelect(role) {
+            const select = document.getElementById('team-select');
+            select.innerHTML = '<option value="">-- Bitte wählen --</option>';
+
+            const filtered = allTeams.filter(t => {
+                if (role === 'mister_x') {
+                    return t.role === 'mister_x' || (t.id && t.id.toLowerCase().startsWith('mister'));
+                } else {
+                    return t.role === 'fänger' && !(t.id && t.id.toLowerCase().startsWith('mister'));
+                }
+            });
+
+            filtered.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.id;
+                opt.textContent = t.name;
+                select.appendChild(opt);
+            });
+        }
+
+        // Standardmäßig Fänger initialisieren
+        onRoleChange('fänger');
 
         function escapeHtml(str) {
             if (str === null || str === undefined) return '';
@@ -273,7 +407,7 @@
             let tickerEvents = [];
 
             logs.forEach(log => {
-                if (log.type === 'stop' || log.type === 'catch' || (log.type === 'system' && (log.desc.includes('HALBZEIT') || log.desc.includes('Rollen wurden zugewiesen')))) {
+                if (log.type === 'team_caught' || log.type === 'catch' || log.type === 'system') {
                     const effTs = new Date(log.actual_timestamp || log.timestamp).getTime();
                     tickerEvents.push({
                         ts: effTs,
@@ -285,15 +419,9 @@
             });
             
             if (startTs) {
-                const preStartTs = startTs - (5 * 60 * 1000);
-                const catchersStartTs = startTs + (5 * 60 * 1000);
                 const now = Date.now() + serverOffset;
-                
-                if (now >= preStartTs) {
-                    tickerEvents.push({ ts: preStartTs, text: "🏃 LÄUFER STARTEN! Die Läufer dürfen jetzt loslaufen.", type: "system", hasActual: false });
-                }
-                if (now >= catchersStartTs) {
-                    tickerEvents.push({ ts: catchersStartTs, text: "⚔️ FÄNGER STARTEN! Die Fänger dürfen jetzt die Verfolgung aufnehmen.", type: "system", hasActual: false });
+                if (now >= startTs) {
+                    tickerEvents.push({ ts: startTs, text: "🚀 SPIEL GESTARTET! Die Jagd auf Mister X hat begonnen.", type: "system", hasActual: false });
                 }
             }
             
@@ -308,8 +436,8 @@
                 tickerEvents.forEach(ev => {
                     const date = new Date(ev.ts);
                     const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' Uhr';
-                    let textClass = ev.type === 'system' ? 'ticker-system' : '';
-                    let timeColor = ev.hasActual ? '#16a34a' : '#111';
+                    let textClass = ev.type === 'system' ? 'ticker-system' : 'ticker-catch';
+                    let timeColor = ev.hasActual ? '#16a34a' : '#049EAB';
                     html += `<div class="ticker-entry"><span class="ticker-time" style="color: ${timeColor}; font-weight: bold;">[${timeStr}]</span> <span class="${textClass}">${escapeHtml(ev.text)}</span></div>`;
                 });
             }
@@ -320,13 +448,13 @@
             const table = document.getElementById('leaderboard-table');
             let html = `<tr><th>Platz</th><th>Team</th><th>Punkte</th></tr>`;
 
-            if (leaderboardData.length === 0) {
-                html += `<tr><td colspan="3" style="text-align: center; color: #777;">Noch keine Teams im Spiel.</td></tr>`;
+            if (!leaderboardData || leaderboardData.length === 0) {
+                html += `<tr><td colspan="3" style="text-align: center; color: #777; padding: 15px;">Noch keine Fänger-Teams im Spiel.</td></tr>`;
             } else {
                 leaderboardData.forEach((entry, index) => {
                     html += `<tr>
                         <td><b>#${index + 1}</b></td>
-                        <td>${escapeHtml(entry.display_name)} <span class="role-badge role-${escapeHtml(entry.role)}">${escapeHtml(entry.role)}</span></td>
+                        <td>${escapeHtml(entry.display_name)}</td>
                         <td class="score">${entry.score}</td>
                     </tr>`;
                 });
@@ -354,24 +482,44 @@
         // --- TEAM / ADMIN LOGINS ---
         function loginTeam() {
             const teamId = document.getElementById('team-select').value;
-            const pin = document.getElementById('team-pin').value;
+            const pin = document.getElementById('team-pin').value.trim();
 
-            if (!teamId || !pin) return alert("Bitte wähle dein Team und gib den dazugehörigen PIN ein.");
+            if (!teamId || !pin) return alert("Bitte wähle dein Team und gib die dazugehörige PIN ein.");
             
-            fetch('/api/login_team', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ team_id: teamId, pin: pin })
-            }).then(r => r.json()).then(data => {
-                if (data.success) { window.location.href = '/team/' + data.slug; } else { alert(data.error); }
-            }).catch(() => alert("Netzwerkfehler!"));
+            fetch('/api/login_team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team_id: teamId, pin: pin })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/team/' + data.slug;
+                } else {
+                    alert(data.error || "Ungültige PIN!");
+                }
+            })
+            .catch(() => alert("Netzwerkfehler beim Login!"));
         }
 
         function loginAdmin() {
-            const pass = document.getElementById('admin-pass').value;
+            const pass = document.getElementById('admin-pass').value.trim();
             if (!pass) return alert("Bitte Admin-Passwort eingeben.");
 
-            fetch('/api/login_admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pass })
-            }).then(r => r.json()).then(data => {
-                if (data.success) { window.location.href = data.redirect_url; } else { alert(data.error); }
-            }).catch(() => alert("Netzwerkfehler!"));
+            fetch('/api/login_admin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: pass })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = data.redirect_url;
+                } else {
+                    alert(data.error || "Ungültiges Admin-Passwort!");
+                }
+            })
+            .catch(() => alert("Netzwerkfehler beim Admin-Login!"));
         }
     </script>
 </body>

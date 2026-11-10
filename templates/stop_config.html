@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Haltestellen-Editor - Catch Me</title>
+    <title>Geofencing & Spielfeld verwalten - Mister X</title>
     <!-- VCD Hausschriften laden -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,8 +12,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <!-- Leaflet-Geoman (Geofencing Editor) -->
-<link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
-<script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
+    <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
 
     <style>
         /* Basis VCD-Typografie und Farben */
@@ -42,7 +42,7 @@
             --vcd-gray-petrol: #4E8293;
         }
 
-        /* Header mit VCD-Logo oben rechts */
+        /* Header */
         .header {
             height: 65px;
             background: white;
@@ -65,10 +65,15 @@
             font-weight: 700;
             color: var(--vcd-petrol);
             margin: 0;
-            font-size: 1.4rem;
+            font-size: 1.35rem;
+        }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
         .header-logo {
-            height: 46px;
+            height: 44px;
             object-fit: contain;
         }
 
@@ -82,7 +87,7 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: white;
-            font-size: 13px;
+            font-size: 12.5px;
             text-align: center;
             border-radius: 3px;
             transition: background 0.2s ease, transform 0.1s ease;
@@ -122,8 +127,8 @@
 
         /* Sidebar */
         #sidebar {
-            width: 480px;
-            max-width: 42%;
+            width: 440px;
+            max-width: 40%;
             height: 100%;
             background: white;
             border-left: 1px solid #ddd;
@@ -131,11 +136,10 @@
             padding: 20px;
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 18px;
             box-shadow: -2px 0 10px rgba(0,0,0,0.04);
         }
 
-        /* Überschriften in Roboto Slab */
         h2, h3 {
             font-family: 'Roboto Slab', serif;
             font-weight: 700;
@@ -144,12 +148,11 @@
             margin-bottom: 12px;
         }
         h3 {
-            font-size: 1.15rem;
+            font-size: 1.1rem;
             border-bottom: 2px solid #eef2f2;
             padding-bottom: 6px;
         }
 
-        /* Formular-Elemente */
         .card-box {
             background: #fafbfc;
             border: 1px solid #e2e8f0;
@@ -162,12 +165,12 @@
         label {
             display: block;
             font-family: 'Roboto', Arial, sans-serif;
-            font-weight: 400;
+            font-weight: 500;
             margin-bottom: 4px;
             color: #333;
             font-size: 0.9em;
         }
-        input[type="text"], input[type="number"], select {
+        input[type="text"], select {
             width: 100%;
             padding: 9px 12px;
             border: 1px solid #ccc;
@@ -182,954 +185,175 @@
             border-color: var(--vcd-petrol);
             box-shadow: 0 0 0 2px rgba(4, 158, 171, 0.15);
         }
-        .row {
-            display: flex;
-            gap: 10px;
-        }
-        .row .form-group {
-            flex: 1;
-            margin-bottom: 0;
-        }
         .help-text {
             font-size: 0.82em;
             color: #666;
             margin-top: 4px;
-            line-height: 1.35;
+            line-height: 1.4;
         }
 
-        /* JSON Key Preview Box */
-        .key-preview-box {
-            background: #eef8f8;
-            border-left: 3px solid var(--vcd-petrol);
-            padding: 8px 12px;
-            margin: 8px 0 14px 0;
-            font-size: 0.88em;
-            border-radius: 2px;
-        }
-        .key-preview-box code {
-            font-weight: 700;
-            color: #026770;
-            word-break: break-all;
-            font-family: monospace;
-            font-size: 1.05em;
-        }
-
-        /* Haltestellen Liste */
-        .stops-list-container {
-            max-height: 200px;
-            overflow-y: auto;
-            border: 1px solid #e0e6ed;
-            border-radius: 4px;
-            background: white;
-            margin-top: 8px;
-        }
-        .stop-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 7px 10px;
-            border-bottom: 1px solid #f0f3f6;
-            cursor: pointer;
-            font-size: 0.88em;
-            transition: background 0.15s ease;
-        }
-        .stop-item:hover {
-            background-color: #f1f8f9;
-        }
-        .stop-item.selected {
-            background-color: #e0f2f3;
-            border-left: 3px solid var(--vcd-petrol);
-        }
-        .stop-item-title {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .badge-factor {
-            font-size: 0.75em;
-            font-weight: 700;
-            padding: 2px 6px;
-            border-radius: 10px;
-            color: white;
-        }
-        .badge-orange { background-color: var(--vcd-orange); }
-        .badge-petrol { background-color: var(--vcd-petrol); }
-        .badge-gray { background-color: var(--vcd-gray-petrol); }
-
-        .btn-delete-stop {
-            background: none;
-            border: none;
-            color: #999;
-            cursor: pointer;
-            padding: 3px 6px;
-            font-size: 13px;
-            border-radius: 3px;
-            transition: color 0.15s ease, background 0.15s ease;
-        }
-        .btn-delete-stop:hover {
-            color: var(--vcd-orange);
-            background: #fff0eb;
-        }
-
-        /* Leaflet Custom Marker Pins */
-        .vcd-pin {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            border: 2px solid white;
-            box-shadow: 0 2px 7px rgba(0,0,0,0.4);
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            transition: transform 0.15s ease;
-        }
-        .vcd-pin:hover {
-            transform: scale(1.15);
-        }
-
-        /* Karten-Legende Overlay */
-        .map-legend {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            background: rgba(255, 255, 255, 0.95);
-            padding: 10px 14px;
-            border-radius: 5px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-            font-size: 12px;
-            z-index: 1000;
-            border: 1px solid #ddd;
-            line-height: 1.6;
-        }
-        .legend-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .legend-dot {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 9px;
-            font-weight: bold;
-        }
-
-        /* Status Toast */
+        /* Toast & Indicator */
         #status-toast {
             position: fixed;
-            top: 75px;
-            right: 20px;
-            background: #333;
+            bottom: 25px;
+            right: 25px;
+            background: rgba(33, 37, 41, 0.92);
             color: white;
             padding: 12px 20px;
             border-radius: 4px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            font-size: 14px;
-            z-index: 9999;
+            font-size: 13.5px;
+            z-index: 99999;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
             display: none;
-            opacity: 0;
             transition: opacity 0.3s ease;
         }
 
-        @media (max-width: 900px) {
-            .split-container {
-                flex-direction: column;
-                height: auto;
-                overflow: auto;
-            }
-            body {
-                overflow: auto;
-                height: auto;
-            }
-            #map-container {
-                height: 420px;
-                flex: none;
-            }
-            #sidebar {
-                width: 100%;
-                max-width: 100%;
-                border-left: none;
-                border-top: 2px solid var(--vcd-petrol);
-            }
+        .exclusion-list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 3px;
+            padding: 7px 10px;
+            margin-top: 6px;
+            font-size: 0.85em;
         }
     </style>
 </head>
 <body>
-    <!-- SVG Pattern für schraffierte Sperrzonen -->
-    <svg width="0" height="0" style="position:absolute;">
-      <defs>
-        <pattern id="red-hatch" width="10" height="10" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
-          <line x1="0" y1="0" x2="0" y2="10" stroke="#e53e3e" stroke-width="3" />
-        </pattern>
-      </defs>
-    </svg>
-
-    <!-- Header mit VCD-Logo oben rechts -->
-    <header class="header">
+    <div class="header">
         <div class="header-left">
-            <a href="/adminconsole-{{ admin_url }}/settings" class="btn btn-secondary" style="padding: 7px 12px; font-size: 12px;">← Einstellungen</a>
-            <h1>Haltestellen-Editor</h1>
+            <h1>🗺️ Geofencing & Spielfeld verwalten</h1>
         </div>
-        <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo" class="header-logo">
-    </header>
+        <div class="header-actions">
+            <span id="save-status-indicator" style="font-size: 0.85em; margin-right: 10px;">
+                <span style="color: #049EAB;">✓ Alle Änderungen gespeichert</span>
+            </span>
+            <button id="btn-save-server" class="btn btn-petrol">
+                💾 Auf Server speichern
+            </button>
+            <a href="/adminconsole-{{ admin_url }}" class="btn btn-secondary">
+                ← Admin-Konsole
+            </a>
+            <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo" class="header-logo">
+        </div>
+    </div>
 
-    <!-- Split-Screen -->
     <div class="split-container">
-
-        <!-- Linke Seite: Karte -->
+        <!-- Karte -->
         <div id="map-container">
             <div id="map"></div>
-            <div class="map-legend">
-                <b style="color: var(--vcd-petrol); display:block; margin-bottom: 4px;">VCD Farbcodes:</b>
-                <div class="legend-row">
-                    <span class="legend-dot" style="background: var(--vcd-orange);">⭐</span>
-                    <span>Wertigkeit &gt; 1 (Sonderpunkte)</span>
-                </div>
-                <div class="legend-row">
-                    <span class="legend-dot" style="background: var(--vcd-petrol);">●</span>
-                    <span>Wertigkeit = 1 (Standard)</span>
-                </div>
-                <div class="legend-row">
-                    <span class="legend-dot" style="background: var(--vcd-gray-petrol);">⚠️</span>
-                    <span>Wertigkeit &lt; 1 (Abwertung)</span>
-                </div>
-                <div class="legend-row" style="margin-top: 3px; border-top: 1px dashed #ddd; padding-top: 3px;">
-                    <span class="legend-dot" style="background: #026770; border: 1px solid var(--vcd-green);">🔍</span>
-                    <span>GTFS-Suchtreffer</span>
-                </div>
-                <div class="legend-row">
-                    <span class="legend-dot" style="background: #4E8293; border: 1px dashed white;">🔄</span>
-                    <span>Alternativ-Haltestelle</span>
-                </div>
-            </div>
         </div>
 
-        <!-- Rechte Seite: Sidebar -->
+        <!-- Sidebar -->
         <div id="sidebar">
-
-            <!-- Sektion 1: Datensatz-Verwaltung -->
+            <!-- Datensatz-Verwaltung -->
             <div class="card-box">
-                <h3>Datensatz-Verwaltung</h3>
-                
+                <h3>📁 Datensatz-Verwaltung</h3>
                 <div class="form-group">
-                    <label for="dataset-select">Bestehenden Datensatz laden:</label>
+                    <label for="dataset-select">Geofence-Datensatz wählen:</label>
                     <select id="dataset-select"></select>
                 </div>
-
-                <div class="form-group" style="margin-top: 14px;">
+                <div class="form-group" style="margin-bottom: 0;">
                     <label for="new-dataset-name">Neuen Datensatz anlegen:</label>
                     <div style="display: flex; gap: 8px;">
-                        <input type="text" id="new-dataset-name" placeholder="z. B. Neuer_Datensatz.json">
+                        <input type="text" id="new-dataset-name" placeholder="z. B. Frankfurt_Mitte.json">
                         <button id="btn-create-dataset" class="btn btn-green" style="white-space: nowrap;">Anlegen</button>
                     </div>
                 </div>
-
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
-                    <label style="margin: 0; font-weight: 700; color: #026770;">Haltestellen (<span id="stops-counter">0</span>):</label>
-                    <input type="text" id="filter-stops-input" placeholder="Filtern..." style="width: 140px; padding: 4px 8px; font-size: 12px;">
-                </div>
-                
-                <div id="stops-list" class="stops-list-container">
-                    <div style="padding: 15px; color: #777; text-align: center; font-size: 0.85em;">Keine Haltestellen geladen</div>
-                </div>
             </div>
 
-            <!-- Sektion Geofencing (Spielfeldbegrenzung & Sperrzonen) -->
+            <!-- Spielfeldbegrenzung & Sperrzonen -->
             <div class="card-box" style="border-left: 4px solid var(--vcd-petrol);">
-                <h3>Spielfeld & Sperrzonen (Geofencing)</h3>
-                <div class="help-text" style="margin-bottom: 12px;">
-                    Definiere die äußere Grenze des Spielfelds sowie Sperrzonen. Nach Klick auf einen Zeichen-Button auf die Karte klicken, um Eckpunkte zu setzen.
+                <h3>⬡ Spielfeld & Sperrzonen</h3>
+                <div class="help-text" style="margin-bottom: 14px;">
+                    Definiere die äußere Grenze des Spielfelds (z. B. Stadtgrenze Frankfurt) sowie Sperrzonen (z. B. Gefahrenbereiche, Gleisanlagen).
                 </div>
 
-                <div style="display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;">
-                    <button type="button" id="btn-draw-outer" class="btn btn-petrol" style="flex: 1; min-width: 170px; font-size: 11.5px; padding: 9px 10px;">
-                        ⬡ Spielfeldbegrenzung zeichnen
+                <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                    <button type="button" id="btn-draw-outer" class="btn btn-petrol" style="flex: 1; min-width: 170px; font-size: 11.5px; padding: 10px;">
+                        ⬡ Spielfeld zeichnen
                     </button>
-                    <button type="button" id="btn-draw-exclusion" class="btn btn-orange" style="flex: 1; min-width: 170px; font-size: 11.5px; padding: 9px 10px;">
+                    <button type="button" id="btn-draw-exclusion" class="btn btn-orange" style="flex: 1; min-width: 170px; font-size: 11.5px; padding: 10px;">
                         ⛔ Sperrzone zeichnen
                     </button>
                 </div>
 
-                <div id="geofence-status-box" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 3px; padding: 10px; font-size: 0.85em; margin-bottom: 8px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <span><b>Spielfeldbegrenzung:</b> <span id="outer-status-text" style="color: #666;">Nicht definiert</span></span>
-                        <button type="button" id="btn-delete-outer" class="btn btn-orange" style="display:none; padding: 3px 8px; font-size: 10px; width: auto; margin: 0;">Löschen</button>
-                    </div>
+                <div id="geofence-action-hint" class="help-text" style="color: var(--vcd-petrol); font-weight: 500; display: none; background: #eef8f8; padding: 8px 12px; border-radius: 3px; margin-bottom: 12px; border-left: 3px solid var(--vcd-petrol);"></div>
+
+                <!-- Status Spielfeld -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 12px; margin-bottom: 10px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span><b>Sperrzonen:</b> <span id="exclusion-count-text">0 definiert</span></span>
-                        <button type="button" id="btn-delete-all-exclusion" class="btn btn-orange" style="display:none; padding: 3px 8px; font-size: 10px; width: auto; margin: 0;">Alle löschen</button>
-                    </div>
-                </div>
-                <div id="geofence-action-hint" class="help-text" style="color: var(--vcd-petrol); font-weight: 500; display: none; background: #eef8f8; padding: 6px 10px; border-radius: 3px;"></div>
-            </div>
-
-            <!-- Sektion 2: Formular (Bearbeiten / Anlegen) -->
-            <div class="card-box">
-                <h3 id="form-title">Haltestelle bearbeiten / anlegen</h3>
-
-                <div class="form-group">
-                    <label for="input-stadt">Stadtname (nur für GTFS-Suche):</label>
-                    <input type="text" id="input-stadt" placeholder="z. B. Braunschweig">
-                </div>
-
-                <div class="row">
-                    <div class="form-group">
-                        <label for="input-stadtteil">Stadtteilname:</label>
-                        <input type="text" id="input-stadtteil" placeholder="z. B. Innenstadt">
-                    </div>
-                    <div class="form-group">
-                        <label for="input-name">Haltestellenname:</label>
-                        <input type="text" id="input-name" placeholder="z. B. Rathaus">
-                    </div>
-                </div>
-
-                <!-- Dynamische Vorschau des finalen JSON-Keys -->
-                <div class="key-preview-box">
-                    <span>Finaler JSON-Key: </span>
-                    <code id="preview-key">—</code>
-                </div>
-
-                <div class="form-group">
-                    <label for="input-factor">Wertigkeit (Faktor, Standard: 1):</label>
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <input type="number" id="input-factor" step="0.5" value="1.0" min="0.0" style="width: 110px;">
-                        <span id="factor-preview-badge" class="badge-factor badge-petrol" style="font-size: 0.85em; padding: 4px 8px;">● Standard (1.0)</span>
-                    </div>
-                </div>
-
-                <div class="row" style="margin-top: 10px;">
-                    <div class="form-group">
-                        <label for="input-lat">Latitude:</label>
-                        <input type="number" id="input-lat" step="any" placeholder="z. B. 52.2688">
-                    </div>
-                    <div class="form-group">
-                        <label for="input-lon">Longitude:</label>
-                        <input type="number" id="input-lon" step="any" placeholder="z. B. 10.5267">
-                    </div>
-                </div>
-                <div class="help-text">📍 Durch Klick auf die Karte werden Koordinaten automatisch übernommen.</div>
-
-                <!-- Formular Aktionen -->
-                <div style="margin-top: 14px;">
-                    <button id="btn-search-gtfs" class="btn btn-petrol" style="width: 100%;">
-                        🔍 In GTFS suchen
-                    </button>
-                    <div id="gtfs-status-message" class="help-text" style="display: none; padding: 6px 0; font-weight: 500;"></div>
-                </div>
-
-                <!-- Ausklappbarer Bereich: Alternativ-Haltestelle -->
-                <div style="margin-top: 14px;">
-                    <button type="button" id="btn-toggle-alt" class="btn" style="width: 100%; background: #eef2f5; color: #334155; border: 1px solid #cbd5e1; justify-content: space-between; padding: 8px 12px; font-size: 13px;">
-                        <span>🔄 Alternativ-Haltestelle</span>
-                        <span id="alt-toggle-icon">▼</span>
-                    </button>
-
-                    <div id="alt-section" style="display: none; background: #f8fafc; border: 1px solid #cbd5e1; border-top: none; border-radius: 0 0 4px 4px; padding: 14px; margin-bottom: 10px;">
-                        <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-                            <input type="checkbox" id="input-alt-enabled" style="width: 18px; height: 18px; cursor: pointer;">
-                            <label for="input-alt-enabled" style="margin: 0; font-weight: 700; cursor: pointer; color: #026770;">Alternative aktivieren</label>
+                        <div>
+                            <b>Spielfeldbegrenzung:</b><br>
+                            <span id="outer-status-text" style="font-size: 0.9em; color: #666;">Nicht definiert</span>
                         </div>
-
-                        <div class="form-group">
-                            <label for="input-alt-name">Name der Alternative:</label>
-                            <input type="text" id="input-alt-name" placeholder="z. B. Hintereingang">
-                            <div class="help-text">Wird automatisch mit dem Stadtteil der Haupthaltestelle verknüpft (Format: Stadtteil, Alt-Name).</div>
-                        </div>
-
-                        <div class="key-preview-box" style="margin: 6px 0 12px 0; background: #fff8f0; border-left-color: var(--vcd-orange);">
-                            <span>Finaler Alt-Key: </span>
-                            <code id="preview-alt-key">—</code>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="input-alt-factor">Wertigkeit (Faktor, Standard: 1):</label>
-                            <input type="number" id="input-alt-factor" step="0.5" value="1.0" min="0.0" style="width: 110px;">
-                        </div>
-
-                        <div class="row" style="margin-top: 10px;">
-                            <div class="form-group">
-                                <label for="input-alt-lat">Latitude (Alt):</label>
-                                <input type="number" id="input-alt-lat" step="any" placeholder="z. B. 52.2690">
-                            </div>
-                            <div class="form-group">
-                                <label for="input-alt-lon">Longitude (Alt):</label>
-                                <input type="number" id="input-alt-lon" step="any" placeholder="z. B. 10.5270">
-                            </div>
-                        </div>
-
-                        <div style="margin-top: 10px;">
-                            <button type="button" id="btn-search-gtfs-alt" class="btn btn-petrol" style="width: 100%; font-size: 12px; padding: 8px 12px;">
-                                🔍 In GTFS suchen (Alt)
-                            </button>
-                            <div id="gtfs-status-message-alt" class="help-text" style="display: none; padding: 6px 0; font-weight: 500;"></div>
-                            <div class="help-text">Sucht in den GTFS-Daten nach der Alternativ-Haltestelle. Koordinatenklicks auf der Karte werden automatisch der Alternative zugeordnet, solange dieses Fenster offen ist.</div>
-                        </div>
-
-                    </div>
-                    <div style="display: flex; gap: 10px; margin-top: 12px;">
-                        <button id="btn-apply-stop" class="btn btn-green" style="flex: 2;">✓ Übernehmen</button>
-                        <button id="btn-clear-form" class="btn btn-secondary" style="flex: 1;">Leeren</button>
+                        <button type="button" id="btn-delete-outer" class="btn btn-orange" style="display:none; padding: 4px 10px; font-size: 11px; width: auto; margin: 0;">Löschen</button>
                     </div>
                 </div>
 
-
-            </div>
-
-            <!-- Sektion 3: Globaler Speicher-Button -->
-            <div>
-                <button id="btn-save-server" class="btn btn-petrol" style="width: 100%; padding: 15px; font-size: 15px; box-shadow: 0 4px 12px rgba(4,158,171,0.3);">
-                    💾 Auf Server speichern
-                </button>
-                <div id="save-status-indicator" style="text-align: center; margin-top: 6px; font-size: 0.85em; color: #666;">
-                    Alle Änderungen auf Server synchronisieren
+                <!-- Status Sperrzonen -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div>
+                            <b>Sperrzonen:</b><br>
+                            <span id="exclusion-count-text" style="font-size: 0.9em; color: #666;">0 definiert</span>
+                        </div>
+                        <button type="button" id="btn-delete-all-exclusion" class="btn btn-orange" style="display:none; padding: 4px 10px; font-size: 11px; width: auto; margin: 0;">Alle löschen</button>
+                    </div>
+                    <div id="exclusion-items-container"></div>
                 </div>
             </div>
 
+            <!-- Info-Box -->
+            <div class="card-box" style="background: #eef8f8; border: 1px solid #cceaea;">
+                <h4 style="margin: 0 0 6px 0; color: #026770; font-family: 'Roboto Slab', serif;">💡 Spielregeln Geofencing</h4>
+                <div class="help-text" style="color: #444; line-height: 1.45;">
+                    Wenn <b>Geofencing-Regeln</b> in den Einstellungen aktiviert sind:
+                    <ul style="margin: 6px 0 0 16px; padding: 0;">
+                        <li>Teams, die das <b>Spielfeld verlassen</b>, lösen sofort eine Warnung und ein Ereignis im Action-Log aus.</li>
+                        <li>Teams, die eine <b>Sperrzone betreten</b>, werden ebenfalls protokolliert und verwarnt.</li>
+                    </ul>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Status Toast Popup -->
+    <!-- Status Toast -->
     <div id="status-toast"></div>
 
     <script>
-        const baseStopPoints = {{ points_stop_reached | default(2) }};
-        function formatStopPoints(factor) {
-            const pts = Number((factor * baseStopPoints).toFixed(2));
-            return `${pts} ${pts === 1 ? 'Punkt' : 'Punkte'}`;
-        }
-
-        // --- ANWENDUNGS-STATE ---
-        let currentDatasetFilename = "";
-        let stopsData = {}; // Format: { "Stadtteil, Name": { lat: ..., lon: ..., factor: ... } }
-        let currentEditKey = null; // Falls eine existierende Haltestelle editiert wird
+        // --- GLOBALE VARIABLEN ---
+        let currentDatasetFilename = null;
+        let stopsData = {};
         let unsavedChanges = false;
+        let currentGeomanMode = null; // 'outer' | 'exclusion' | null
 
         // --- MAP INITIALISIERUNG ---
-        const map = L.map('map').setView([52.26887, 10.52677], 13);
+        const map = L.map('map').setView([51.1657, 10.4515], 6);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            attribution: '&copy; OpenStreetMap contributors',
             maxZoom: 19
         }).addTo(map);
 
-        const stopsLayerGroup = L.layerGroup().addTo(map);
-        const gtfsSearchLayerGroup = L.layerGroup().addTo(map);
         const geofenceLayerGroup = L.layerGroup().addTo(map);
-        let tempClickMarker = null;
-        let currentGeomanMode = null; // 'outer' | 'exclusion' | null
 
-        // --- MARKER ICONS NACH VCD CORPORATE DESIGN ---
-        function getVcdStopIcon(factor) {
-            let bg = '#049EAB'; // VCD Petrol
-            let symbol = '●';
-            let size = 26;
-
-            if (factor > 1) {
-                bg = '#EB6502'; // VCD Orange
-                symbol = '⭐';
-                size = 30;
-            } else if (factor < 1) {
-                bg = '#4E8293'; // VCD Grau-Petrol
-                symbol = '⚠️';
-                size = 28;
-            }
-
-            return L.divIcon({
-                className: 'custom-vcd-marker',
-                html: `<div class="vcd-pin" style="background-color: ${bg}; width: ${size}px; height: ${size}px; font-size: ${factor === 1 ? '14px' : '12px'};">${symbol}</div>`,
-                iconSize: [size, size],
-                iconAnchor: [size / 2, size / 2],
-                popupAnchor: [0, -size / 2]
-            });
-        }
-
-        const gtfsIcon = L.divIcon({
-            className: 'custom-gtfs-marker',
-            html: `<div class="vcd-pin" style="background-color: #026770; border: 2px solid #AEC905; width: 26px; height: 26px; font-size: 12px;">🔍</div>`,
-            iconSize: [26, 26],
-            iconAnchor: [13, 13],
-            popupAnchor: [0, -13]
-        });
-
-        const tempPinIcon = L.divIcon({
-            className: 'custom-temp-marker',
-            html: `<div style="background-color: #e53e3e; width: 18px; height: 18px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 8px rgba(0,0,0,0.5);"></div>`,
-            iconSize: [18, 18],
-            iconAnchor: [9, 9]
-        });
-
-        // Hilfsfunktion: Überprüft, ob das Alternativ-Fenster gerade offen ist
-        function isAltTarget() {
-            return document.getElementById('alt-section').style.display !== 'none';
-        }
-
-        // --- KARTEN-KLICK: TEMPORÄREN PIN SETZEN & KOORDINATEN ÜBERNEHMEN ---
-        map.on('click', function(e) {
-            if (currentGeomanMode) return; // Geoman zeichnet gerade Polygone
-            const lat = parseFloat(e.latlng.lat.toFixed(6));
-            const lon = parseFloat(e.latlng.lng.toFixed(6));
-
-            // Zuweisung dynamisch nach Fenster-Status (offen = Alt, zu = Haupt)
-            if (isAltTarget()) {
-                document.getElementById('input-alt-lat').value = lat;
-                document.getElementById('input-alt-lon').value = lon;
-                showToast(`Koordinaten für Alternative übernommen: ${lat}, ${lon}`);
-            } else {
-                document.getElementById('input-lat').value = lat;
-                document.getElementById('input-lon').value = lon;
-                showToast(`Koordinaten übernommen: ${lat}, ${lon}`);
-            }
-
-            if (tempClickMarker) {
-                map.removeLayer(tempClickMarker);
-            }
-            tempClickMarker = L.marker([lat, lon], { icon: tempPinIcon }).addTo(map);
-        });
-
-        // --- FORMULAR & LIVE-PREVIEW HANDLING ---
-        const inputStadt = document.getElementById('input-stadt');
-        const inputStadtteil = document.getElementById('input-stadtteil');
-        const inputName = document.getElementById('input-name');
-        const inputFactor = document.getElementById('input-factor');
-        const inputLat = document.getElementById('input-lat');
-        const inputLon = document.getElementById('input-lon');
-        const previewKeyEl = document.getElementById('preview-key');
-        const factorBadgeEl = document.getElementById('factor-preview-badge');
-
-        // Alternative Haltestelle UI-Elemente
-        const btnToggleAlt = document.getElementById('btn-toggle-alt');
-        const altSection = document.getElementById('alt-section');
-        const altToggleIcon = document.getElementById('alt-toggle-icon');
-        const inputAltEnabled = document.getElementById('input-alt-enabled');
-        const inputAltName = document.getElementById('input-alt-name');
-        const inputAltFactor = document.getElementById('input-alt-factor');
-        const inputAltLat = document.getElementById('input-alt-lat');
-        const inputAltLon = document.getElementById('input-alt-lon');
-        const previewAltKeyEl = document.getElementById('preview-alt-key');
-
-        function setAltSectionOpen(open) {
-            altSection.style.display = open ? 'block' : 'none';
-            altToggleIcon.textContent = open ? '▲' : '▼';
-            
-            if (open) {
-                inputAltEnabled.checked = true;
-                // Wertigkeit von Haupthaltestelle übernehmen
-                if (!inputAltFactor.value || inputAltFactor.value === "1.0") {
-                    inputAltFactor.value = inputFactor.value;
-                }
-            }
-        }
-
-        btnToggleAlt.addEventListener('click', function() {
-            const isOpen = altSection.style.display !== 'none';
-            setAltSectionOpen(!isOpen);
-        });
-
-        inputAltEnabled.addEventListener('change', function() {
-            if (inputAltEnabled.checked) {
-                setAltSectionOpen(true);
-            }
-        });
-
-        function updateAltKeyPreview() {
-            const stadtteil = inputStadtteil.value.trim();
-            const altName = inputAltName.value.trim();
-            let key = "—";
-            if (stadtteil && altName) {
-                key = `${stadtteil}, ${altName}`;
-            } else if (stadtteil) {
-                key = `${stadtteil}, ...`;
-            } else if (altName) {
-                key = altName;
-            }
-            previewAltKeyEl.textContent = key;
-        }
-
-        function updateKeyPreview() {
-            const stadtteil = inputStadtteil.value.trim();
-            const name = inputName.value.trim();
-            let key = "";
-            if (stadtteil && name) {
-                key = `${stadtteil}, ${name}`;
-            } else if (stadtteil) {
-                key = `${stadtteil}, ...`;
-            } else if (name) {
-                key = name;
-            } else {
-                key = "—";
-            }
-            previewKeyEl.textContent = key;
-        }
-
-        function updateFactorBadge() {
-            let parsedVal = parseFloat(inputFactor.value);
-            const val = isNaN(parsedVal) ? 1.0 : parsedVal;
-            
-            if (val > 1) {
-                factorBadgeEl.className = "badge-factor badge-orange";
-                factorBadgeEl.textContent = `⭐ Sonderpunkte (${val})`;
-            } else if (val < 1) {
-                factorBadgeEl.className = "badge-factor badge-gray";
-                factorBadgeEl.textContent = `⚠️ Abwertung (${val})`;
-            } else {
-                factorBadgeEl.className = "badge-factor badge-petrol";
-                factorBadgeEl.textContent = `● Standard (1.0)`;
-            }
-        }
-
-        inputStadtteil.addEventListener('input', function() {
-            updateKeyPreview();
-            updateAltKeyPreview();
-        });
-        inputName.addEventListener('input', updateKeyPreview);
-        inputFactor.addEventListener('input', updateFactorBadge);
-        inputAltName.addEventListener('input', updateAltKeyPreview);
-
-        function clearForm() {
-            currentEditKey = null;
-            document.getElementById('form-title').textContent = "Haltestelle anlegen";
-            inputStadtteil.value = "";
-            inputName.value = "";
-            inputFactor.value = "1.0";
-            inputLat.value = "";
-            inputLon.value = "";
-            updateKeyPreview();
-            updateFactorBadge();
-
-            // Alternative Felder zurücksetzen
-            setAltSectionOpen(false);
-            inputAltEnabled.checked = false;
-            inputAltName.value = "";
-            inputAltFactor.value = "1.0";
-            inputAltLat.value = "";
-            inputAltLon.value = "";
-            updateAltKeyPreview();
-
-            // Statusmeldungen zurücksetzen
-            document.getElementById('gtfs-status-message').style.display = 'none';
-            document.getElementById('gtfs-status-message-alt').style.display = 'none';
-
-            if (tempClickMarker) {
-                map.removeLayer(tempClickMarker);
-                tempClickMarker = null;
-            }
-            
-            // GTFS Marker löschen
-            gtfsSearchLayerGroup.clearLayers();
-            
-            document.querySelectorAll('.stop-item').forEach(el => el.classList.remove('selected'));
-        }
-
-        document.getElementById('btn-clear-form').addEventListener('click', clearForm);
-
-        function populateFormForStop(key, data) {
-            currentEditKey = key;
-            document.getElementById('form-title').textContent = `Haltestelle bearbeiten: ${key}`;
-
-            let stadtteil = "";
-            let name = key;
-            if (key.includes(',')) {
-                const parts = key.split(',');
-                stadtteil = parts[0].trim();
-                name = parts.slice(1).join(',').trim();
-            }
-
-            inputStadtteil.value = stadtteil;
-            inputName.value = name;
-            inputFactor.value = data.factor !== undefined ? data.factor : 1.0;
-            inputLat.value = data.lat;
-            inputLon.value = data.lon;
-
-            updateKeyPreview();
-            updateFactorBadge();
-
-            // Lade-Logik für Alternative
-            if (data.alternative && typeof data.alternative === 'object') {
-                setAltSectionOpen(true);
-                inputAltEnabled.checked = true;
-
-                let altRawName = data.alternative.name || "";
-                if (stadtteil && altRawName.startsWith(stadtteil + ",")) {
-                    inputAltName.value = altRawName.substring(stadtteil.length + 1).trim();
-                } else if (altRawName.includes(',')) {
-                    inputAltName.value = altRawName.split(',').slice(1).join(',').trim();
-                } else {
-                    inputAltName.value = altRawName;
-                }
-
-                inputAltFactor.value = data.alternative.factor !== undefined ? data.alternative.factor : 1.0;
-                inputAltLat.value = data.alternative.lat !== undefined ? data.alternative.lat : "";
-                inputAltLon.value = data.alternative.lon !== undefined ? data.alternative.lon : "";
-            } else {
-                setAltSectionOpen(false);
-                inputAltEnabled.checked = false;
-                inputAltName.value = "";
-                inputAltFactor.value = "1.0";
-                inputAltLat.value = "";
-                inputAltLon.value = "";
-            }
-            updateAltKeyPreview();
-
-            // Statusmeldungen zurücksetzen
-            document.getElementById('gtfs-status-message').style.display = 'none';
-            document.getElementById('gtfs-status-message-alt').style.display = 'none';
-
-            // Zentriere Karte auf Haltestelle
-            map.flyTo([data.lat, data.lon], 16, { animate: true, duration: 0.8 });
-
-            // Markiere ausgewählte Zeile in Liste
-            document.querySelectorAll('.stop-item').forEach(el => {
-                if (el.dataset.key === key) {
-                    el.classList.add('selected');
-                    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                } else {
-                    el.classList.remove('selected');
-                }
-            });
-        }
-
-        // --- HALTESTELLEN RENDERN & LISTE BEFÜLLEN ---
-        function renderStops() {
-            stopsLayerGroup.clearLayers();
-            const stopsListEl = document.getElementById('stops-list');
-            stopsListEl.innerHTML = "";
-
-            const keys = Object.keys(stopsData).filter(k => !k.startsWith('_'));
-            document.getElementById('stops-counter').textContent = keys.length;
-
-            if (keys.length === 0) {
-                stopsListEl.innerHTML = '<div style="padding: 15px; color: #777; text-align: center; font-size: 0.85em;">Keine Haltestellen im Datensatz vorhanden.</div>';
-                return;
-            }
-
-            const bounds = [];
-            const filterQuery = document.getElementById('filter-stops-input').value.toLowerCase().trim();
-
-            keys.sort().forEach(key => {
-                const stop = stopsData[key];
-                
-                let parsedFactor = parseFloat(stop.factor);
-                const factor = isNaN(parsedFactor) ? 1.0 : parsedFactor;
-                
-                const lat = parseFloat(stop.lat);
-                const lon = parseFloat(stop.lon);
-
-                if (!isNaN(lat) && !isNaN(lon)) {
-                    bounds.push([lat, lon]);
-
-                    // Marker auf Karte
-                    const marker = L.marker([lat, lon], {
-                        icon: getVcdStopIcon(factor)
-                    });
-
-                    marker.bindPopup(`
-                        <div style="font-family: 'Roboto', sans-serif;">
-                            <b style="color: #049EAB; font-size: 1.1em;">${key}</b><br>
-                            Faktor: <b>${factor}</b> (Punkte im Spiel: <b>${formatStopPoints(factor)}</b>)<br>
-                            Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}<br>
-                            <button onclick="window.editStopFromPopup('${encodeURIComponent(key)}')" class="btn btn-petrol" style="padding: 4px 8px; font-size: 11px; margin-top: 6px; width: 100%;">
-                                Im Formular bearbeiten
-                            </button>
-                        </div>
-                    `);
-
-                    marker.on('click', () => {
-                        populateFormForStop(key, stop);
-                    });
-
-                    stopsLayerGroup.addLayer(marker);
-
-                    // Alternative auf der Karte darstellen
-                    if (stop.alternative && !isNaN(parseFloat(stop.alternative.lat)) && !isNaN(parseFloat(stop.alternative.lon))) {
-                        const altLat = parseFloat(stop.alternative.lat);
-                        const altLon = parseFloat(stop.alternative.lon);
-                        let parsedAltFactor = parseFloat(stop.alternative.factor);
-                        const altFactor = isNaN(parsedAltFactor) ? 1.0 : parsedAltFactor;
-
-                        bounds.push([altLat, altLon]);
-
-                        const altIcon = L.divIcon({
-                            className: 'custom-vcd-marker-alt',
-                            html: `<div class="vcd-pin" style="background-color: #4E8293; border: 2px dashed white; width: 24px; height: 24px; font-size: 11px;" title="Alternative zu ${key}">🔄</div>`,
-                            iconSize: [24, 24],
-                            iconAnchor: [12, 12],
-                            popupAnchor: [0, -12]
-                        });
-
-                        const altMarker = L.marker([altLat, altLon], { icon: altIcon });
-                        altMarker.bindPopup(`
-                            <div style="font-family: 'Roboto', sans-serif;">
-                                <span style="font-size: 0.8em; color: #4E8293; font-weight: bold;">ALTERNATIV-HALTESTELLE</span><br>
-                                <b style="color: #049EAB; font-size: 1.05em;">${stop.alternative.name || 'Alternative'}</b><br>
-                                Hauptziel: <b>${key}</b><br>
-                                Faktor: <b>${altFactor}</b> (Punkte im Spiel: <b>${formatStopPoints(altFactor)}</b>)<br>
-                                Lat: ${altLat.toFixed(5)}, Lon: ${altLon.toFixed(5)}<br>
-                                <button onclick="window.editStopFromPopup('${encodeURIComponent(key)}')" class="btn btn-petrol" style="padding: 4px 8px; font-size: 11px; margin-top: 6px; width: 100%;">
-                                    Haupthaltestelle bearbeiten
-                                </button>
-                            </div>
-                        `);
-                        altMarker.on('click', () => {
-                            populateFormForStop(key, stop);
-                        });
-                        stopsLayerGroup.addLayer(altMarker);
-
-                        const connectLine = L.polyline([[lat, lon], [altLat, altLon]], {
-                            color: '#4E8293',
-                            weight: 2,
-                            dashArray: '4, 4',
-                            opacity: 0.7
-                        });
-                        stopsLayerGroup.addLayer(connectLine);
-                    }
-                }
-
-                // Zeile in Sidebar-Liste
-                if (!filterQuery || key.toLowerCase().includes(filterQuery)) {
-                    const item = document.createElement('div');
-                    item.className = 'stop-item' + (currentEditKey === key ? ' selected' : '');
-                    item.dataset.key = key;
-
-                    let badgeClass = 'badge-petrol';
-                    let badgeSymbol = '●';
-                    if (factor > 1) { badgeClass = 'badge-orange'; badgeSymbol = '⭐'; }
-                    else if (factor < 1) { badgeClass = 'badge-gray'; badgeSymbol = '⚠️'; }
-
-                    let altBadge = '';
-                    if (stop.alternative) {
-                        altBadge = `<span class="badge-factor" style="background-color: #4E8293; padding: 2px 5px;" title="Alternative: ${stop.alternative.name || ''}">🔄 Alt</span>`;
-                    }
-
-                    item.innerHTML = `
-                        <div class="stop-item-title" title="${key}">
-                            <span class="badge-factor ${badgeClass}" style="padding: 2px 5px;">${badgeSymbol} ${factor}</span>
-                            ${altBadge}
-                            <span>${key}</span>
-                        </div>
-                        <button class="btn-delete-stop" title="Haltestelle löschen" onclick="event.stopPropagation(); window.deleteStop('${encodeURIComponent(key)}');">✕</button>
-                    `;
-
-                    item.addEventListener('click', () => {
-                        populateFormForStop(key, stop);
-                    });
-
-                    stopsListEl.appendChild(item);
-                }
-            });
-
-            if (bounds.length > 0 && !currentEditKey) {
-                map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
-            }
-        }
-
-        window.editStopFromPopup = function(encodedKey) {
-            const key = decodeURIComponent(encodedKey);
-            if (stopsData[key]) {
-                populateFormForStop(key, stopsData[key]);
-            }
-        };
-
-        window.deleteStop = function(encodedKey) {
-            const key = decodeURIComponent(encodedKey);
-            if (confirm(`Haltestelle "${key}" wirklich aus diesem Datensatz löschen?`)) {
-                delete stopsData[key];
-                if (currentEditKey === key) {
-                    clearForm();
-                }
-                unsavedChanges = true;
-                updateSaveIndicator();
-                renderStops();
-                showToast(`Haltestelle "${key}" entfernt.`);
-            }
-        };
-
-        document.getElementById('filter-stops-input').addEventListener('input', renderStops);
-
-        // --- BUTTON "ÜBERNEHMEN" (IN LOKALEN STATE ÜBERNEHMEN) ---
-        document.getElementById('btn-apply-stop').addEventListener('click', function() {
-            const stadtteil = inputStadtteil.value.trim();
-            const name = inputName.value.trim();
-
-            if (!name) {
-                alert("Bitte gib mindestens einen Haltestellennamen ein!");
-                return;
-            }
-
-            const lat = parseFloat(inputLat.value);
-            const lon = parseFloat(inputLon.value);
-
-            if (isNaN(lat) || isNaN(lon)) {
-                alert("Bitte gültige Latitude- und Longitude-Werte eingeben oder auf die Karte klicken!");
-                return;
-            }
-
-            let parsedFactor = parseFloat(inputFactor.value);
-            const factor = isNaN(parsedFactor) ? 1.0 : parsedFactor;
-            
-            const finalKey = stadtteil ? `${stadtteil}, ${name}` : name;
-
-            // Falls der Key umbenannt wurde, alten Key löschen
-            if (currentEditKey && currentEditKey !== finalKey) {
-                delete stopsData[currentEditKey];
-            }
-
-            const newStopObj = {
-                lat: lat,
-                lon: lon,
-                factor: factor
-            };
-
-            // Prüfe Alternativ-Haltestelle
-            const altEnabled = inputAltEnabled.checked;
-            const altName = inputAltName.value.trim();
-            const altLat = parseFloat(inputAltLat.value);
-            const altLon = parseFloat(inputAltLon.value);
-            let parsedAltFactor = parseFloat(inputAltFactor.value);
-            const altFactor = isNaN(parsedAltFactor) ? 1.0 : parsedAltFactor;
-
-            if (altEnabled) {
-                if (!altName) {
-                    alert("Bitte einen Namen für die Alternativ-Haltestelle eingeben!");
-                    return;
-                }
-                if (isNaN(altLat) || isNaN(altLon)) {
-                    alert("Bitte gültige Koordinaten für die Alternativ-Haltestelle angeben oder per Klick wählen!");
-                    return;
-                }
-                const altFullName = stadtteil ? `${stadtteil}, ${altName}` : altName;
-                newStopObj.alternative = {
-                    name: altFullName,
-                    lat: altLat,
-                    lon: altLon,
-                    factor: altFactor
-                };
-            }
-
-            stopsData[finalKey] = newStopObj;
-
-            currentEditKey = finalKey;
-            unsavedChanges = true;
-            updateSaveIndicator();
-
-            if (tempClickMarker) {
-                map.removeLayer(tempClickMarker);
-                tempClickMarker = null;
-            }
-
-            renderStops();
-            clearForm();
-            showToast(`Haltestelle "${finalKey}" übernommen!`);
-        });
-
-        // --- GEOFENCING LOGIK (LEAFLET-GEOMAN) ---
+        // SVG Muster für Schraffur von Sperrzonen definieren
+        const svgDef = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svgDef.style.position = "absolute";
+        svgDef.style.width = "0";
+        svgDef.style.height = "0";
+        svgDef.innerHTML = `
+            <defs>
+                <pattern id="red-hatch" width="10" height="10" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+                    <line x1="0" y1="0" x2="0" y2="10" stroke="#e53e3e" stroke-width="2.5" />
+                </pattern>
+            </defs>
+        `;
+        document.body.appendChild(svgDef);
+
+        // --- GEOFENCING RENDERING ---
         function renderGeofences() {
             geofenceLayerGroup.clearLayers();
 
@@ -1138,11 +362,11 @@
             const btnDeleteOuter = document.getElementById('btn-delete-outer');
 
             if (Array.isArray(outer) && outer.length >= 3) {
-                outerStatusText.innerHTML = `<span style="color: #EB6502; font-weight: bold;">Definiert (${outer.length} Punkte)</span>`;
+                outerStatusText.innerHTML = `<span style="color: #049EAB; font-weight: bold;">Aktiv (${outer.length} Eckpunkte)</span>`;
                 btnDeleteOuter.style.display = 'inline-block';
 
                 const outerPoly = L.polygon(outer, {
-                    color: '#EB6502',
+                    color: '#049EAB',
                     weight: 3,
                     fill: false
                 }).addTo(geofenceLayerGroup);
@@ -1150,7 +374,7 @@
                 outerPoly.bindTooltip("Spielfeldbegrenzung", { sticky: true });
                 outerPoly.bindPopup(`
                     <div style="font-family: 'Roboto', sans-serif;">
-                        <b style="color: #EB6502;">Spielfeldbegrenzung</b><br>
+                        <b style="color: #049EAB;">Spielfeldbegrenzung</b><br>
                         ${outer.length} Eckpunkte<br>
                         <button onclick="window.removeOuterBoundary()" class="btn btn-orange" style="padding: 4px 8px; font-size: 11px; margin-top: 6px; width: 100%;">
                             Begrenzung löschen
@@ -1165,9 +389,11 @@
             const exclusions = stopsData['_geofence_exclusion'];
             const exclusionCountText = document.getElementById('exclusion-count-text');
             const btnDeleteAllExclusion = document.getElementById('btn-delete-all-exclusion');
+            const exclusionItemsContainer = document.getElementById('exclusion-items-container');
+            exclusionItemsContainer.innerHTML = '';
 
             if (Array.isArray(exclusions) && exclusions.length > 0) {
-                exclusionCountText.innerHTML = `<span style="color: #EB6502; font-weight: bold;">${exclusions.length} aktiv</span>`;
+                exclusionCountText.innerHTML = `<span style="color: #e53e3e; font-weight: bold;">${exclusions.length} aktiv</span>`;
                 btnDeleteAllExclusion.style.display = 'inline-block';
 
                 exclusions.forEach((zone, idx) => {
@@ -1176,7 +402,7 @@
                             color: '#e53e3e',
                             weight: 2,
                             fillColor: 'url(#red-hatch)',
-                            fillOpacity: 1
+                            fillOpacity: 0.8
                         }).addTo(geofenceLayerGroup);
 
                         exPoly.bindTooltip(`Sperrzone ${idx + 1}`, { sticky: true });
@@ -1189,6 +415,14 @@
                                 </button>
                             </div>
                         `);
+
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'exclusion-list-item';
+                        itemDiv.innerHTML = `
+                            <span><b>Sperrzone ${idx + 1}</b> (${zone.length} Pkt.)</span>
+                            <button type="button" onclick="window.removeExclusionZone(${idx})" class="btn btn-orange" style="padding: 2px 6px; font-size: 10px; width: auto; margin: 0;">Löschen</button>
+                        `;
+                        exclusionItemsContainer.appendChild(itemDiv);
                     }
                 });
             } else {
@@ -1241,7 +475,7 @@
             map.pm.enableDraw('Polygon', {
                 snappable: true,
                 pathOptions: {
-                    color: '#EB6502',
+                    color: '#049EAB',
                     weight: 3,
                     fill: false,
                     fillOpacity: 0
@@ -1261,7 +495,7 @@
                     color: '#e53e3e',
                     weight: 2,
                     fillColor: 'url(#red-hatch)',
-                    fillOpacity: 1
+                    fillOpacity: 0.8
                 }
             });
             showToast('Zeichne Sperrzone...');
@@ -1301,7 +535,7 @@
             document.getElementById('geofence-action-hint').style.display = 'none';
         });
 
-        // --- DATASET LADEN & VERWALTEN ---
+        // --- DATASETS LADEN & SPEICHERN ---
         async function loadAvailableDatasets(selectFilename = null) {
             try {
                 const res = await fetch('/api/stop_datasets?admin_slug={{ admin_url }}');
@@ -1349,10 +583,24 @@
                 currentDatasetFilename = filename;
                 unsavedChanges = false;
                 updateSaveIndicator();
-                clearForm();
-                gtfsSearchLayerGroup.clearLayers();
-                renderStops();
                 renderGeofences();
+
+                // Karte auf Spielfeldbegrenzung zoomen falls vorhanden, sonst auf Haltestellen
+                if (Array.isArray(stopsData['_geofence_outer']) && stopsData['_geofence_outer'].length >= 3) {
+                    map.fitBounds(stopsData['_geofence_outer'], { padding: [30, 30] });
+                } else {
+                    const stopCoords = [];
+                    for (const key in stopsData) {
+                        if (!key.startsWith('_') && stopsData[key] && stopsData[key].lat != null && stopsData[key].lon != null) {
+                            stopCoords.push([stopsData[key].lat, stopsData[key].lon]);
+                        }
+                    }
+                    if (stopCoords.length > 0) {
+                        if (stopCoords.length === 1) map.setView(stopCoords[0], 15);
+                        else map.fitBounds(stopCoords, { padding: [30, 30], maxZoom: 16 });
+                    }
+                }
+
                 showToast(`Datensatz "${filename}" geladen.`);
             } catch (err) {
                 alert(`Fehler beim Laden des Datensatzes "${filename}": ${err.message}`);
@@ -1363,11 +611,11 @@
             loadDataset(this.value);
         });
 
-        // --- NEUEN DATENSATZ ANLEGEN ---
+        // Neuen Datensatz anlegen
         document.getElementById('btn-create-dataset').addEventListener('click', function() {
             let nameInput = document.getElementById('new-dataset-name').value.trim();
             if (!nameInput) {
-                alert("Bitte einen Dateinamen eingeben (z. B. Neuer_Datensatz.json)");
+                alert("Bitte einen Dateinamen eingeben (z. B. Frankfurt_Spielfeld.json)");
                 return;
             }
             if (!nameInput.endsWith('.json')) {
@@ -1375,22 +623,15 @@
             }
 
             const selectEl = document.getElementById('dataset-select');
-            let exists = false;
             for (let opt of selectEl.options) {
                 if (opt.value === nameInput) {
-                    exists = true;
-                    break;
+                    alert("Ein Datensatz mit diesem Namen existiert bereits!");
+                    selectEl.value = nameInput;
+                    loadDataset(nameInput);
+                    return;
                 }
             }
 
-            if (exists) {
-                alert("Ein Datensatz mit diesem Namen existiert bereits!");
-                selectEl.value = nameInput;
-                loadDataset(nameInput);
-                return;
-            }
-
-            // Neues Option Element hinzufügen
             const opt = document.createElement('option');
             opt.value = nameInput;
             opt.textContent = nameInput;
@@ -1401,163 +642,12 @@
             stopsData = {};
             unsavedChanges = true;
             updateSaveIndicator();
-            clearForm();
-            gtfsSearchLayerGroup.clearLayers();
-            renderStops();
+            renderGeofences();
             document.getElementById('new-dataset-name').value = "";
-            showToast(`Neuer Datensatz "${nameInput}" initialisiert. Füge Haltestellen hinzu und speichere auf dem Server.`);
+            showToast(`Neuer Datensatz "${nameInput}" angelegt.`);
         });
 
-        // --- GTFS SUCHE (/api/search_gtfs) ---
-        const btnSearchGtfs = document.getElementById('btn-search-gtfs');
-        const btnSearchGtfsAlt = document.getElementById('btn-search-gtfs-alt');
-        const gtfsStatusMsg = document.getElementById('gtfs-status-message');
-        const gtfsStatusMsgAlt = document.getElementById('gtfs-status-message-alt');
-
-        async function performGtfsSearch(isAlt) {
-            const stadt = inputStadt.value.trim();
-            const stadtteil = inputStadtteil.value.trim();
-            const name = isAlt ? inputAltName.value.trim() : inputName.value.trim();
-
-            if (!name && !stadt && !stadtteil) {
-                alert("Bitte mindestens einen Haltestellennamen oder eine Stadt für die GTFS-Suche eingeben!");
-                return;
-            }
-
-            const activeBtn = isAlt ? btnSearchGtfsAlt : btnSearchGtfs;
-            const activeStatusMsg = isAlt ? gtfsStatusMsgAlt : gtfsStatusMsg;
-            const originalText = activeBtn.textContent;
-            
-            // Verstecke die andere Statusmeldung
-            if (isAlt) {
-                gtfsStatusMsg.style.display = "none";
-            } else {
-                gtfsStatusMsgAlt.style.display = "none";
-            }
-            
-            activeBtn.disabled = true;
-            activeBtn.textContent = "⏳ Suche in GTFS...";
-            activeStatusMsg.style.display = "block";
-            activeStatusMsg.style.color = "#049EAB";
-            activeStatusMsg.textContent = `Durchsuche GTFS stops.txt nach ${stadt}, ${stadtteil}, ${name}...`;
-
-            gtfsSearchLayerGroup.clearLayers();
-
-            try {
-                const res = await fetch('/api/search_gtfs', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ admin_slug: "{{ admin_url }}", stadt, stadtteil, name })
-                });
-
-                const data = await res.json();
-
-                if (!res.ok) {
-                    activeStatusMsg.style.color = "#EB6502";
-                    activeStatusMsg.textContent = data.error || "Fehler bei der GTFS-Suche.";
-                    alert(data.error || "GTFS-Datei nicht gefunden oder Fehler bei der Suche.");
-                    return;
-                }
-
-                if (!Array.isArray(data) || data.length === 0) {
-                    activeStatusMsg.style.color = "#666";
-                    activeStatusMsg.textContent = "Keine Treffer in stops.txt gefunden.";
-                    showToast("Keine passenden GTFS-Treffer gefunden.");
-                    return;
-                }
-
-                activeStatusMsg.style.color = "#026770";
-                activeStatusMsg.textContent = `${data.length} Treffer auf der Karte visualisiert. Klicke auf einen Marker!`;
-
-                const searchBounds = [];
-                data.forEach(item => {
-                    const lat = parseFloat(item.lat);
-                    const lon = parseFloat(item.lon);
-                    searchBounds.push([lat, lon]);
-
-                    const marker = L.marker([lat, lon], { icon: gtfsIcon });
-                    marker.bindPopup(`
-                        <div style="font-family: 'Roboto', sans-serif;">
-                            <span style="font-size: 0.8em; color: #026770; font-weight: bold;">GTFS SUCHTREFFER</span><br>
-                            <b style="font-size: 1.1em; color: #333;">${item.name}</b><br>
-                            Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}<br>
-                            <button onclick="window.applyGtfsCoords(${lat}, ${lon}, '${encodeURIComponent(item.name)}')" class="btn btn-green" style="padding: 5px 10px; font-size: 11px; margin-top: 8px; width: 100%;">
-                                ✓ Koordinaten übernehmen
-                            </button>
-                        </div>
-                    `);
-
-                    marker.on('click', () => {
-                        window.applyGtfsCoords(lat, lon, encodeURIComponent(item.name));
-                    });
-
-                    gtfsSearchLayerGroup.addLayer(marker);
-                });
-
-                if (searchBounds.length > 0) {
-                    map.fitBounds(searchBounds, { padding: [40, 40], maxZoom: 16 });
-                }
-
-                showToast(`${data.length} GTFS-Treffer auf der Karte eingezeichnet.`);
-
-            } catch (err) {
-                activeStatusMsg.style.color = "#EB6502";
-                activeStatusMsg.textContent = "Netzwerkfehler bei der GTFS-Suche.";
-                console.error(err);
-            } finally {
-                activeBtn.disabled = false;
-                activeBtn.textContent = originalText;
-            }
-        }
-
-        btnSearchGtfs.addEventListener('click', () => performGtfsSearch(false));
-        btnSearchGtfsAlt.addEventListener('click', () => performGtfsSearch(true));
-
-        window.applyGtfsCoords = function(lat, lon, encodedName) {
-            const rawName = decodeURIComponent(encodedName);
-            
-            // Wenn das Fenster für die Alternative offen ist, Koordinaten dorthin übertragen
-            if (isAltTarget()) {
-                inputAltLat.value = lat;
-                inputAltLon.value = lon;
-                if (!inputAltName.value.trim()) {
-                    let suggestedAltName = rawName;
-                    if (suggestedAltName.includes(',')) {
-                        suggestedAltName = suggestedAltName.split(',').slice(1).join(',').trim();
-                    }
-                    inputAltName.value = suggestedAltName;
-                    updateAltKeyPreview();
-                }
-                showToast(`GTFS-Koordinaten für Alternative übernommen: ${lat}, ${lon}`);
-            } else {
-                inputLat.value = lat;
-                inputLon.value = lon;
-
-                // Falls Haltestellenname noch leer ist, schlage den Namen vor
-                if (!inputName.value.trim()) {
-                    if (rawName.includes(',')) {
-                        const parts = rawName.split(',');
-                        if (!inputStadtteil.value.trim() && parts.length > 1) {
-                            inputStadtteil.value = parts[0].trim();
-                            inputName.value = parts.slice(1).join(',').trim();
-                        } else {
-                            inputName.value = parts.slice(1).join(',').trim();
-                        }
-                    } else {
-                        inputName.value = rawName;
-                    }
-                    updateKeyPreview();
-                }
-                showToast(`GTFS-Koordinaten für "${rawName}" übernommen.`);
-            }
-
-            if (tempClickMarker) {
-                map.removeLayer(tempClickMarker);
-            }
-            tempClickMarker = L.marker([lat, lon], { icon: tempPinIcon }).addTo(map);
-        };
-
-        // --- GLOBALER BUTTON: AUF SERVER SPEICHERN ---
+        // Auf Server speichern
         document.getElementById('btn-save-server').addEventListener('click', async function() {
             if (!currentDatasetFilename) {
                 alert("Kein Datensatz ausgewählt!");
@@ -1566,7 +656,7 @@
 
             const btn = document.getElementById('btn-save-server');
             btn.disabled = true;
-            btn.textContent = "⏳ Speichere auf Server...";
+            btn.textContent = "⏳ Speichere...";
 
             try {
                 const res = await fetch('/api/save_stop_dataset', {
@@ -1581,13 +671,13 @@
 
                 const data = await res.json();
                 if (!res.ok || !data.success) {
-                    alert(data.error || "Fehler beim Speichern des Datensatzes auf dem Server!");
+                    alert(data.error || "Fehler beim Speichern!");
                     return;
                 }
 
                 unsavedChanges = false;
                 updateSaveIndicator();
-                showToast(`✓ Datensatz "${currentDatasetFilename}" (${Object.keys(stopsData).length} Haltestellen) erfolgreich auf dem Server gespeichert!`);
+                showToast(`✓ Datensatz "${currentDatasetFilename}" erfolgreich auf dem Server gespeichert!`);
             } catch (err) {
                 alert("Netzwerkfehler beim Speichern des Datensatzes!");
                 console.error(err);
@@ -1600,13 +690,12 @@
         function updateSaveIndicator() {
             const ind = document.getElementById('save-status-indicator');
             if (unsavedChanges) {
-                ind.innerHTML = `<span style="color: var(--vcd-orange); font-weight: bold;">● Ungespeicherte Änderungen im Browser</span>`;
+                ind.innerHTML = `<span style="color: var(--vcd-orange); font-weight: bold;">● Ungespeicherte Änderungen</span>`;
             } else {
-                ind.innerHTML = `<span style="color: #049EAB;">✓ Alle Änderungen auf dem Server gespeichert</span>`;
+                ind.innerHTML = `<span style="color: #049EAB;">✓ Alle Änderungen gespeichert</span>`;
             }
         }
 
-        // --- TOAST HILFSFUNKTION ---
         function showToast(msg) {
             const toast = document.getElementById('status-toast');
             toast.textContent = msg;
@@ -1618,12 +707,8 @@
             }, 3000);
         }
 
-        // --- INITIALISIERUNG BEIM LADEN DER SEITE ---
         window.addEventListener('DOMContentLoaded', () => {
             loadAvailableDatasets();
-            updateKeyPreview();
-            updateFactorBadge();
-            updateAltKeyPreview();
             renderGeofences();
         });
     </script>

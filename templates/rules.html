@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spielregeln - Catch Me</title>
+    <title>Spielregeln - Mister X Frankfurt</title>
     <!-- VCD Hausschriften laden -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -152,119 +152,94 @@
             <div>
                 <!-- VCD Keyvisual -->
                 <div class="keyvisual">
-                    <div class="kv-top">Catch me</div>
-                    <div class="kv-bottom">if you can<div class="kv-triangle"></div></div>
+                    <div class="kv-top">Mister X</div>
+                    <div class="kv-bottom">Frankfurt am Main<div class="kv-triangle"></div></div>
                 </div>
             </div>
             <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo">
         </div>
 
         <div class="box">
-            <h2>Zusammenfassung</h2>
-            <p>Das Spielprinzip ist simpel: Ein Team läuft weg, die anderen fangen. Das Ganze findet im gesamten Stadtgebiet statt, wobei alle öffentlichen Verkehrsmittel genutzt werden dürfen. Für Absprachen und Fotos nutzen wir eine gemeinsame Chatgruppe. Den aktuellen Spielstatus, Haltestellen und den Punktestand findet ihr in der Catch Me Web-App, das Live-Tracking eurer Standorte läuft über die GPS-App Traccar.</p>
+            <h2>Zusammenfassung & Spielidee</h2>
+            <p>Willkommen zu <b>Mister X in Frankfurt am Main</b>! Nach dem bekannten Vorbild von „Scotland Yard“ treten mehrere <b>Fänger-Teams</b> gegen getarnte <b>Mister X</b> an. Das gesamte Spielgeschehen findet im Frankfurter RMV-Gebiet statt. Mister X reist verdeckt und muss sich in festen Zeitintervallen der Jagdgesellschaft offenbaren, während die Fänger versuchen, die Standorte zu kombinieren und Mister X auf frischer Tat zu ertappen.</p>
+            
+            <div class="highlight">
+                📍 <b>Gemeinsamer Startpunkt:</b> Frankfurt am Main <b>Südbahnhof</b>.<br>
+                🍦 <b>Zielpunkt & Siegerehrung:</b> <b>Eis Christina</b>, Oeder Weg 44, 60318 Frankfurt am Main.
+            </div>
 
-            <h2>1. Die Catch Me Web-App</h2>
-            <p>Über die Web-App läuft die gesamte Organisation während des Spiels. Loggt euch dafür auf der Startseite mit eurem Teamnamen und eurer Team-PIN ein. Im Dashboard findet ihr folgende Infos:</p>
+            <h2>1. Die Web-App & Rollen</h2>
+            <p>Über die Web-App läuft die Spielkoordination in Echtzeit. Loggt euch auf der Startseite mit eurer Rolle und Team-PIN ein:</p>
             <ul>
-                <li><b>Rolle:</b> Ganz oben steht, ob ihr aktuell LÄUFER oder FÄNGER seid. Eure anfängliche Rolle wird 30 Minuten vor Spielbeginn zugewiesen. 
-                {% if config.enable_mid_game_swap %}
-                    <b>Wichtig:</b> Zur Halbzeit tauschen die Rollen. Bei einer ungeraden Teamanzahl wird beim Rollentausch exakt gespiegelt, sodass Rollen, die in der ersten Hälfte in der Überzahl waren, in der zweiten Hälfte in der Unterzahl sind und umgekehrt.
-                    {% if config.shuffle_stops_on_swap %}
-                        <b>Zusätzlich werden beim Rollentausch die zu erreichenden Haltestellen auf der Karte einmal komplett neu ausgewürfelt!</b>
-                    {% endif %}
-                {% else %}
-                    Ihr behaltet eure zugewiesene Rolle das gesamte Spiel über.
-                {% endif %}
-                </li>
-                <li><b>Timer:</b> Zeigt an, wann es losgeht, wie viel Zeit noch bleibt und wann das Spiel vorbei ist.</li>
-                <li><b>Live-Rangliste & Log:</b> Hier seht ihr den aktuellen Punktestand, wer gerade wen gefangen hat und welche Stationen erfolgreich abgehakt wurden.</li>
-                <li><b>Karte (nur für Läufer sichtbar):</b> Zeigt alle aktiven Haltestellen im Spielgebiet an. Die Karte wird kurz vor Spielbeginn freigeschaltet.</li>
+                <li><b>Fänger:</b> Ihr seht euren eigenen Live-Standort auf der Karte. Sobald ein Intervall-Snapshot veröffentlicht wird, erscheint der zuletzt bekannte Aufenthaltsort der Mister X als anonymisierter Marker <b>„Mister X“</b> mit Angaben zu Linie, Fahrtrichtung und Station.</li>
+                <li><b>Mister X:</b> Ihr seid Einzel- oder Doppelagenten. Auf eurer Karte seht ihr ausschließlich eure eigene Position und eure bisherigen Veröffentlichungen – keine anderen Teams! Vor jedem Intervall öffnet sich eine 2-Minuten-Eingabemaske.</li>
+                <li><b>Kein Rollentausch:</b> Rollen bleiben das gesamte Spiel über fest vergeben.</li>
             </ul>
 
             <h2>2. Live-Tracking über Traccar</h2>
             <div class="highlight">
-                <b>Was ist Traccar?</b> Traccar ist eine ressourcenschonende GPS-Tracking-App, die euren aktuellen Standort im Hintergrund an das Spiel übermittelt. So weiß das System, wo ihr seid, und Fänger können die Läufer aufspüren.
+                <b>Traccar Client:</b> Das System nutzt die Traccar-App zur exakten Standortüberwachung im Hintergrund. Für Mister X dient sie der Erfassung des Standorts beim Intervall-Signal; für die Spielleitung der lückenlosen Überwachung der Spielfeldbegrenzung.
             </div>
-            <p>Damit ihr am Spiel teilnehmen könnt, müsst ihr Traccar auf einem Smartphone eures Teams einrichten:</p>
+            <p>So richtet ihr das Tracking vor Spielbeginn ein:</p>
             <ol class="step-list">
-                <li>Ladet euch die kostenlose App <b>Traccar Client</b> für iOS oder Android herunter.</li>
-                <li>Loggt euch in die <b>Catch Me Web-App</b> (Team-Dashboard) ein. Scrollt nach unten zum Bereich „Traccar GPS-Setup“.</li>
-                <li>Klickt dort auf den grünen Button zur <b>automatischen Einrichtung</b>. Dadurch werden Server-URL und eure eindeutige Team-ID direkt in die Traccar-App übernommen.</li>
-                <li><b>Ganz wichtig:</b> Geht in die Einstellungen eures Smartphones und setzt die Standortberechtigung für Traccar zwingend auf <b>„Immer“</b> (bzw. „Immer zulassen“). Macht ihr das nicht, bricht das GPS ab, sobald ihr den Bildschirm ausschaltet!</li>
-                <li>Schaltet das Tracking in der App über den Hauptschalter ein. Dieser bleibt das gesamte Spiel über an.</li>
+                <li>Ladet die kostenlose App <b>Traccar Client</b> (iOS App Store / Android Google Play) auf das Team-Smartphone.</li>
+                <li>Öffnet euer Team-Dashboard in der Web-App und klickt unter „Traccar GPS-Setup“ auf den grünen Button zur <b>automatischen Einrichtung</b>. Alle Verbindungsparameter werden direkt in Traccar übernommen.</li>
+                <li><b>Zwingend erforderlich:</b> Setzt in den Smartphone-Einstellungen die Standortberechtigung für Traccar auf <b>„Immer“</b> (bzw. „Immer zulassen“). Bei „Beim Verwenden der App“ bricht das GPS ab, sobald der Bildschirm gesperrt wird!</li>
+                <li>Schaltet den Dienst in Traccar über den Hauptschalter auf <b>„Status: Läuft“</b>.</li>
             </ol>
 
-            <h2>3. Haltestellen ansteuern & Punkte sammeln</h2>
-            <p>Als Läufer sammelt ihr Punkte, indem ihr zufällige Haltestellen ansteuert. Die jeweils aktiven Ziele werden euch auf der Karte im Dashboard angezeigt. Sobald eine Station erledigt ist, wirft das System direkt die nächste aus (eine Haltestelle wird nie doppelt hintereinander gezogen).</p>
-            
-            {% if config.auto_approve_stops %}
-            <p>Es gibt zwei Möglichkeiten, wie euch eine Haltestelle gutgeschrieben wird:</p>
+            <h2>3. Mister X: 15-Minuten-Intervalle & Veröffentlichung</h2>
+            <p>In regelmäßigen Intervallen (Standard: alle {{ config.broadcast_interval_minutes | default(15) }} Minuten ab {{ config.first_broadcast_time | default('14:30') }} Uhr) muss jeder Mister X seinen aktuellen Standort über die Web-App mitteilen:</p>
             <ol class="step-list">
-                <li><b>Weg A: Automatischer GPS-Check (Bevorzugt)</b><br>
-                Fahrt oder geht zur aktiven Haltestelle. Meldet die Haltestelle im Dashboard (über das Dropdown-Menü oder Klick auf die Karte). Das System prüft nun automatisch eure Traccar-GPS-Daten der letzten 5 Minuten. Wenn ihr euch innerhalb des definierten Radius <b>(aktuell eingestellter Radius: {{ config.stop_radius_meters }} Meter)</b> befunden habt, wird die Haltestelle sofort vom System akzeptiert und ihr erhaltet die Punkte.<br><i>Tipp: Falls das GPS leicht verzögert ist, wartet das System nach dem Klick automatisch noch 1 Minute auf passende Koordinaten.</i></li>
-                
-                <li><b>Weg B: Manueller Fotobeweis (Fallback bei GPS-Problemen)</b><br>
-                Sollte die GPS-Automatik fehlschlagen, müsst ihr einen Fotobeweis erbringen. Macht ein Teambild vor dem Haltestellenschild (oder fotografiert den Monitor im Fahrzeug, auf dem der Name der Station zu sehen ist) und schickt dieses in die <b>Chatgruppe</b>. Wenn die automatische GPS-Nachprüfung nach einer Minute ohne Treffer abläuft, wird eure Anfrage automatisch an den Spielleiter weitergeleitet, der sie nach Sichtung eures Fotos in der Chatgruppe manuell freigibt.<br>
-                <i>Frist: Das Beweisfoto muss spätestens 30 Sekunden nach einem Rollenwechsel oder nach Spielende in der Chatgruppe sein, sonst verfällt der Punkt.</i></li>
+                <li><b>2-Minuten-Vorabfenster (T - 2 Min.):</b> Ein Countdown signalisiert das Öffnen der Eingabemaske. Mister X trägt hier die aktuelle <b>Linie</b> (z. B. U1, Tram 16, Bus 61), <b>Fahrtrichtung</b> und die <b>nächste Haltestelle</b> ein.</li>
+                <li><b>Positionskorrektur per Pin:</b> Befindet sich Mister X im Untergrund (U-Bahn-Station) mit schwachem GPS, kann der orange Korrektur-Pin auf der Karte auf die tatsächliche Position gezogen werden.</li>
+                <li><b>Veröffentlichungszeitpunkt (T):</b> Exakt zur vollen Intervallzeit wird der Standort für alle Fänger auf der Karte sichtbar geschaltet.</li>
+                <li><b>1-Minute Nachlauffenster & Fallback:</b> Liegt um T noch keine Eingabe vor, hat Mister X noch 1 Minute Gnadenfrist. Läuft auch diese ab, sendet das Backend um T + 1 Min. automatisch einen <b>Live-GPS-Snapshot</b> der aktuellen Koordinaten an die Fänger.</li>
             </ol>
-            {% else %}
-            <p>So läuft der Nachweis ab:</p>
-            <ol class="step-list">
-                <li>Fahrt oder geht zu einer der aktiven Haltestellen auf eurer Karte.</li>
-                <li><b>Das Foto:</b> Macht ein Teambild vor dem Haltestellenschild. Falls ihr im Bus oder in der Bahn sitzt und ohne Auszusteigen durchfahrt, fotografiert einfach den Monitor im Fahrzeug, auf dem der Name der Station zu sehen ist.</li>
-                <li>Schickt das Foto direkt in die <b>Chatgruppe</b>.</li>
-                <li><b>Punkte eintragen:</b> Wählt die Station im Dropdown-Menü der Web-App aus oder klickt sie direkt auf der Karte an. Der Admin gleicht das mit dem Foto in der Chatgruppe ab und gibt die Punkte manuell frei.</li>
-                <li><i>Frist: Das Beweisfoto muss spätestens 30 Sekunden nach einem Rollenwechsel oder nach Spielende in der Chatgruppe sein, sonst verfällt der Punkt. Wenn ihr es nicht mehr in die Website eingetragen habt, kann der Spielleiter die Punkte nachtragen.</i></li>
-            </ol>
-            {% endif %}
 
-            <h2>4. Spielablauf & Fangen</h2>
-            <p>Los geht es am Platz der deutschen Einheit. Die Läufer starten mit 10 Minuten Vorsprung. Um ein Team zu fangen, reicht es, wenn ein Mitglied des Läuferteams von einem Fänger berührt wird.</p>
+            <h2>4. Fang-Mechanik & strikte Sperr-Regel</h2>
+            <p>Ein Fang gilt als vollzogen, wenn ein Fänger einen Mister X physisch berührt (z. B. am Bahnsteig, im Fahrzeug oder auf der Straße).</p>
             
             <div class="warning">
-                <b>Catch eintragen:</b> Jeder Fang muss im Dashboard gemeldet werden. Nutzt dazu das Dropdown „Team gefangen?“ (als Fänger) oder „Gefangen worden?“ (als Läufer). Die Punkte werden gutgeschrieben, sobald die Gegenseite den Fang in ihrer App bestätigt hat.
+                <b>Fang melden:</b> Das Fänger-Team klickt im Dashboard auf <b>„Mister X fangen“</b> (oder direkt auf den Karten-Marker) und sendet die Anfrage ab. Mister X erhält eine Benachrichtigung und bestätigt den Fang per Klick auf „Bestätigen“. Bei unberechtigter Anfrage kann Mister X ablehnen (die Anfrage wird rückstandslos gelöscht).
             </div>
-            
+
+            <div class="highlight" style="border-left-color: #EB6502;">
+                🔒 <b>Die Sperr-Regel:</b><br>
+                Ein Fänger-Team darf denselben Mister X <b>nicht zweimal hintereinander fangen</b>! Nach einem bestätigten Fang wird dieser Mister X für euer Team gesperrt (Marker färbt sich grau <code>#6c757d</code>, Fang-Button ist deaktiviert). Erst wenn ihr einen <b>anderen</b> Mister X erfolgreich gefangen habt, ist der gesperrte Mister X wieder für euch freigegeben.
+            </div>
+
+            <h2>5. Fahrregeln & RMV-Nahverkehr</h2>
+            <p>Das gesamte Spiel findet unter Einhaltung der StVO und der Beförderungsbedingungen des RMV im Frankfurter Stadtgebiet statt.</p>
             <ul>
-                <li>Nach dem Fang dürfen die Läufer sofort weiterfahren.</li>
-                <li>Das Fängerteam darf den Läufern nicht direkt in dasselbe Fahrzeug folgen, sondern muss mindestens 5 Minuten warten, bevor es weitergeht.</li>
-                <li>Ein Team kann am selben Ort erst dann wieder gefangen werden, wenn es zwischendurch ein anderes Verkehrsmittel genutzt hat.</li>
-                <li>Ausnahme bei dünnem Takt: Findet ein Fang in einem Verkehrsmittel statt, das nur alle 30 Minuten fährt, werden beide Teams zusammen bis zum nächsten Knotenpunkt fahren. Die 5-Minuten-Sperre für die Fänger beginnt dann erst dort, damit niemand am Streckenrand strandet.</li>
+                <li><b>Erlaubte Verkehrsmittel:</b> U-Bahnen, Straßenbahnen, Stadt- und Regionalbusse, S-Bahnen sowie Fortbewegung zu Fuß.</li>
+                <li><b>Fahreinschränkungen für Mister X:</b>
+                    <ul>
+                        <li><b>U-Bahn:</b> Maximal <b>4 Stationen</b> am Stück pro Fahrt. Danach muss ausgestiegen oder umgestiegen werden.</li>
+                        <li><b>S-Bahn:</b> Maximal <b>3 Stationen</b> am Stück pro Fahrt.</li>
+                        <li><b>Bus & Straßenbahn:</b> Beliebig viele Stationen im Spielgebiet.</li>
+                    </ul>
+                </li>
+                <li><b>Verbotene Verkehrsmittel:</b> Private PKW, Taxis, E-Scooter, Leihräder oder Inline-Skates sind für alle Teams untersagt.</li>
+                <li><b>Fairplay:</b> Teams bleiben stets als geschlossene Gruppe zusammen (kein taktisches Aufteilen). Bei Fängen im Fahrzeug gilt: Beide Teams verhalten sich rücksichtsvoll gegenüber anderen Fahrgästen.</li>
             </ul>
 
-            <h2>5. Spielfeld & erlaubte Verkehrsmittel</h2>
-            <p>Das Spielgebiet umfasst das gesamte Stadtgebiet Braunschweig (außer Harxbüttel), Wolfenbüttel und Weddel. Die Buslinie 740 zwischen Weddel und Wolfenbüttel darf genutzt werden, allerdings ist auf freier Strecke kein Ein- oder Ausstieg erlaubt.</p>
+            <h2>6. Spielende, Siegerehrung & Replay</h2>
+            <p>Sobald die Spieluhr abläuft, schaltet die Web-App automatisch auf <b>„Spiel Beendet“</b>. Ab diesem Zeitpunkt sind keine Fänge mehr möglich.</p>
             <ul>
-                <li>Erlaubt sind Busse, Straßenbahnen, der Regionalverkehr sowie <b>Nextbikes</b> (letztere für maximal 30 Minuten pro Spielrunde).
-                <br><b>Wichtig:</b> Bei Verdacht, dass ihr Nextbike länger als die erlaubten 30 Minuten insgesamt genutzt habt, kann der Spielleiter ein Foto eurer Buchungshistorie aus der Nextbike-App anfordern. Könnt ihr dies nicht vorlegen oder habt die Zeit überschritten, drohen Strafpunkte!</li>
-                <li>Ihr müsst euch so bewegen, dass innerhalb eines 15-minütigen Gehradius immer mindestens eine Haltestelle liegt, die mindestens alle 30 Minuten angefahren wird.</li>
-                <li>Verlasst ihr diesen Bereich für länger als 10 Minuten, müsst ihr direkt zu einem vom Spielleiter festgelegten Knotenpunkt. Von dort dürft ihr erst weiter, wenn ihr von zwei unterschiedlichen Fängerteams gefangen wurdet.</li>
-                <li>Taktisches Aufteilen ist nicht erlaubt – die Teams müssen immer komplett zusammenbleiben.</li>
+                <li>Alle Teams begeben sich direkt zum Zielort <b>Eis Christina</b> (Oeder Weg 44, Frankfurt am Main).</li>
+                <li><b>Wertung:</b> Jedes Fänger-Team erhält <b>+{{ config.points_caught_team | default(1) }} Punkt</b> pro bestätigten Fang. Das Fänger-Team mit den meisten Punkten gewinnt den Hauptpreis!</li>
+                <li><b>Replay:</b> Nach Spielende wird für alle Teilnehmer das interaktive <b>Karten-Replay</b> freigeschaltet, auf dem sämtliche Laufwege, Fluchtmanöver und Fänge Sekunde für Sekunde nachvollzogen werden können.</li>
             </ul>
-
-            <h2>6. Spielende und Abrechnung</h2>
-            <p>Sobald der Timer abgelaufen ist, schaltet die Web-App auf „POST-GAME“ und das Spiel ist vorbei. Ab diesem Moment ist kein Fangen mehr erlaubt. Alle Teams machen sich auf den Weg zum Rathaus. Für eventuelle manuelle Nachträge bleibt die App noch einige Minuten offen.</p>
-            
-            <div class="highlight" style="border-left-color: #AEC905;">
-                <b>Punkteverteilung gemäß aktueller Servereinstellungen:</b><br><br>
-                <b>Läufer:</b> +{{ config.points_stop_reached }} Punkte pro erreichte Haltestelle und {{ config.points_was_caught }} Punkte, wenn ihr gefangen wurdet.<br><br>
-                <b>Fänger:</b> +{{ config.points_caught_team }} Punkte für jeden erfolgreichen Fang.
-            </div>
-            
-            <p>Wer am Ende die meisten Punkte hat, gewinnt das Spiel.</p>
         </div>
 
         <div class="box">
-            <h2>Datenschutzerklärung</h2>
-            <p>Für die Teilnahme am Spiel gelten die folgenden Datenschutzhinweise. Wir legen großen Wert auf den Schutz deiner Daten:</p>
+            <h2>Datenschutzerklärung & Haftung</h2>
+            <p>Für die Teilnahme an der Veranstaltung gelten folgende Hinweise:</p>
             <ul>
-                <li><b>Zweck und Speicherung:</b> Alle erhobenen persönlichen Daten werden ausschließlich zur Durchführung und Organisation des Spiels benötigt. Die Speicherung der Daten der Web-App erfolgt auf den Servern der Academic Cloud und der TU Braunschweig. Rechtsgrundlage hierfür ist die Einwilligung der Teilnehmenden (Art. 6 Abs. 1 lit. a DSGVO).</li>
-                <li><b>Löschung der Daten:</b> Deine persönlichen Daten werden nach Ende des Spiels auf Anfrage vollständig gelöscht.</li>
-                <li><b>Deine Rechte:</b> Du hast das Recht auf Auskunft, Berichtigung, Löschung oder Einschränkung der Verarbeitung deiner Daten sowie ein Beschwerderecht bei einer zuständigen Aufsichtsbehörde.</li>
-                <li><b>Drittanbieter (Chatgruppe & Traccar):</b> Die Kommunikation und der Foto-Austausch während des Spiels läuft über eine gemeinsame Chatgruppe, das Live-Tracking über die App Traccar. Bitte beachte, dass dabei deine entsprechenden Profilinformationen (z. B. Name, Profilbild) und fortlaufend deine Standortdaten (GPS) mit dem Spielserver und der Spielgruppe geteilt werden. Es gelten zusätzlich die Datenschutzbestimmungen der jeweiligen Anbieter.</li>
-                <li><b>Chatgruppe:</b> Die Gruppe bleibt nach Beendigung des Spiels bestehen, falls du in einer künftigen Runde erneut mitspielen möchtest. Du kannst die Gruppe selbstverständlich jederzeit selbstständig verlassen.</li>
+                <li><b>Standortdaten:</b> Die Erfassung der Geodaten via Traccar dient ausschließlich der Spieldurchführung. Alle Daten werden nach Abschluss des Spiels vertraulich behandelt.</li>
+                <li><b>Haftung:</b> Die Teilnahme erfolgt auf eigene Gefahr. Alle Teilnehmenden verpflichten sich zur Einhaltung der Verkehrsregeln und zur gegenseitigen Rücksichtnahme.</li>
             </ul>
-            <p><i>Verantwortlicher für die Datenverarbeitung im Rahmen des Spiels:<br>Tim Beutling, VCD Kreisverband Braunschweig<br>E-Mail: <a href="mailto:tim.beutling@vcd-bs.de" style="color: #049EAB; text-decoration: none;">tim.beutling@vcd-bs.de</a></i></p>
         </div>
 
         <div style="text-align: center; margin-bottom: 40px;">

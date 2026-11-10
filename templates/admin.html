@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Catch Me</title>
+    <title>Admin - Mister X</title>
     <!-- VCD Hausschriften laden -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,116 +11,85 @@
     <!-- Leaflet CSS für die Karte -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { font-family: 'Roboto', Arial, sans-serif; padding: 20px; max-width: 950px; margin: auto; background-color: #f4f7f6; color: #333; }
+        body { font-family: 'Roboto', Arial, sans-serif; padding: 20px; max-width: 980px; margin: auto; background-color: #f4f7f6; color: #333; }
         h1, h2, h3, h4 { font-family: 'Roboto Slab', serif; font-weight: 700; color: #049EAB; margin-top: 0; }
         .header-section { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #049EAB; }
-        .header-section img { height: 60px; max-width: 100%; }
+        .header-section img { height: 55px; max-width: 100%; }
         
-        .admin-timer { background: #fff; border: 2px solid #333; padding: 15px; text-align: center; font-weight: 900; font-size: 1.2em; margin-bottom: 30px; color: #333; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-        .box { background: white; padding: 25px; border: 1px solid #ddd; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .admin-timer { background: #fff; border: 2px solid #333; padding: 14px; text-align: center; font-weight: 900; font-size: 1.15em; margin-bottom: 25px; color: #333; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border-radius: 4px; }
+        .box { background: white; padding: 25px; border: 1px solid #ddd; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border-radius: 4px; }
         
-        .btn { padding: 10px 18px; border: none; cursor: pointer; font-family: 'Roboto', sans-serif; font-weight: 900; color: white; text-transform: uppercase; font-size: 0.85em; letter-spacing: 0.5px; transition: background-color 0.2s ease; box-sizing: border-box; }
-        .btn-green { background-color: #AEC905; color: #333; }
-        .btn-green:hover { background-color: #9cb404; }
+        .btn { padding: 10px 18px; border: none; cursor: pointer; font-family: 'Roboto', sans-serif; font-weight: 900; color: white; text-transform: uppercase; font-size: 0.85em; letter-spacing: 0.5px; transition: background-color 0.2s ease; box-sizing: border-box; border-radius: 3px; }
+        .btn-green { background-color: #049EAB; color: white; }
+        .btn-green:hover { background-color: #038c98; }
         .btn-petrol { background-color: #049EAB; }
         .btn-petrol:hover { background-color: #038c98; }
-        .btn-orange { background-color: #EB6502; }
+        .btn-orange { background-color: #EB6502; color: white; }
         .btn-orange:hover { background-color: #d15902; }
         .btn-neutral { background-color: #6c757d; }
         .btn-neutral:hover { background-color: #5a6268; }
         
         .notifications { background: #fdfdfd; border-left: 5px solid #EB6502; }
-        .req-item { display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px; margin-bottom: 10px; border: 1px solid #eee; }
-        .req-actions { display: flex; gap: 5px; }
-        .late-badge { color: #EB6502; font-weight: bold; font-size: 0.85em; margin-right: 5px; }
-        .gps-wait-badge { background: #e6f7f8; color: #049EAB; border: 1px solid #049EAB; padding: 2px 6px; font-weight: bold; font-size: 0.8em; margin-right: 5px; border-radius: 4px; }
+        .req-item { display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px; margin-bottom: 10px; border: 1px solid #eee; border-radius: 4px; }
+        .req-actions { display: flex; gap: 8px; }
         
         .team-urls { background: #f9f9f9; border-left: 5px solid #049EAB; }
         .url-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-        .url-row b { width: 150px; }
-        .url-input { flex: 1; padding: 8px; border: 1px solid #ccc; font-family: monospace; font-size: 14px; box-sizing: border-box; }
+        .url-row b { width: 160px; font-size: 0.9em; }
+        .url-input { flex: 1; padding: 8px; border: 1px solid #ccc; font-family: monospace; font-size: 13.5px; box-sizing: border-box; border-radius: 3px; }
 
-        .stop-item { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; align-items: center; }
-        .stop-controls { display: flex; gap: 10px; align-items: center; }
-        select { padding: 8px; border: 1px solid #ccc; font-size: 14px; font-family: 'Roboto', sans-serif; box-sizing: border-box; }
-        
         .team-rank { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
         .team-rank:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-        .team-score { font-size: 1.2em; font-weight: 700; color: #049EAB; }
-        .role-badge { font-size: 0.7em; padding: 4px 8px; color: white; margin-left: 10px; vertical-align: middle; text-transform: uppercase; font-weight: 900; }
-        .badge-catcher { background-color: #EB6502; }
-        .badge-runner { background-color: #AEC905; color: #333; }
-        .badge-keine { background-color: #6c757d; color: white; }
-        .team-details { font-size: 0.9em; color: #555; margin-top: 8px; line-height: 1.6em; }
+        .team-score { font-size: 1.15em; font-weight: 700; color: #049EAB; }
+        .role-badge { font-size: 0.7em; padding: 4px 8px; color: white; margin-left: 10px; vertical-align: middle; text-transform: uppercase; font-weight: 900; border-radius: 3px; }
+        .badge-hunter { background-color: #049EAB; }
+        .badge-mister { background-color: #EB6502; }
+        .team-details { font-size: 0.88em; color: #555; margin-top: 8px; line-height: 1.6em; }
         
         .table-wrapper { width: 100%; overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.95em; }
-        th, td { padding: 12px 10px; border-bottom: 1px solid #eee; min-width: 120px; }
-        th { border-bottom: 2px solid #049EAB; color: #049EAB; }
-        .time-meta { font-size: 0.82em; color: #666; margin-top: 4px; }
-        .time-meta b { color: #049EAB; }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.92em; }
+        th, td { padding: 10px; border-bottom: 1px solid #eee; min-width: 120px; }
+        th { border-bottom: 2px solid #049EAB; color: #049EAB; font-weight: 700; }
+        .time-meta { font-size: 0.8em; color: #666; margin-top: 3px; }
 
-        .manual-catch-wrapper { display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; background: #f9f9f9; padding: 15px; border: 1px solid #eee; }
+        .manual-catch-wrapper { display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; background: #f9f9f9; padding: 15px; border: 1px solid #eee; border-radius: 4px; }
         .manual-catch-col { display: flex; flex-direction: column; }
-        
-        /* Custom Factor Map Icon */
-        .custom-factor-icon, .custom-bonus-stop-icon { background: transparent; border: none; }
-        @keyframes pulse-bonus {
-            0% { transform: scale(1); box-shadow: 0 0 6px #e11d48; }
-            50% { transform: scale(1.15); box-shadow: 0 0 14px #e11d48; }
-            100% { transform: scale(1); box-shadow: 0 0 6px #e11d48; }
-        }
+        select, input[type="number"], input[type="text"] { padding: 8px 10px; border: 1px solid #ccc; font-size: 14px; font-family: 'Roboto', sans-serif; box-sizing: border-box; border-radius: 3px; }
 
         /* Offline-Details Accordion */
         .offline-details { 
-            margin-top: 12px; 
+            margin-top: 8px; 
             background: #fdfdfd; 
             border-left: 4px solid #EB6502; 
-            padding: 10px 15px; 
+            padding: 8px 12px; 
             border-radius: 0 4px 4px 0;
             box-shadow: 0 1px 3px rgba(0,0,0,0.03);
         }
         .offline-details summary { 
             font-weight: 700; 
-            font-size: 0.9em; 
+            font-size: 0.85em; 
             color: #333; 
             cursor: pointer; 
             outline: none;
-            transition: color 0.2s ease;
-        }
-        .offline-details summary:hover { 
-            color: #EB6502; 
         }
         .offline-details ul { 
-            margin: 10px 0 0 20px; 
+            margin: 6px 0 0 18px; 
             padding: 0; 
-            font-size: 0.85em; 
+            font-size: 0.82em; 
             color: #555; 
-            line-height: 1.6;
-        }
-        .offline-details li { 
-            margin-bottom: 4px; 
-            padding-bottom: 4px; 
-            border-bottom: 1px dotted #ddd; 
-        }
-        .offline-details li:last-child { 
-            border-bottom: none; 
-            margin-bottom: 0; 
-            padding-bottom: 0; 
+            line-height: 1.5;
         }
 
         @media (max-width: 768px) {
             body { padding: 10px; }
             .box { padding: 15px; }
             .header-section { flex-direction: column; align-items: center; text-align: center; gap: 15px; }
-            .req-item { flex-direction: column; align-items: flex-start; gap: 15px; }
+            .req-item { flex-direction: column; align-items: flex-start; gap: 12px; }
             .req-actions { width: 100%; flex-direction: column; }
             .req-actions .btn { width: 100%; }
             .url-row { flex-direction: column; align-items: flex-start; gap: 5px; }
             .url-row b { width: 100%; }
             .url-input { width: 100%; }
-            .stop-item { flex-direction: column; align-items: flex-start; gap: 10px; }
-            .stop-controls { width: 100%; flex-direction: column; align-items: stretch; }
             .manual-catch-wrapper { flex-direction: column; align-items: stretch; gap: 10px; }
         }
     </style>
@@ -137,100 +106,82 @@
     <div class="header-section">
         <div>
             <h1>Admin Console</h1>
-            <p style="margin: 5px 0 0 0; color: #666;">Catch Me - Spielverwaltung</p>
+            <p style="margin: 5px 0 0 0; color: #666;">Mister X - Spielleitung & Monitoring (Frankfurt am Main)</p>
         </div>
         <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo">
     </div>
     
     <div class="admin-timer" id="admin-timer">Timer wird geladen...</div>
 
-    <!-- 1. Ausstehende Anfragen -->
+    <!-- 1. Ausstehende Fang-Anfragen -->
     <div class="box notifications" id="notifications-container">
-        <h3>Ausstehende Anfragen ({{ pending_requests|length }})</h3>
+        <h3>Ausstehende Fang-Anfragen ({{ pending_requests|length }})</h3>
         {% for req in pending_requests %}
         <div class="req-item">
             <span>
-                {% if req.is_late %}<span class="late-badge">[ZU SPÄT EINGETRAGEN]</span>{% endif %}
-                {% if req.gps_check_until %}<span class="gps-wait-badge">⏳ 1-Min. GPS-Nachprüfung läuft...</span>{% endif %}
-                {% if req.detected_actual_timestamp %}<span class="gps-delayed-badge" style="background: #16a34a; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; font-weight: bold; margin-right: 5px;">✅ Team war vor Ort (Tatsächliche Zeit: {{ req.detected_actual_timestamp | iso_time }}, Haltestelle war aktiv – Eintrag > 5 Min. verzögert)</span>{% endif %}
-                {% if req.type == 'stop' %}
-                    Team <b>{{ req.team_name }}</b> möchte Haltestelle <b>{{ req.stop }}</b> gutschreiben.
-                {% else %}
-                    Meldung von <b>{{ req.reporter_name }}</b>: <b>{{ req.hunter_name }}</b> fängt <b>{{ req.prey_name }}</b>.
-                {% endif %}
+                ⚔️ Meldung von <b>{{ req.reporter_name }}</b>: <b>{{ req.hunter_name }}</b> fängt <b>{{ req.prey_name }}</b>
+                <span style="font-size: 0.85em; color: #777; margin-left: 8px;">(Eingereicht: {{ req.timestamp | iso_time }})</span>
             </span>
             <div class="req-actions">
                 <button class="btn btn-green" onclick="resolveReq('{{ req.id }}', 'approve')">Bestätigen</button>
-                <button class="btn btn-neutral" onclick="resolveReq('{{ req.id }}', 'reject')">Ablehnen</button>
+                <button class="btn btn-neutral" style="background:#dc2626;" onclick="resolveReq('{{ req.id }}', 'reject')">Ablehnen (Löschen)</button>
             </div>
         </div>
         {% else %}
-        <p style="margin: 0; color: #666; font-style: italic;">Keine neuen Anfragen vorhanden.</p>
+        <p style="margin: 0; color: #666; font-style: italic;">Keine offenen Fanganfragen vorhanden.</p>
         {% endfor %}
     </div>
 
     <!-- 2. Rangliste & Team-Status -->
     <div class="box leaderboard" id="admin-leaderboard-box">
-        <h3>Rangliste & Team-Status</h3>
+        <h3>Team-Übersicht & Punkte</h3>
         {% for entry in leaderboard %}
         <div class="team-rank">
             <div class="team-score">
                 {{ loop.index }}. {{ entry.display_name }} 
                 {% if entry.deactivated %}<span style="color:red; font-size: 0.7em;">(DEAKTIVIERT)</span>{% endif %}  
-                — {{ entry.score }} Punkte
-                <span class="role-badge {{ 'badge-catcher' if entry.role == 'fänger' else 'badge-runner' if entry.role == 'läufer' else 'badge-keine' }}">{{ entry.role }}</span>
-                {% if enable_swap and phase in ['pre_game', 'game'] and not roles_swapped and not entry.deactivated and entry.next_role != 'keine' %}
-                    <span style="font-size: 0.6em; color: #888; font-weight: normal; margin-left: 5px; text-transform: uppercase;">(Danach: {{ entry.next_role }})</span>
-                {% endif %}
+                — {% if entry.role == 'mister_x' %}<i>Mister X</i>{% else %}<b>{{ entry.score }} Punkte</b>{% endif %}
+                <span class="role-badge {{ 'badge-mister' if entry.role == 'mister_x' else 'badge-hunter' }}">
+                    {{ 'Mister X' if entry.role == 'mister_x' else 'Fänger' }}
+                </span>
             </div>
             <div class="team-details">
-                <div><b>Erreichte Haltestellen:</b>
-                    {% if entry.stops %}{{ entry.stops | join(', ') }}{% else %}<i>Keine</i>{% endif %}
-                </div>
-                <div><b>Andere Teams gefangen:</b>
+                {% if entry.role == 'fänger' %}
+                <div><b>Mister X gefangen:</b>
                     {% if entry.caught %}
                         {% for c in entry.caught %}{{ team_names_map[c] }}{% if not loop.last %}, {% endif %}{% endfor %}
-                    {% else %}<i>Niemanden</i>{% endif %}
+                    {% else %}<i>Noch niemanden gefangen</i>{% endif %}
                 </div>
+                {% else %}
                 <div><b>Gefangen worden von:</b>
                     {% if entry.caught_by %}
                         {% for c in entry.caught_by %}{{ team_names_map[c] }}{% if not loop.last %}, {% endif %}{% endfor %}
                     {% else %}<i>Noch ungeschlagen</i>{% endif %}
                 </div>
+                {% endif %}
+
                 {% if entry.offline_warnings|length > 0 %}
                 <details class="offline-details" data-team-id="{{ entry.id }}" data-type="offline">
                     <summary>⚠️ Offlinezeiten (Gesamt: {{ (entry.total_offline_seconds / 60) | round | int }} Min.)</summary>
                     <ul>
                     {% for warn in entry.offline_warnings %}
-                        <li>
-                            Ab {{ warn.start_time_str }} Uhr: 
-                            {% if warn.end_time_str %}
-                                bis {{ warn.end_time_str }} Uhr
-                            {% else %}
-                                <b style="color: #EB6502;">bis jetzt</b>
-                            {% endif %}
-                        </li>
+                        <li>Ab {{ warn.start_time_str }} Uhr: {% if warn.end_time_str %}bis {{ warn.end_time_str }} Uhr{% else %}<b style="color: #EB6502;">bis jetzt</b>{% endif %}</li>
                     {% endfor %}
                     </ul>
                 </details>
                 {% endif %}
+
                 {% if entry.geofence_violations and entry.geofence_violations|length > 0 %}
                 <details class="offline-details" data-team-id="{{ entry.id }}" data-type="violation" style="margin-top: 5px;">
                     <summary style="color: #dc2626; font-weight: bold;">🚨 Spielfeldverstöße (Gesamt: {{ (entry.total_violation_seconds / 60) | round | int }} Min.)</summary>
                     <ul>
                     {% for warn in entry.geofence_violations %}
-                        <li>
-                            Ab {{ warn.start_time_str }} Uhr: 
-                            {% if warn.end_time_str %}
-                                bis {{ warn.end_time_str }} Uhr
-                            {% else %}
-                                <b style="color: #dc2626;">bis jetzt (aktiv)</b>
-                            {% endif %}
-                        </li>
+                        <li>Ab {{ warn.start_time_str }} Uhr: {% if warn.end_time_str %}bis {{ warn.end_time_str }} Uhr{% else %}<b style="color: #dc2626;">bis jetzt (aktiv)</b>{% endif %}</li>
                     {% endfor %}
                     </ul>
                 </details>
                 {% endif %}
+
                 {% if entry.manual_points != 0 %}
                 <div><b>Manuelle Korrektur:</b> {{ "+%s" % entry.manual_points if entry.manual_points > 0 else entry.manual_points }} Punkte</div>
                 {% endif %}
@@ -239,16 +190,18 @@
         {% endfor %}
     </div>
 
-    <!-- 3. Live Karte (Alle Haltestellen & Teams) -->
+    <!-- 3. Live Karte (Volle Transparenz für Admin) -->
     <div class="box">
-        <h2>Live Karte (Alle Haltestellen & Teams)</h2>
-        <p style="font-size: 0.9em; color: #555; margin-bottom: 15px;">Aktivierte Haltestellen sowie alle aktiven Teams (nach Rolle eingefärbt) werden live angezeigt.</p>
-        <div id="admin-map" style="height: 450px; width: 100%; border: 1px solid #ddd; z-index: 1;"></div>
+        <h2>Live Karte (Echtzeit-Tracking aller Teams)</h2>
+        <p style="font-size: 0.9em; color: #555; margin-bottom: 12px;">
+            Spielleiter-Ansicht mit Klarnamen: Fänger (Petrol), Mister X Live-Standorte (Orange) und veröffentlichte Intervall-Snapshots (X-Marker).
+        </p>
+        <div id="admin-map" style="height: 480px; width: 100%; border: 1px solid #ddd; z-index: 1; border-radius: 4px;"></div>
     </div>
 
     <!-- 4. Geheime Zugangslinks -->
     <div class="box team-urls">
-        <h3>Geheime Zugangslinks</h3>
+        <h3>Geheime Zugangslinks der Teams</h3>
         {% for team_name, url in team_urls.items() %}
         <div class="url-row">
             <b>{{ team_name }}:</b>
@@ -274,8 +227,7 @@
                     </tr>
                 </thead>
                 <tbody id="history-table-body">
-                    {% set filtered_logs = action_log | rejectattr('type', 'equalto', 'role_change') | rejectattr('type', 'equalto', 'gps_warning') | list %}
-                    {% for log in filtered_logs[:20] %}
+                    {% for log in action_log[:20] %}
                     <tr>
                         <td>
                             {{ log.desc }}
@@ -283,9 +235,6 @@
                             {% set eff_ts = log.actual_timestamp if is_actual else log.timestamp %}
                             <div class="time-meta">
                                 <span style="color: {{ '#16a34a' if is_actual else '#111' }}; font-weight: bold;">{{ eff_ts | iso_time }}</span>
-                                {% if is_actual and log.type == 'stop' %}
-                                    <span style="color: #16a34a; font-weight: bold; margin-left: 5px;">(GPS Auto-Freigabe)</span>
-                                {% endif %}
                             </div>
                         </td>
                         <td>
@@ -316,55 +265,35 @@
     <!-- 6. Manuelles Eingreifen -->
     <div class="box">
         <h2>Manuelles Eingreifen</h2>
-        <p style="font-size: 0.9em; color: #555; margin-bottom: 25px;">Zuweisungen korrigieren oder direkte Systemeingaben tätigen. Unabhängig vom Spielstatus jederzeit möglich.</p>
-        
-        <h4 style="margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Haltestelle zuweisen / austauschen</h4>
-        <div class="manual-catch-wrapper">
-            <div class="manual-catch-col" style="flex: 1; min-width: 220px;">
-                <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Haltestelle auswählen:</label>
-                <select id="assign-stop-select" style="width: 100%;">
-                    {% for name in active_stops|sort %}
-                    <option value="{{ name }}">{{ name }}</option>
-                    {% else %}
-                    <option value="">-- Keine aktiven Haltestellen --</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="manual-catch-col" style="flex: 1; min-width: 220px;">
-                <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Team zuweisen (optional):</label>
-                <select id="assign-team-select" style="width: 100%;">
-                    <option value="">-- Kein Team (Neutral) --</option>
-                    {% for t in teams %}
-                    <option value="{{ t.id }}">{{ t.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <button class="btn btn-petrol" onclick="catchStopFromDropdown(this)" style="white-space: nowrap;">Haltestelle austauschen</button>
-        </div>
+        <p style="font-size: 0.9em; color: #555; margin-bottom: 20px;">Direkte Systemeingaben tätigen oder Fangpunkte manuell korrigieren.</p>
 
-        <h4 style="margin-top: 40px; margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Catch manuell eintragen</h4>
+        <h4 style="margin-top: 20px; margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Catch manuell eintragen</h4>
         <div class="manual-catch-wrapper">
             <div class="manual-catch-col">
-                <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Jäger (Fänger):</label>
+                <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Fänger-Team:</label>
                 <select id="hunter-select">
-                    {% for t in teams %}
+                    {% for t in faenger_teams %}
                     <option value="{{ t.id }}">{{ t.name }}</option>
+                    {% else %}
+                    <option value="">-- Keine Fänger-Teams --</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="catch-divider" style="font-size: 0.9em; color: #666; font-weight: bold; padding-bottom: 8px;">fängt</div>
             <div class="manual-catch-col">
-                <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Gejagter (Läufer):</label>
+                <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Mister X:</label>
                 <select id="prey-select">
-                    {% for t in teams %}
+                    {% for t in mister_x_teams %}
                     <option value="{{ t.id }}">{{ t.name }}</option>
+                    {% else %}
+                    <option value="">-- Keine Mister X Teams --</option>
                     {% endfor %}
                 </select>
             </div>
             <button class="btn btn-orange" onclick="catchTeam()">Eintrag Speichern</button>
         </div>
 
-        <h4 style="margin-top: 40px; margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Punkte manuell anpassen (z. B. bei GPS-Regelverstoß)</h4>
+        <h4 style="margin-top: 30px; margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Punkte manuell anpassen (z. B. Strafpunkte)</h4>
         <div class="manual-catch-wrapper">
             <div class="manual-catch-col">
                 <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Team auswählen:</label>
@@ -382,25 +311,20 @@
         </div>
     </div>
 
-    <div style="text-align: center; margin-top: 20px; margin-bottom: 40px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
-        <a href="/adminconsole-{{ admin_url }}/replay" target="_blank" class="btn btn-green" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">🎬 Zum Live-Replay</a>
-        <a href="/adminconsole-{{ admin_url }}/settings" class="btn btn-petrol" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">⚙️ Zu den Spiel-Einstellungen</a>
-        <a href="/traccar_debug-{{ admin_url }}" class="btn btn-neutral" style="padding: 15px 30px; font-size: 1em; text-decoration: none; display: inline-block;">🛰️ Traccar Diagnose & Debug</a>
+    <!-- 7. Schnellnavigation -->
+    <div style="text-align: center; margin-top: 20px; margin-bottom: 40px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
+        <a href="/adminconsole-{{ admin_url }}/replay" target="_blank" class="btn btn-green" style="padding: 13px 24px; font-size: 0.95em; text-decoration: none;">🎬 Zum Live-Replay</a>
+        <a href="/adminconsole-{{ admin_url }}/settings" class="btn btn-petrol" style="padding: 13px 24px; font-size: 0.95em; text-decoration: none;">⚙️ Spiel-Einstellungen</a>
+        <a href="/adminconsole-{{ admin_url }}/stop_config" class="btn btn-orange" style="padding: 13px 24px; font-size: 0.95em; text-decoration: none;">🗺️ Geofencing & Spielfeld</a>
+        <a href="/traccar_debug-{{ admin_url }}" class="btn btn-neutral" style="padding: 13px 24px; font-size: 0.95em; text-decoration: none;">🛰️ Traccar Diagnose</a>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        const enableSwap = {{ 'true' if enable_swap else 'false' }};
-        const baseStopPoints = {{ points_stop_reached | default(2) }};
-        function formatStopPoints(factor) {
-            const pts = Number((factor * baseStopPoints).toFixed(2));
-            return `${pts} ${pts === 1 ? 'Punkt' : 'Punkte'}`;
-        }
         let serverOffset = 0;
-        let startTs = 0, endTs = 0, midTs = 0, postEndTs = 0;
+        let startTs = 0, endTs = 0;
         let reloadedTrigger = false;
         let lastKnownPhase = null;
-        let lastTeamLocations = []; // Globale Speicherung für den Sekundentakt-Timer
         let allActionLogs = {{ action_log | tojson | safe }};
         let currentHistoryPage = 1;
         const HISTORY_PAGE_SIZE = 20;
@@ -409,15 +333,12 @@
             const serverNowStr = "{{ now_time }}";
             const startStr = "{{ start_time }}";
             const endStr = "{{ end_time }}";
-            const midStr = "{{ mid_time }}";
             
             if (serverNowStr && startStr && endStr) {
                 const serverNow = new Date(serverNowStr).getTime();
                 serverOffset = serverNow - Date.now();
                 startTs = new Date(startStr).getTime();
                 endTs = new Date(endStr).getTime();
-                postEndTs = endTs + (5 * 60 * 1000);
-                if (midStr && midStr !== "None") midTs = new Date(midStr).getTime();
             }
         }
         
@@ -430,47 +351,25 @@
         
         function updateAdminTimer() {
             const el = document.getElementById('admin-timer');
-            if (!startTs || !endTs) { el.innerHTML = "Kein Spielzeiten konfiguriert."; return; }
+            if (!startTs || !endTs) { el.innerHTML = "Keine Spielzeiten konfiguriert."; return; }
 
             const now = Date.now() + serverOffset;
-            const preStartTs = startTs - (5 * 60 * 1000);
-            
             const startDateFormatted = new Date(startTs).toLocaleString('de-DE', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) + ' Uhr';
             
-            if (now < preStartTs) {
-                el.innerHTML = `INAKTIV - Das Spiel startet am ${startDateFormatted}`;
+            if (now < startTs) {
+                el.innerHTML = `INAKTIV - Start am ${startDateFormatted} (in ${formatTime(startTs - now)})`;
                 el.style.borderColor = "#333"; el.style.color = "#333";
-            } else if (now >= preStartTs && now < startTs) {
-                el.innerHTML = `PRE-GAME (Dashboard Read-Only für Spieler) - Spiel startet in ${formatTime(startTs - now)}`;
-                el.style.borderColor = "#AEC905"; el.style.color = "#AEC905";
             } else if (now >= startTs && now <= endTs) {
-                let swapInfo = "";
-                if (midTs && now < midTs) swapInfo = ` | Swap in: ${formatTime(midTs - now)}`;
-                el.innerHTML = `SPIEL AKTIV - Ende in ${formatTime(endTs - now)} ${swapInfo}`;
+                el.innerHTML = `SPIEL AKTIV - Ende in ${formatTime(endTs - now)}`;
                 el.style.borderColor = "#EB6502"; el.style.color = "#EB6502";
-            } else if (now > endTs && now <= postEndTs) {
-                el.innerHTML = `POST-GAME (Nachtrag von Aktionen ist noch für Spieler möglich) - Auswertung läuft`;
-                el.style.borderColor = "#049EAB"; el.style.color = "#049EAB";
             } else {
-                el.innerHTML = "SPIELRUNDE ABGESCHLOSSEN";
-                el.style.borderColor = "#333"; el.style.color = "#333";
+                el.innerHTML = `SPIEL BEENDET (Replay für alle freigeschaltet)`;
+                el.style.borderColor = "#049EAB"; el.style.color = "#049EAB";
             }
 
-            // Sekundengenaue Aktualisierung der Team-Standort-Timer auf der Karte ohne neuen Server-Request
-            if (lastTeamLocations.length > 0) {
-                updateTeamMap(lastTeamLocations);
-            }
-
-            // Sichere Phasen-Reload-Logik
             let currentLogicalPhase = "inactive";
-            if (now >= (startTs - 30 * 60000) + 2000 && now < preStartTs + 2000) currentLogicalPhase = "roles_assigned";
-            if (now >= preStartTs + 2000 && now < startTs + 2000) currentLogicalPhase = "pre_game";
-            if (now >= startTs + 2000 && now <= endTs + 2000) {
-                currentLogicalPhase = "game_first_half";
-                if (enableSwap && midTs && now >= midTs + 2000) currentLogicalPhase = "game_second_half";
-            }
-            if (now > endTs + 2000 && now <= postEndTs + 2000) currentLogicalPhase = "post_game";
-            if (now > postEndTs + 2000) currentLogicalPhase = "finished";
+            if (now >= startTs && now <= endTs) currentLogicalPhase = "game";
+            if (now > endTs) currentLogicalPhase = "finished";
 
             if (lastKnownPhase !== null && lastKnownPhase !== currentLogicalPhase) {
                 if(!reloadedTrigger) { reloadedTrigger = true; window.location.reload(); }
@@ -478,295 +377,299 @@
             lastKnownPhase = currentLogicalPhase;
         }
 
-        initTimer(); setInterval(updateAdminTimer, 1000); updateAdminTimer();
+        initTimer();
+        setInterval(updateAdminTimer, 1000);
+        updateAdminTimer();
 
-        // --- MAP LOGIK FÜR ADMIN ---
-        const adminMap = L.map('admin-map').setView([52.248874, 10.526770], 12);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(adminMap);
-        
-        let allStopsData = [];
-        let mapLayerGroup = L.layerGroup().addTo(adminMap);
-        let teamLayerGroup = L.layerGroup().addTo(adminMap); // Layer für die Spieler-Standorte
-        let adminGeofenceLayer = L.layerGroup().addTo(adminMap);
+        const initialGeofenceOuter = {{ geofence_outer | tojson | safe if geofence_outer else '[]' }};
+        let hasInitialMapFit = false;
+        let latestOuterGeofence = initialGeofenceOuter || [];
+        let latestLocations = [];
+        let latestBroadcasts = [];
 
-        function renderAdminGeofences(outer, exclusion) {
-            adminGeofenceLayer.clearLayers();
+        function autoFitMap(outer, locations, broadcasts) {
             if (outer && Array.isArray(outer) && outer.length >= 3) {
-                const poly = L.polygon(outer, {
-                    color: '#EB6502', // VCD Orange
-                    weight: 3,
-                    fill: false
-                }).addTo(adminGeofenceLayer);
-                poly.bindTooltip("Spielfeldbegrenzung", { sticky: true });
+                map.fitBounds(outer, { padding: [25, 25] });
+                return true;
+            }
+            const bounds = [];
+            (locations || []).forEach(loc => {
+                if (loc && loc.lat != null && loc.lon != null) bounds.push([loc.lat, loc.lon]);
+            });
+            (broadcasts || []).forEach(b => {
+                if (b && b.lat != null && b.lon != null) bounds.push([b.lat, b.lon]);
+            });
+            if (bounds.length > 0) {
+                if (bounds.length === 1) map.setView(bounds[0], 15);
+                else map.fitBounds(bounds, { padding: [35, 35], maxZoom: 16 });
+                return true;
+            }
+            return false;
+        }
+
+        // --- MAP INITIALISIERUNG ---
+        const map = L.map('admin-map').setView([51.1657, 10.4515], 6);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        if (initialGeofenceOuter && initialGeofenceOuter.length >= 3) {
+            map.fitBounds(initialGeofenceOuter, { padding: [25, 25] });
+            hasInitialMapFit = true;
+        }
+
+        const fitControl = L.Control.extend({
+            options: { position: 'topright' },
+            onAdd: function() {
+                const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+                const btn = L.DomUtil.create('a', '', container);
+                btn.href = '#';
+                btn.title = 'Spielfeld / Alle Marker zentrieren';
+                btn.innerHTML = '⛶';
+                btn.style.fontSize = '18px';
+                btn.style.width = '30px';
+                btn.style.height = '30px';
+                btn.style.lineHeight = '30px';
+                btn.style.textAlign = 'center';
+                btn.style.display = 'block';
+                btn.style.background = 'white';
+                btn.style.cursor = 'pointer';
+
+                L.DomEvent.disableClickPropagation(btn);
+                L.DomEvent.on(btn, 'click', function(e) {
+                    L.DomEvent.preventDefault(e);
+                    autoFitMap(latestOuterGeofence, latestLocations, latestBroadcasts);
+                });
+                return container;
+            }
+        });
+        map.addControl(new fitControl());
+
+        let teamLocationsLayer = L.layerGroup().addTo(map);
+        let broadcastsLayer = L.layerGroup().addTo(map);
+        let geofenceLayerGroup = L.layerGroup().addTo(map);
+        let teamMarkers = {};
+
+        function renderGeofences(outer, exclusion) {
+            geofenceLayerGroup.clearLayers();
+            if (outer && Array.isArray(outer) && outer.length >= 3) {
+                L.polygon(outer, { color: '#049EAB', weight: 3, fill: false }).addTo(geofenceLayerGroup);
             }
             if (exclusion && Array.isArray(exclusion) && exclusion.length > 0) {
                 exclusion.forEach(zone => {
                     if (zone && Array.isArray(zone) && zone.length >= 3) {
-                        const poly = L.polygon(zone, {
-                            color: '#e53e3e',
-                            weight: 2,
-                            fillColor: 'url(#red-hatch)',
-                            fillOpacity: 1
-                        }).addTo(adminGeofenceLayer);
-                        poly.bindTooltip("Sperrzone", { sticky: true });
+                        L.polygon(zone, { color: '#e53e3e', weight: 2, fillColor: 'url(#red-hatch)', fillOpacity: 0.8 }).addTo(geofenceLayerGroup);
                     }
                 });
             }
         }
 
-        fetch('/api/all_stops?admin_slug={{ admin_url }}').then(r => r.json()).then(data => {
-            allStopsData = data;
-            let bounds = [];
-            data.forEach(stop => bounds.push([stop.lat, stop.lon]));
-            if(bounds.length > 0) adminMap.fitBounds(bounds);
-            
-            const initialActive = {{ active_stops | tojson | safe }};
-            const initialBonus = {{ bonus_stops | tojson | safe }};
-            updateAdminMap(initialActive, initialBonus);
-        });
-
-        let adminStopMarkers = {};
-        let currentBonusStops = new Set();
-        function updateAdminMap(activeStops, bonusStops) {
-            if (!allStopsData) return;
-            if (bonusStops !== undefined) {
-                currentBonusStops = new Set(bonusStops || []);
-            }
-
-            allStopsData.forEach(stop => {
-                let factorText = '';
-                if (stop.factor > 1) {
-                    factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span>`;
-                } else if (stop.factor < 1) {
-                    factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span>`;
-                }
-                
-                const isActive = activeStops.includes(stop.name);
-                const isBonus = isActive && currentBonusStops.has(stop.name);
-
-                let bonusText = '';
-                if (isBonus) {
-                    bonusText = `<br><span style="color: #e11d48; font-weight: bold;">🎁 Bonushaltestelle (+2 Extrapunkte!)</span>`;
-                }
-
-                let popupContent = `<b>${escapeHtml(stop.name)}</b>${factorText}${bonusText}`;
-
-                if (adminStopMarkers[stop.name] && adminStopMarkers[stop.name]._isActive === isActive && adminStopMarkers[stop.name]._isBonus === isBonus) {
-                    adminStopMarkers[stop.name].setPopupContent(popupContent);
-                } else {
-                    const wasOpen = adminStopMarkers[stop.name] ? adminStopMarkers[stop.name].isPopupOpen() : false;
-                    if (adminStopMarkers[stop.name]) {
-                        mapLayerGroup.removeLayer(adminStopMarkers[stop.name]);
-                    }
-
-                    let marker;
-                    if (isActive) {
-                        let markerOpts = {};
-                        if (isBonus) {
-                            markerOpts.icon = L.divIcon({
-                                className: 'custom-bonus-stop-icon',
-                                html: '<div style="background-color: #e11d48; width: 28px; height: 28px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px #e11d48, 0 0 5px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; font-size: 15px; animation: pulse-bonus 1.5s infinite;">🎁</div>',
-                                iconSize: [34, 34],
-                                iconAnchor: [17, 17]
-                            });
-                        } else if (stop.factor > 1) {
-                            markerOpts.icon = L.divIcon({
-                                className: 'custom-factor-icon',
-                                html: '<div style="background-color: #EB6502; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⭐</div>',
-                                iconSize: [30, 30],
-                                iconAnchor: [15, 15]
-                            });
-                        } else if (stop.factor < 1) {
-                            markerOpts.icon = L.divIcon({
-                                className: 'custom-factor-icon',
-                                html: '<div style="background-color: #6c757d; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">🔽</div>',
-                                iconSize: [30, 30],
-                                iconAnchor: [15, 15]
-                            });
-                        }
-                        marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
-                    } else {
-                        let color = stop.factor > 1 ? '#EB6502' : (stop.factor < 1 ? '#333' : '#6c757d');
-                        let radius = stop.factor !== 1 ? 6 : 4;
-                        marker = L.circleMarker([stop.lat, stop.lon], {
-                            color: color, fillColor: color, fillOpacity: 0.5, radius: radius, weight: 1
-                        }).bindPopup(popupContent);
-                    }
-
-                    marker._isActive = isActive;
-                    marker._isBonus = isBonus;
-                    mapLayerGroup.addLayer(marker);
-                    adminStopMarkers[stop.name] = marker;
-                    if (wasOpen) {
-                        marker.openPopup();
-                    }
-                }
-            });
-        }
-
-        // Funktion zur sekundengenauen Darstellung der Spieler auf der Karte
-        let adminTeamMarkers = {};
-        function updateTeamMap(teamLocations) {
-            if (!teamLocations) return;
-
-            const now = Date.now() + serverOffset;
+        function renderTeamLocations(locations, broadcasts) {
             const currentKeys = new Set();
+            const now = Date.now() + serverOffset;
 
-            teamLocations.forEach(team => {
-                const markerKey = String(team.id || team.name);
+            // 1. Live Standorte aller Teams
+            (locations || []).forEach(loc => {
+                const markerKey = 'team_' + loc.id;
                 currentKeys.add(markerKey);
 
-                // --- Status des <details>-Tags merken, falls das Popup gerade offen ist ---
-                let isDetailsOpen = false;
-                if (adminTeamMarkers[markerKey] && adminTeamMarkers[markerKey].isPopupOpen()) {
-                    const popupEl = adminTeamMarkers[markerKey].getPopup().getElement();
-                    if (popupEl) {
-                        const detailsTag = popupEl.querySelector('details');
-                        if (detailsTag && detailsTag.open) {
-                            isDetailsOpen = true;
-                        }
-                    }
-                }
-
-                let bgColor = '#6c757d'; // Standard (Keine Rolle)
-                if (team.role === 'fänger') bgColor = '#EB6502';
-                else if (team.role === 'läufer') bgColor = '#AEC905';
-
-                const updatedMs = typeof team.updated_at === 'number'
-                    ? team.updated_at * 1000
-                    : new Date(team.updated_at).getTime();
-                const diffSec = Math.max(0, Math.floor((now - updatedMs) / 1000));
-                let timeAgo = "";
-
-                if (diffSec < 60) {
-                    timeAgo = `vor ${diffSec} Sekunde${diffSec !== 1 ? 'n' : ''}`;
-                } else if (diffSec < 3600) {
-                    const mins = Math.floor(diffSec / 60);
-                    timeAgo = `vor ${mins} Minute${mins !== 1 ? 'n' : ''}`;
-                } else {
-                    const hours = Math.floor(diffSec / 3600);
-                    const mins = Math.floor((diffSec % 3600) / 60);
-                    timeAgo = `vor ${hours} Std. ${mins} Min.`;
-                }
-
-                // Telemetrie-Daten aufbereiten
-                const hasTelemetry = [
-                    team.batteryLevel, team.charge, team.motion,
-                    team.altitude, team.speed, team.course, team.accuracy
-                ].some(v => v !== null && v !== undefined);
-
-                const battStr = (team.batteryLevel !== null && team.batteryLevel !== undefined) ? `${Number(team.batteryLevel).toFixed(1)} %` : '<i>k. A.</i>';
-                const chargeStr = (team.charge !== null && team.charge !== undefined) ? ` (${team.charge ? 'Lädt' : 'Entlädt'})` : '';
-                const motionStr = (team.motion !== null && team.motion !== undefined) ? (team.motion ? 'Ja' : 'Nein') : '<i>k. A.</i>';
-                const speedStr = (team.speed !== null && team.speed !== undefined) ? `${(Number(team.speed) * 3.6).toFixed(1)} km/h` : '<i>k. A.</i>';
-                const altStr = (team.altitude !== null && team.altitude !== undefined) ? `${Number(team.altitude).toFixed(1)} m` : '<i>k. A.</i>';
-                const courseStr = (team.course !== null && team.course !== undefined) ? `${Math.round(team.course)}°` : '<i>k. A.</i>';
-                const accStr = (team.accuracy !== null && team.accuracy !== undefined) ? `${Number(team.accuracy).toFixed(1)} m` : '<i>k. A.</i>';
-
-                let telemetryHtml = '';
-                if (hasTelemetry) {
-                    // --- Attribut "open" wird dynamisch gesetzt, wenn das Menü vorher offen war ---
-                    telemetryHtml = `
-                        <details ${isDetailsOpen ? 'open' : ''} style="margin-top: 8px; text-align: left; font-size: 0.85em; background: #f4f7f6; padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
-                            <summary style="cursor: pointer; font-weight: bold; color: #049EAB; outline: none;">GPS Details 🔽</summary>
-                            <div style="margin-top: 8px; line-height: 1.5; color: #444;">
-                                🔋 Akku: <b>${battStr}${chargeStr}</b><br>
-                                🏃 Bewegung: <b>${motionStr}</b><br>
-                                💨 Geschw.: <b>${speedStr}</b><br>
-                                ⛰️ Höhe: <b>${altStr}</b><br>
-                                🧭 Kurs: <b>${courseStr}</b><br>
-                                🎯 Genauigkeit: <b>${accStr}</b>
-                            </div>
-                        </details>
-                    `;
-                }
+                const isMister = (loc.role === 'mister_x');
+                const color = isMister ? '#EB6502' : '#049EAB';
 
                 const icon = L.divIcon({
                     className: 'custom-team-icon',
-                    html: `<div style="background-color: ${bgColor}; width: 18px; height: 18px; border-radius: 50%; border: 3px solid #333; box-shadow: 0 0 6px rgba(0,0,0,0.6);"></div>`,
-                    iconSize: [24, 24],
-                    iconAnchor: [12, 12]
+                    html: `
+                        <div style="background-color: ${color}; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 8px rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; color:white; font-size:10px; font-weight:bold;">
+                            ${isMister ? 'X' : 'F'}
+                        </div>
+                    `,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
                 });
 
-                const popupContent = `
-                    <div style="text-align:center; font-family: 'Roboto', sans-serif; min-width: 160px;">
-                        <b style="font-size: 1.2em; color: #333;">${escapeHtml(team.name)}</b><br>
-                        <span style="font-size: 0.9em; font-weight: bold; color: ${bgColor}; text-transform: uppercase;">${escapeHtml(team.role)}</span><br>
-                        <div style="margin-top: 8px; font-size: 0.85em; color: #666; border-top: 1px solid #ccc; padding-top: 5px;">
-                            Letztes GPS-Update:<br><b style="color: ${diffSec > 120 ? '#EB6502' : '#22c55e'};">${timeAgo}</b>
+                let updatedMs = typeof loc.updated_at === 'number' ? loc.updated_at * 1000 : new Date(loc.updated_at).getTime();
+                const diffSec = Math.max(0, Math.floor((now - updatedMs) / 1000));
+                let timeAgo = diffSec < 60 ? `vor ${diffSec}s` : `vor ${Math.floor(diffSec / 60)} Min.`;
+
+                const popup = `
+                    <div style="font-family:'Roboto',sans-serif; text-align:center;">
+                        <b style="font-size:1.1em; color:${color};">${escapeHtml(loc.name)}</b><br>
+                        <span style="font-size:0.85em; text-transform:uppercase; font-weight:bold; color:#555;">${isMister ? 'Mister X' : 'Fänger'}</span><br>
+                        <div style="margin-top:6px; font-size:0.82em; color:#666; border-top:1px solid #eee; padding-top:4px;">
+                            Signal: ${timeAgo}<br>
+                            ${loc.batteryLevel !== null && loc.batteryLevel !== undefined ? 'Akku: ' + Math.round(loc.batteryLevel) + '%<br>' : ''}
+                            ${loc.speed ? 'Geschwindigkeit: ' + (loc.speed * 3.6).toFixed(1) + ' km/h' : ''}
                         </div>
-                        ${telemetryHtml}
                     </div>
                 `;
 
-                if (adminTeamMarkers[markerKey]) {
-                    const m = adminTeamMarkers[markerKey];
-                    m.setLatLng([team.lat, team.lon]);
-                    m.setIcon(icon);
-                    m.setPopupContent(popupContent);
+                if (teamMarkers[markerKey]) {
+                    teamMarkers[markerKey].setLatLng([loc.lat, loc.lon]);
+                    teamMarkers[markerKey].setPopupContent(popup);
                 } else {
-                    const m = L.marker([team.lat, team.lon], {icon: icon, zIndexOffset: 1000})
-                        .bindPopup(popupContent)
-                        .addTo(teamLayerGroup);
-                    adminTeamMarkers[markerKey] = m;
+                    teamMarkers[markerKey] = L.marker([loc.lat, loc.lon], { icon: icon }).bindPopup(popup).addTo(teamLocationsLayer);
                 }
             });
 
-            for (const key in adminTeamMarkers) {
+            // 2. Zuletzt veröffentlichte Broadcasts
+            broadcastsLayer.clearLayers();
+            (broadcasts || []).forEach(b => {
+                if (b.lat && b.lon) {
+                    const bIcon = L.divIcon({
+                        className: 'custom-broadcast-icon',
+                        html: `
+                            <div style="background-color: #ffffff; border: 2px dashed #EB6502; width: 22px; height: 22px; border-radius: 50%; box-shadow: 0 0 6px rgba(235,101,2,0.6); display:flex; align-items:center; justify-content:center; color:#EB6502; font-size:11px; font-weight:900;">
+                                📢
+                            </div>
+                        `,
+                        iconSize: [26, 26],
+                        iconAnchor: [13, 13]
+                    });
+
+                    let timeStr = b.interval_time_str ? (b.interval_time_str.endsWith('Uhr') ? b.interval_time_str : b.interval_time_str + ' Uhr') : '';
+                    if (!timeStr && (b.interval_iso || b.published_at)) {
+                        const d = new Date(b.interval_iso || b.published_at);
+                        if (!isNaN(d.getTime())) {
+                            timeStr = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+                        }
+                    }
+
+                    L.marker([b.lat, b.lon], { icon: bIcon }).bindPopup(`
+                        <div style="font-family:'Roboto',sans-serif; text-align:center;">
+                            <b style="color:#EB6502;">📢 Veröffentlichter Snapshot</b><br>
+                            Zeit: <b>${escapeHtml(timeStr || '-')}</b><br>
+                            Linie: <b>${escapeHtml(b.line || '-')}</b> | Haltestelle: <b>${escapeHtml(b.station || '-')}</b><br>
+                            Richtung: <b>${escapeHtml(b.direction || '-')}</b>
+                        </div>
+                    `).addTo(broadcastsLayer);
+                }
+            });
+
+            for (const key in teamMarkers) {
                 if (!currentKeys.has(key)) {
-                    teamLayerGroup.removeLayer(adminTeamMarkers[key]);
-                    delete adminTeamMarkers[key];
+                    teamLocationsLayer.removeLayer(teamMarkers[key]);
+                    delete teamMarkers[key];
                 }
             }
         }
 
-        function copyUrl(elementId) {
-            const el = document.getElementById(elementId);
-            el.select(); document.execCommand("copy"); alert("Link in die Zwischenablage kopiert.");
-        }
-
-        function updateActiveStopsDropdown(activeStops) {
-            const sel = document.getElementById('assign-stop-select');
-            if (!sel || !activeStops) return;
-            const curVal = sel.value;
-            const sorted = [...activeStops].sort();
-            let html = '';
-            if (sorted.length === 0) {
-                html = '<option value="">-- Keine aktiven Haltestellen --</option>';
-            } else {
-                sorted.forEach(name => {
-                    const selected = (name === curVal) ? 'selected' : '';
-                    html += `<option value="${escapeHtml(name)}" ${selected}>${escapeHtml(name)}</option>`;
-                });
-            }
-            sel.innerHTML = html;
-        }
-        
-        function loadAdminData() {
-            fetch('/api/admin_data/{{ admin_url }}').then(res => res.json()).then(data => {
-                if (data.success) {
-                    renderNotifications(data.pending_requests);
-                    renderHistory(data.action_log);
-                    if (data.now_time) serverOffset = new Date(data.now_time).getTime() - Date.now();
-                    if (data.active_stops) {
-                        updateAdminMap(data.active_stops, data.bonus_stops);
-                        updateActiveStopsDropdown(data.active_stops);
-                    }
-                    if (data.team_locations) {
-                        lastTeamLocations = data.team_locations;
-                        updateTeamMap(lastTeamLocations);
-                    }
+        // --- POLLING DER ADMIN-DATEN ---
+        function fetchAdminData() {
+            fetch('/api/admin_data/{{ admin_url }}')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data || !data.success) return;
+                    latestOuterGeofence = (data.geofence_outer && data.geofence_outer.length >= 3) ? data.geofence_outer : latestOuterGeofence;
+                    latestLocations = data.team_locations || [];
+                    latestBroadcasts = data.mister_broadcasts || [];
+                    renderTeamLocations(latestLocations, latestBroadcasts);
                     if (data.geofence_outer || data.geofence_exclusion) {
-                        renderAdminGeofences(data.geofence_outer, data.geofence_exclusion);
+                        renderGeofences(data.geofence_outer, data.geofence_exclusion);
                     }
-                    if (data.leaderboard) {
-                        renderAdminLeaderboard(data.leaderboard, data.team_names_map, data.phase, data.enable_swap, data.roles_swapped);
+                    if (!hasInitialMapFit) {
+                        hasInitialMapFit = autoFitMap(latestOuterGeofence, latestLocations, latestBroadcasts);
                     }
-                }
-            }).catch(err => console.error("Update fehlgeschlagen:", err));
+                    if (data.action_log) {
+                        allActionLogs = data.action_log;
+                        renderHistoryTable();
+                    }
+                })
+                .catch(e => console.error("Admin-Polling fehlgeschlagen:", e));
         }
-        loadAdminData();
-        setInterval(loadAdminData, 5000);
+
+        fetchAdminData();
+        setInterval(fetchAdminData, 5000);
+
+        // --- AKTIONEN / STEUERUNG ---
+        function resolveReq(reqId, action) {
+            fetch('/api/respond_catch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slug: '{{ admin_url }}', request_id: reqId, action: action })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message || "Anfrage bearbeitet.");
+                    window.location.reload();
+                } else {
+                    alert(data.error || "Fehler bei der Bearbeitung.");
+                }
+            })
+            .catch(() => alert("Netzwerkfehler!"));
+        }
+
+        function catchTeam() {
+            const hunter = document.getElementById('hunter-select').value;
+            const prey = document.getElementById('prey-select').value;
+            if (!hunter || !prey) return alert("Bitte wähle Fänger und Mister X aus.");
+
+            fetch('/api/catch_team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_slug: '{{ admin_url }}', hunter: hunter, prey: prey })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Fang erfolgreich manuell eingetragen!");
+                    window.location.reload();
+                } else {
+                    alert(data.error || "Fehler beim Eintragen des Fangs.");
+                }
+            })
+            .catch(() => alert("Netzwerkfehler!"));
+        }
+
+        function addManualPoints() {
+            const teamId = document.getElementById('manual-points-team').value;
+            const points = document.getElementById('manual-points-value').value;
+            if (!teamId) return alert("Bitte ein Team auswählen.");
+
+            fetch('/api/add_manual_points', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_slug: '{{ admin_url }}', team_id: teamId, points: points })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Punkte erfolgreich angepasst!");
+                    window.location.reload();
+                } else {
+                    alert(data.error || "Fehler beim Anpassen.");
+                }
+            })
+            .catch(() => alert("Netzwerkfehler!"));
+        }
+
+        function undoAction(actionId) {
+            if (!confirm("Aktion wirklich rückgängig machen?")) return;
+            fetch('/api/undo_action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_slug: '{{ admin_url }}', action_id: actionId })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Aktion rückgängig gemacht.");
+                    window.location.reload();
+                } else {
+                    alert(data.error || "Fehler beim Rückgängigmachen.");
+                }
+            })
+            .catch(() => alert("Netzwerkfehler!"));
+        }
+
+        function copyUrl(inputId) {
+            const copyText = document.getElementById(inputId);
+            copyText.select();
+            copyText.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(copyText.value);
+            alert("Zugangs-URL kopiert: " + copyText.value);
+        }
 
         function escapeHtml(str) {
             if (str === null || str === undefined) return '';
@@ -778,306 +681,61 @@
                 .replace(/'/g, '&#39;');
         }
 
-        function renderAdminLeaderboard(leaderboard, teamNamesMap, phase, enableSwap, rolesSwapped) {
-            const container = document.getElementById('admin-leaderboard-box');
-            if (!container || !leaderboard) return;
+        // --- AKTIONSHISTORIE PAGINIERUNG ---
+        function renderHistoryTable() {
+            const tbody = document.getElementById('history-table-body');
+            const totalCountEl = document.getElementById('history-total-count');
+            const pageInfoEl = document.getElementById('history-page-info');
+            const btnPrev = document.getElementById('btn-history-prev');
+            const btnNext = document.getElementById('btn-history-next');
 
-            const openDetails = new Set();
-            container.querySelectorAll('details.offline-details').forEach(el => {
-                if (el.open) {
-                    const teamId = el.getAttribute('data-team-id');
-                    const type = el.getAttribute('data-type');
-                    if (teamId && type) {
-                        openDetails.add(`${teamId}_${type}`);
-                    }
-                }
-            });
+            const filtered = allActionLogs.filter(l => l.type !== 'role_change' && l.type !== 'gps_warning');
+            const total = filtered.length;
+            totalCountEl.textContent = `(${total} Einträge gesamt)`;
 
-            let html = `<h3>Rangliste & Team-Status</h3>`;
-            leaderboard.forEach((entry, idx) => {
-                const badgeClass = entry.role === 'fänger' ? 'badge-catcher' : (entry.role === 'läufer' ? 'badge-runner' : 'badge-keine');
-                
-                let deactBadge = entry.deactivated ? `<span style="color:red; font-size: 0.7em;">(DEAKTIVIERT)</span>` : '';
-                
-                let nextRoleBadge = '';
-                if (enableSwap && (phase === 'pre_game' || phase === 'game') && !rolesSwapped && !entry.deactivated && entry.next_role && entry.next_role !== 'keine') {
-                    nextRoleBadge = `<span style="font-size: 0.6em; color: #888; font-weight: normal; margin-left: 5px; text-transform: uppercase;">(Danach: ${escapeHtml(entry.next_role)})</span>`;
-                }
+            const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
+            if (currentHistoryPage > totalPages) currentHistoryPage = totalPages;
+            if (currentHistoryPage < 1) currentHistoryPage = 1;
 
-                let stopsText = (entry.stops && entry.stops.length > 0) ? entry.stops.map(escapeHtml).join(', ') : '<i>Keine</i>';
+            pageInfoEl.textContent = `Seite ${currentHistoryPage} von ${totalPages}`;
+            btnPrev.disabled = (currentHistoryPage <= 1);
+            btnNext.disabled = (currentHistoryPage >= totalPages);
 
-                let caughtText = '<i>Niemanden</i>';
-                if (entry.caught && entry.caught.length > 0) {
-                    caughtText = entry.caught.map(c => escapeHtml((teamNamesMap && teamNamesMap[c]) || c)).join(', ');
-                }
+            const startIdx = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE;
+            const pageLogs = filtered.slice(startIdx, startIdx + HISTORY_PAGE_SIZE);
 
-                let caughtByText = '<i>Noch ungeschlagen</i>';
-                if (entry.caught_by && entry.caught_by.length > 0) {
-                    caughtByText = entry.caught_by.map(c => escapeHtml((teamNamesMap && teamNamesMap[c]) || c)).join(', ');
-                }
+            if (pageLogs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; color: #777;">Noch keine Aktionen im Spielverlauf.</td></tr>';
+                return;
+            }
 
-                let offlineDetailsHtml = '';
-                if (entry.offline_warnings && entry.offline_warnings.length > 0) {
-                    const isOpen = openDetails.has(`${entry.id}_offline`) ? ' open' : '';
-                    const totalMin = Math.round((entry.total_offline_seconds || 0) / 60);
-                    let listItems = '';
-                    entry.offline_warnings.forEach(warn => {
-                        const endText = warn.end_time_str ? `bis ${escapeHtml(warn.end_time_str)} Uhr` : `<b style="color: #EB6502;">bis jetzt</b>`;
-                        listItems += `<li>Ab ${escapeHtml(warn.start_time_str)} Uhr: ${endText}</li>`;
-                    });
-                    offlineDetailsHtml = `
-                        <details class="offline-details" data-team-id="${escapeHtml(entry.id)}" data-type="offline"${isOpen}>
-                            <summary>⚠️ Offlinezeiten (Gesamt: ${totalMin} Min.)</summary>
-                            <ul>${listItems}</ul>
-                        </details>`;
-                }
-
-                let violationDetailsHtml = '';
-                if (entry.geofence_violations && entry.geofence_violations.length > 0) {
-                    const isOpen = openDetails.has(`${entry.id}_violation`) ? ' open' : '';
-                    const totalMin = Math.round((entry.total_violation_seconds || 0) / 60);
-                    let listItems = '';
-                    entry.geofence_violations.forEach(warn => {
-                        const endText = warn.end_time_str ? `bis ${escapeHtml(warn.end_time_str)} Uhr` : `<b style="color: #dc2626;">bis jetzt (aktiv)</b>`;
-                        listItems += `<li>Ab ${escapeHtml(warn.start_time_str)} Uhr: ${endText}</li>`;
-                    });
-                    violationDetailsHtml = `
-                        <details class="offline-details" data-team-id="${escapeHtml(entry.id)}" data-type="violation" style="margin-top: 5px;"${isOpen}>
-                            <summary style="color: #dc2626; font-weight: bold;">🚨 Spielfeldverstöße (Gesamt: ${totalMin} Min.)</summary>
-                            <ul>${listItems}</ul>
-                        </details>`;
-                }
-
-                let manualPointsHtml = '';
-                if (entry.manual_points !== undefined && entry.manual_points !== 0) {
-                    const ptsStr = entry.manual_points > 0 ? `+${entry.manual_points}` : `${entry.manual_points}`;
-                    manualPointsHtml = `<div><b>Manuelle Korrektur:</b> ${ptsStr} Punkte</div>`;
-                }
+            let html = '';
+            pageLogs.forEach(log => {
+                const effTs = log.actual_timestamp || log.timestamp;
+                const d = new Date(effTs);
+                const timeStr = !isNaN(d.getTime()) ? d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' Uhr' : '';
 
                 html += `
-                <div class="team-rank">
-                    <div class="team-score">
-                        ${idx + 1}. ${escapeHtml(entry.display_name)} ${deactBadge} — ${entry.score} Punkte
-                        <span class="role-badge ${badgeClass}">${escapeHtml(entry.role)}</span>
-                        ${nextRoleBadge}
-                    </div>
-                    <div class="team-details">
-                        <div><b>Erreichte Haltestellen:</b> ${stopsText}</div>
-                        <div><b>Andere Teams gefangen:</b> ${caughtText}</div>
-                        <div><b>Gefangen worden von:</b> ${caughtByText}</div>
-                        ${offlineDetailsHtml}
-                        ${violationDetailsHtml}
-                        ${manualPointsHtml}
-                    </div>
-                </div>`;
+                    <tr>
+                        <td>
+                            ${escapeHtml(log.desc)}
+                            <div class="time-meta"><span style="color:#049EAB; font-weight:bold;">${timeStr}</span></div>
+                        </td>
+                        <td>
+                            ${log.type !== 'system' ? `<button class="btn btn-orange" style="padding: 5px 8px; font-size: 11px;" onclick="undoAction('${escapeHtml(log.id)}')">Rückgängig</button>` : ''}
+                        </td>
+                    </tr>
+                `;
             });
-
-            container.innerHTML = html;
-        }
-
-        function renderNotifications(requests) {
-            const container = document.getElementById('notifications-container');
-            let html = `<h3>Ausstehende Anfragen (${requests.length})</h3>`;
-            if (requests.length === 0) {
-                html += `<p style="margin: 0; color: #666; font-style: italic;">Keine neuen Anfragen vorhanden.</p>`;
-            } else {
-                requests.forEach(req => {
-                    let lateBadge = req.is_late ? `<span class="late-badge">[ZU SPÄT EINGETRAGEN]</span> ` : '';
-                    let gpsWaitBadge = req.gps_check_until ? `<span class="gps-wait-badge">⏳ 1-Min. GPS-Nachprüfung läuft...</span> ` : '';
-                    let delayedBadge = req.detected_actual_timestamp ? `<span class="gps-delayed-badge" style="background: #16a34a; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; font-weight: bold; margin-right: 5px;">✅ Team war vor Ort (Tatsächliche Zeit: ${escapeHtml(formatIsoTime(req.detected_actual_timestamp))}, Haltestelle war aktiv – Eintrag &gt; 5 Min. verzögert)</span> ` : '';
-                    let text = req.type === 'stop'
-                        ? `${lateBadge}${gpsWaitBadge}${delayedBadge}Team <b>${escapeHtml(req.team_name || req.team)}</b> möchte Haltestelle <b>${escapeHtml(req.stop)}</b> gutschreiben.`
-                        : `${lateBadge}${delayedBadge}Meldung von <b>${escapeHtml(req.reporter_name || req.reporter)}</b>: <b>${escapeHtml(req.hunter_name || req.hunter)}</b> fängt <b>${escapeHtml(req.prey_name || req.prey)}</b>.`;
-                    
-                    html += `
-                    <div class="req-item">
-                        <span>${text}</span>
-                        <div class="req-actions">
-                            <button class="btn btn-green" onclick="resolveReq('${req.id}', 'approve')">Bestätigen</button>
-                            <button class="btn btn-neutral" onclick="resolveReq('${req.id}', 'reject')">Ablehnen</button>
-                        </div>
-                    </div>`;
-                });
-            }
-            container.innerHTML = html;
-        }
-        
-        function formatIsoTime(isoStr) {
-            if (!isoStr) return "";
-            const d = new Date(isoStr);
-            if (isNaN(d.getTime())) return isoStr;
-            return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' Uhr';
+            tbody.innerHTML = html;
         }
 
         function changeHistoryPage(newPage) {
             currentHistoryPage = newPage;
-            renderHistory(allActionLogs);
+            renderHistoryTable();
         }
 
-        function renderHistory(logs) {
-            if (logs) allActionLogs = logs;
-            const tbody = document.getElementById('history-table-body');
-            if (!tbody) return;
-
-            const totalCountEl = document.getElementById('history-total-count');
-            const pageInfoEl = document.getElementById('history-page-info');
-            const prevBtn = document.getElementById('btn-history-prev');
-            const nextBtn = document.getElementById('btn-history-next');
-            const paginationContainer = document.getElementById('history-pagination');
-
-            // Filtere maschinelle role_change Events heraus
-            const filteredLogs = allActionLogs.filter(log => log.type !== 'role_change' && log.type !== 'gps_warning');
-            filteredLogs.sort((a, b) => new Date(b.actual_timestamp || b.timestamp).getTime() - new Date(a.actual_timestamp || a.timestamp).getTime());
-            const totalItems = filteredLogs.length;
-
-            if (totalCountEl) {
-                totalCountEl.textContent = `(Gesamt: ${totalItems})`;
-            }
-
-            if (totalItems === 0) {
-                tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: #777; padding: 20px;">Noch keine Aktionen im Spielverlauf verzeichnet.</td></tr>`;
-                if (paginationContainer) paginationContainer.style.display = 'none';
-                return;
-            }
-
-            if (paginationContainer) paginationContainer.style.display = 'flex';
-
-            const totalPages = Math.max(1, Math.ceil(totalItems / HISTORY_PAGE_SIZE));
-            if (currentHistoryPage < 1) currentHistoryPage = 1;
-            if (currentHistoryPage > totalPages) currentHistoryPage = totalPages;
-
-            const startIndex = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE;
-            const endIndex = Math.min(startIndex + HISTORY_PAGE_SIZE, totalItems);
-            const pageItems = filteredLogs.slice(startIndex, endIndex);
-
-            let html = '';
-            pageItems.forEach(log => {
-                const isActual = Boolean(log.actual_timestamp);
-                const effTs = log.actual_timestamp || log.timestamp;
-                const timeStr = formatIsoTime(effTs);
-                const timeColor = isActual ? '#16a34a' : '#111';
-                let autoBadge = (isActual && log.type === 'stop') ? '<span style="color: #16a34a; font-weight: bold; margin-left: 5px;">(GPS Auto-Freigabe)</span>' : '';
-                const metaHtml = `<div class="time-meta"><span style="color: ${timeColor}; font-weight: bold;">${escapeHtml(timeStr)}</span>${autoBadge}</div>`;
-
-                html += `<tr>
-                    <td>${escapeHtml(log.desc)}${metaHtml}</td>
-                    <td>${log.type !== 'system' ? `<button class="btn btn-orange" style="padding: 6px 10px; font-size: 11px;" onclick="undoAction('${log.id}')">Rückgängig</button>` : ''}</td>
-                </tr>`;
-            });
-
-            tbody.innerHTML = html;
-
-            if (pageInfoEl) {
-                pageInfoEl.textContent = `Seite ${currentHistoryPage} von ${totalPages} (Einträge ${startIndex + 1}–${endIndex} von ${totalItems})`;
-            }
-            if (prevBtn) {
-                prevBtn.disabled = (currentHistoryPage <= 1);
-                prevBtn.style.opacity = (currentHistoryPage <= 1) ? '0.5' : '1';
-                prevBtn.style.cursor = (currentHistoryPage <= 1) ? 'not-allowed' : 'pointer';
-            }
-            if (nextBtn) {
-                nextBtn.disabled = (currentHistoryPage >= totalPages);
-                nextBtn.style.opacity = (currentHistoryPage >= totalPages) ? '0.5' : '1';
-                nextBtn.style.cursor = (currentHistoryPage >= totalPages) ? 'not-allowed' : 'pointer';
-            }
-        }
-        
-        function resolveReq(id, action) {
-            fetch('/api/resolve_request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_slug: "{{ admin_url }}", id: id, action: action })
-            }).then(() => location.reload()).catch(() => alert('Netzwerkfehler!'));
-        }
-
-        function undoAction(id) {
-            if(!confirm("Möchtest du diese Aktion wirklich rückgängig machen?")) return;
-            fetch('/api/undo_action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_slug: "{{ admin_url }}", id: id })
-            }).then(() => location.reload()).catch(() => alert('Netzwerkfehler!'));
-        }
-
-        function catchStopFromDropdown(btn) {
-            const stopSelect = document.getElementById('assign-stop-select');
-            const teamSelect = document.getElementById('assign-team-select');
-            const stopName = stopSelect.value;
-            const teamId = teamSelect.value;
-
-            if (!stopName) {
-                alert('Bitte wähle eine Haltestelle aus!');
-                return;
-            }
-
-            const teamLabel = teamSelect.options[teamSelect.selectedIndex].text;
-            let confirmMsg = `Möchtest du die Haltestelle "${stopName}" wirklich austauschen?`;
-            if (teamId) {
-                confirmMsg = `Möchtest du die Haltestelle "${stopName}" dem Team "${teamLabel}" gutschreiben und austauschen?`;
-            }
-            if (!confirm(confirmMsg)) return;
-
-            btn.disabled = true;
-            btn.innerText = "Lädt...";
-            fetch('/api/toggle', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ admin_slug: "{{ admin_url }}", name: stopName, team_id: teamId })
-            }).then(r => r.json()).then(d => {
-                if (d.success) {
-                    location.reload();
-                } else {
-                    alert(d.error || 'Fehler beim Austauschen!');
-                    btn.disabled = false;
-                    btn.innerText = "Haltestelle austauschen";
-                }
-            }).catch(() => {
-                alert('Netzwerkfehler!');
-                btn.disabled = false;
-                btn.innerText = "Haltestelle austauschen";
-            });
-        }
-
-        function catchStop(stopName, selectId, btn) {
-            const teamSelect = document.getElementById(selectId);
-            btn.disabled = true; btn.innerText = "Lädt...";
-            fetch('/api/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_slug: "{{ admin_url }}", name: stopName, team_id: teamSelect.value })
-            }).then(r => r.json()).then(d => {
-                if (d.success) location.reload(); else { alert('Fehler!'); btn.disabled = false; btn.innerText = "Austauschen"; }
-            }).catch(() => { alert('Netzwerkfehler!'); btn.disabled = false; btn.innerText = "Austauschen"; });
-        }
-
-        function catchTeam() {
-            const hunter = document.getElementById('hunter-select').value;
-            const prey = document.getElementById('prey-select').value;
-            
-            const hunterLabel = document.getElementById('hunter-select').options[document.getElementById('hunter-select').selectedIndex].text;
-            const preyLabel = document.getElementById('prey-select').options[document.getElementById('prey-select').selectedIndex].text;
-            
-            if (hunter === prey) return alert('Ein Team kann sich nicht selbst fangen.');
-            if (!confirm(`Hat "${hunterLabel}" wirklich "${preyLabel}" gefangen?`)) return;
-            
-            fetch('/api/catch_team', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_slug: "{{ admin_url }}", hunter: hunter, prey: prey })
-            }).then(r => r.json()).then(d => {
-                if (d.success) location.reload(); else alert(d.error || 'Fehler beim Eintragen!');
-            }).catch(() => alert('Netzwerkfehler!'));
-        }
-
-        function addManualPoints() {
-            const teamId = document.getElementById('manual-points-team').value;
-            const pointsVal = document.getElementById('manual-points-value').value;
-            const points = parseInt(pointsVal);
-            const teamLabel = document.getElementById('manual-points-team').options[document.getElementById('manual-points-team').selectedIndex].text;
-            
-            if (isNaN(points) || points === 0) return alert('Bitte eine gültige Zahl ungleich 0 eingeben.');
-            if (!confirm(`Möchtest du dem Team "${teamLabel}" wirklich ${points > 0 ? '+' : ''}${points} Punkte geben?`)) return;
-            
-            fetch('/api/add_manual_points', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ admin_slug: "{{ admin_url }}", team_id: teamId, points: points })
-            }).then(r => r.json()).then(d => {
-                if (d.success) location.reload();
-                else alert(d.error || 'Fehler beim Eintragen!');
-            }).catch(() => alert('Netzwerkfehler!'));
-        }
-
-        // Initiale Renderung der Historie nach dem Laden
-        renderHistory(allActionLogs);
+        renderHistoryTable();
     </script>
 </body>
 </html>

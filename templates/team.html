@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>{{ team_name }} - Catch Me</title>
+    <title>{{ team_name }} - Mister X</title>
     <!-- Leaflet CSS für die Karte -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,31 +11,46 @@
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@700&family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
     
     <style>
-        body { font-family: 'Roboto', Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: #f4f7f6; overflow: hidden; color: #333; }
+        body {
+            font-family: 'Roboto', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh;
+            background: #f4f7f6;
+            overflow: hidden;
+            color: #333;
+        }
         
         h1, h2, h3, h4 { font-family: 'Roboto Slab', serif; font-weight: 700; color: #049EAB; margin-top: 0; }
         
-        .header { background: white; border-bottom: 2px solid #049EAB; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 2000; position: relative; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .header h2 { margin: 0; font-size: 1.3em; display: flex; align-items: center; flex-wrap: wrap; gap: 10px;}
+        .header {
+            background: white;
+            border-bottom: 2px solid #049EAB;
+            padding: 10px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 2000;
+            position: relative;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .header h2 { margin: 0; font-size: 1.25em; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
         .header-logo { height: 35px; }
         
-        .timer-bar { background: #333; color: white; padding: 8px 15px; text-align: center; font-weight: 900; font-family: 'Roboto', sans-serif; font-size: 0.9em; z-index: 1999; }
-        .timer-alert { background: #EB6502; }
-
-        /* GPS Warnbanner für Spieler (> 2 Minuten kein Standort) */
-        .gps-warn-banner {
-            display: none;
-            background: #dc2626;
+        .timer-bar {
+            background: #333;
             color: white;
-            padding: 8px 12px;
+            padding: 8px 15px;
             text-align: center;
-            font-weight: 700;
-            font-size: 0.84em;
-            z-index: 1998;
-            line-height: 1.35;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-            border-bottom: 2px solid #991b1b;
+            font-weight: 900;
+            font-family: 'Roboto', sans-serif;
+            font-size: 0.88em;
+            z-index: 1999;
         }
+        .timer-alert { background: #EB6502; }
 
         /* Geofence Warnbanner */
         .geofence-warn-banner {
@@ -52,54 +67,127 @@
             border-bottom: 2px solid #7f1d1d;
         }
 
-        .role-badge { display: inline-block; padding: 4px 8px; font-size: 0.7em; font-family: 'Roboto', sans-serif; font-weight: 900; text-transform: uppercase; color: white; }
-        .role-fänger { background: #EB6502; } 
-        .role-läufer { background: #AEC905; color: #333; } 
-        .role-keine { background: #6c757d; color: white; }
+        .role-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            font-size: 0.7em;
+            font-family: 'Roboto', sans-serif;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: white;
+            border-radius: 3px;
+        }
+        .role-mister { background: #EB6502; } 
+        .role-hunter { background: #049EAB; } 
         
         .content { display: flex; flex-direction: column; flex: 1; position: relative; overflow: hidden; }
         #map { height: 100%; width: 100%; z-index: 1; }
-        .map-overlay-msg { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(244, 247, 246, 0.95); z-index: 10; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; }
+        .map-overlay-msg {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(244, 247, 246, 0.95);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            text-align: center;
+        }
         
-        .bottom-sheet { position: absolute; bottom: 0; left: 0; right: 0; background: white; z-index: 1000; display: flex; flex-direction: column; transition: transform 0.3s ease-in-out; transform: translateY(calc(100% - 50px)); box-shadow: 0 -3px 15px rgba(0,0,0,0.2); max-height: calc(100% - 35px); }
+        .bottom-sheet {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: white;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease-in-out;
+            transform: translateY(calc(100% - 48px));
+            box-shadow: 0 -3px 15px rgba(0,0,0,0.2);
+            max-height: calc(100% - 35px);
+        }
         .bottom-sheet.open { transform: translateY(0); }
         
-        .sheet-toggle { height: 50px; flex-shrink: 0; background: #049EAB; color: white; display: flex; justify-content: center; align-items: center; font-family: 'Roboto', sans-serif; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+        .sheet-toggle {
+            height: 48px;
+            flex-shrink: 0;
+            background: #049EAB;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Roboto', sans-serif;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            font-size: 13.5px;
+        }
         
-        .sheet-content { padding: 20px; overflow-y: auto; flex: 1; }
+        .sheet-content { padding: 18px; overflow-y: auto; flex: 1; }
         
-        h3 { border-bottom: 2px solid #049EAB; padding-bottom: 5px; margin-bottom: 15px;}
-        select { width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #ccc; font-size: 16px; font-family: 'Roboto', sans-serif; box-sizing: border-box; }
-        select:disabled { background: #eee; cursor: not-allowed; }
+        h3 { border-bottom: 2px solid #049EAB; padding-bottom: 5px; margin-bottom: 14px; font-size: 1.15em; }
+        select, input[type="text"] {
+            width: 100%;
+            padding: 11px;
+            margin-top: 4px;
+            border: 1px solid #ccc;
+            font-size: 15px;
+            font-family: 'Roboto', sans-serif;
+            box-sizing: border-box;
+            border-radius: 4px;
+        }
+        select:disabled, input:disabled { background: #eee; cursor: not-allowed; }
         
-        .btn { padding: 14px; border: none; cursor: pointer; font-family: 'Roboto', sans-serif; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; color: white; width: 100%; margin-top: 10px; font-size: 16px; transition: background 0.2s ease; }
+        .btn {
+            padding: 13px;
+            border: none;
+            cursor: pointer;
+            font-family: 'Roboto', sans-serif;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: white;
+            width: 100%;
+            margin-top: 10px;
+            font-size: 15px;
+            border-radius: 4px;
+            transition: background 0.2s ease;
+        }
         .btn:disabled { background: #ccc !important; color: #888 !important; cursor: not-allowed; }
-        .btn-vcd-green { background-color: #AEC905; color: #333; }
-        .btn-vcd-green:hover:not(:disabled) { background-color: #9cb404; }
+        .btn-vcd-green { background-color: #049EAB; color: white; }
+        .btn-vcd-green:hover:not(:disabled) { background-color: #038c98; }
         .btn-vcd-orange { background-color: #EB6502; color: white; }
         .btn-vcd-orange:hover:not(:disabled) { background-color: #d15902; }
+        .btn-neutral { background-color: #6c757d; color: white; }
         
-        .leaderboard-table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 30px; }
-        .leaderboard-table th, .leaderboard-table td { padding: 12px 10px; text-align: left; border-bottom: 1px solid #eee; }
-        .leaderboard-table th { background: #f8f9fa; color: #049EAB; border-bottom: 2px solid #049EAB;}
-        .highlight-runner { font-weight: bold; background: #f7f9e6; } 
-        .highlight-catcher { font-weight: bold; background: #fdf0e6; }  
+        .leaderboard-table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 25px; }
+        .leaderboard-table th, .leaderboard-table td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #eee; }
+        .leaderboard-table th { background: #f8f9fa; color: #049EAB; border-bottom: 2px solid #049EAB; }
+        .highlight-team { font-weight: bold; background: #e6f7f8; } 
         
-        .log { margin-top: 25px; font-size: 0.9em; color: #555; }
-        .log h4 { color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 10px;}
-        .log-entry { padding: 10px 0; border-bottom: 1px solid #f0f0f0; line-height: 1.4; }
+        .log { margin-top: 20px; font-size: 0.88em; color: #555; }
+        .log h4 { color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 10px; }
+        .log-entry { padding: 8px 0; border-bottom: 1px solid #f0f0f0; line-height: 1.4; }
         .log-entry:last-child { border-bottom: none; }
-        .late-warn { color: #EB6502; font-size: 0.8em; font-weight: bold; }
         .actual-time-badge { color: #049EAB; font-size: 0.82em; font-weight: bold; }
 
-        /* Custom Map Icons */
-        .custom-factor-icon, .custom-bonus-stop-icon { background: transparent; border: none; }
-        @keyframes pulse-bonus {
-            0% { transform: scale(1); box-shadow: 0 0 6px #e11d48; }
-            50% { transform: scale(1.15); box-shadow: 0 0 14px #e11d48; }
-            100% { transform: scale(1); box-shadow: 0 0 6px #e11d48; }
+        /* Card-Box für Sektionen */
+        .dashboard-card {
+            background: #fafbfc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 14px;
+            margin-bottom: 18px;
         }
+
+        /* Marker Styles */
         .custom-team-icon { background: transparent; border: none; }
+        .custom-mister-icon { background: transparent; border: none; }
+        .custom-correction-pin { background: transparent; border: none; }
     </style>
 </head>
 <body>
@@ -116,7 +204,7 @@
     <div style="position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; box-sizing: border-box;">
         <div style="background: white; padding: 30px; border-radius: 10px; max-width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
             <h2 style="color: #EB6502; border: none; margin-bottom: 15px; font-size: 1.8em;">Team deaktiviert</h2>
-            <p style="font-size: 1.1em; color: #333; margin: 0; line-height: 1.4;">Das Team wurde deaktiviert. Wenn du doch mitspielen willst, melde dich bitte beim Spielleiter.</p>
+            <p style="font-size: 1.1em; color: #333; margin: 0; line-height: 1.4;">Dieses Team wurde deaktiviert. Wende dich bitte an die Spielleitung.</p>
         </div>
     </div>
     {% endif %}
@@ -124,9 +212,10 @@
     <div class="header">
         <h2>
             {{ team_name }}
-            <span class="role-badge role-{{ role }}">{{ role }}</span>
-            {% if enable_swap and phase in ['pre_game', 'game'] and not roles_swapped and next_role != 'keine' %}
-                <span style="font-size: 0.5em; color: #888; text-transform: uppercase; margin-left: 5px; font-weight: normal;">(Nach Rollentausch: {{ next_role }})</span>
+            {% if role == 'mister_x' %}
+            <span class="role-badge role-mister">Mister X</span>
+            {% else %}
+            <span class="role-badge role-hunter">Fänger</span>
             {% endif %}
         </h2>
         <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo" class="header-logo">
@@ -134,236 +223,220 @@
     
     <div class="timer-bar" id="top-timer">Zeit wird synchronisiert...</div>
 
-    <!-- WARNUNG BEI FEHLENDEM GPS SIGNAL (> 2 MINUTEN) -->
-    <div class="gps-warn-banner" id="gps-warning-banner">
-        <!-- Wird dynamisch über JavaScript befüllt -->
-    </div>
-
     <!-- WARNUNG BEI SPIELFELDVERSTOSS / SPERRZONE -->
     <div class="geofence-warn-banner" id="geofence-warning-banner">
         ⚠️ SPIELFELD VERLASSEN ODER SPERRZONE BETRETEN! Kehrt sofort ins Spielgebiet zurück!
     </div>
 
-    <!-- GEWINNER ANZEIGE (Global für beide Rollen sichtbar) -->
+    <!-- GEWINNER ANZEIGE BEI SPIELENDE -->
     {% if phase == 'finished' %}
         {% set top_score = leaderboard[0].score if leaderboard|length > 0 else 0 %}
         {% set winners = [] %}
         {% for entry in leaderboard %}
-            {% if entry.score == top_score %}
+            {% if entry.score == top_score and entry.score > 0 %}
                 {% set _ = winners.append(entry.display_name) %}
             {% endif %}
         {% endfor %}
-        <div style="background: white; border-bottom: 2px solid #049EAB; padding: 20px; text-align: center; z-index: 1000; position: relative;">
-            <h2 style="margin:0; color:#049EAB;">🎉 Spiel beendet! 🎉</h2>
-            <p style="font-size: 1.1em; margin: 10px 0;">Sieger mit <b>{{ top_score }} Punkten</b>:</p>
-            <h1 style="color: #EB6502; margin: 0; font-size: 2em;">{{ winners | join(' & ') }}</h1>
-            
+        <div style="background: white; border-bottom: 2px solid #049EAB; padding: 18px; text-align: center; z-index: 1000; position: relative;">
+            <h2 style="margin:0; color:#049EAB; font-size: 1.4em;">🏆 Spiel beendet! 🏆</h2>
+            {% if winners|length > 0 %}
+            <p style="font-size: 1em; margin: 8px 0;">Sieger-Fänger mit <b>{{ top_score }} {% if top_score == 1 %}Punkt{% else %}Punkten{% endif %}</b>:</p>
+            <h1 style="color: #EB6502; margin: 0; font-size: 1.8em;">{{ winners | join(' & ') }}</h1>
             {% if team_name in winners %}
-                <p style="font-weight: bold; color: #AEC905; font-size: 1.3em; margin-top: 15px;">GLÜCKWUNSCH, IHR HABT GEWONNEN! 🏆</p>
-                <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-                <script>
-                    window.addEventListener('load', function() {
-                        var duration = 5 * 1000;
-                        var animationEnd = Date.now() + duration;
-                        var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 3000 };
-                        function randomInRange(min, max) { return Math.random() * (max - min) + min; }
-                        var interval = setInterval(function() {
-                            var timeLeft = animationEnd - Date.now();
-                            if (timeLeft <= 0) { return clearInterval(interval); }
-                            var particleCount = 50 * (timeLeft / duration);
-                            confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
-                            confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
-                        }, 250);
-                    });
-                </script>
+                <p style="font-weight: bold; color: #049EAB; font-size: 1.2em; margin-top: 10px;">GLÜCKWUNSCH, IHR HABT GEWONNEN! 🥇</p>
+            {% endif %}
+            {% else %}
+            <p style="font-size: 1em; color: #555; margin-top: 8px;">Mister X konnte nicht gefangen werden und gewinnt!</p>
             {% endif %}
         </div>
     {% endif %}
 
     <div class="content">
-        <!-- KARTE FÜR BEIDE ROLLEN UNIFORMIERT -->
+        <!-- KARTE -->
         <div id="map"></div>
         
         {% if phase == 'finished' %}
         <div class="map-overlay-msg">
             <div>
-                <h3 style="border:none; margin:0; font-size:1.5em; color:#333;">Karte nicht verfügbar</h3>
-                <p style="color:#666; margin-top:10px;">Das Spiel ist endgültig beendet.</p>
+                <h3 style="border:none; margin:0; font-size:1.4em; color:#333;">Spielrunde beendet</h3>
+                <p style="color:#666; margin-top:8px;">Das Spiel ist abgeschlossen. Schau dir jetzt das komplette Replay an!</p>
+                <a href="/replay" class="btn btn-vcd-green" style="display:inline-block; width:auto; text-decoration:none; padding:10px 20px; margin-top: 10px;">Zum Replay</a>
             </div>
         </div>
         {% endif %}
 
-        <!-- MENÜ: Standardmäßig ausgeklappt mit "open" Klasse -->
+        <!-- MENÜ / BOTTOM SHEET -->
         <div class="bottom-sheet open" id="bottomSheet">
             <div class="sheet-toggle" onclick="toggleSheet()" id="sheetToggleText">
-                Menü & Rangliste zuklappen 🔽
+                Menü zuklappen 🔽
             </div>
             <div class="sheet-content">
                 
-                {% if phase == 'post_game' %}
-                <div style="background: #fff3cd; color: #856404; padding: 10px; border-left: 4px solid #ffeeba; margin-bottom: 15px; font-weight: bold; font-size: 0.9em;">
-                    Das Spiel ist bereits beendet. Nachträge der letzten Aktionen sind noch für wenige Minuten möglich.
-                </div>
-                {% elif phase != 'game' %}
-                <div style="background: #fff3cd; color: #856404; padding: 10px; border-left: 4px solid #ffeeba; margin-bottom: 15px; font-weight: bold; font-size: 0.9em;">
-                    Das Spiel läuft aktuell nicht (Read-Only Modus).
+                {% if phase != 'game' and phase != 'finished' %}
+                <div style="background: #fff3cd; color: #856404; padding: 10px; border-left: 4px solid #ffeeba; margin-bottom: 15px; font-weight: bold; font-size: 0.9em; border-radius: 3px;">
+                    Das Spiel hat noch nicht begonnen (Start um {{ start_time or 'Spielstart' }}).
                 </div>
                 {% endif %}
 
-                {% if role == 'läufer' %}
-                    <!-- LÄUFER KONTROLLEN -->
-                    {% if phase == 'pre_game' or phase == 'game' or phase == 'post_game' %}
-                    <h3>Haltestelle eintragen</h3>
-                    <p style="font-size: 0.85em; color:#666; margin-top: 0; margin-bottom: 15px;">Hinweis: Du kannst Haltestellen auch direkt auf der Karte antippen.</p>
-                    <select id="stop-select" {% if phase == 'pre_game' %}disabled{% endif %}>
-                        <option value="">-- Haltestelle auswählen --</option>
-                    </select>
-                    {% if phase == 'pre_game' %}
-                    <button class="btn btn-vcd-green" disabled style="cursor: not-allowed; opacity: 0.7;">Erst ab Spielstart eintragbar</button>
-                    {% else %}
-                    <button class="btn btn-vcd-green" onclick="requestStop()">Haltestelle melden</button>
-                    {% endif %}
-                    {% endif %}
-                    
-                    <h3 style="margin-top: 40px; border-bottom-color: #EB6502; color: #EB6502;">Gefangen worden?</h3>
-                    <select id="caught-by-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
-                        <option value="">-- Von wem wurdet ihr gefangen? --</option>
-                        {% for t in faenger_teams %}
-                        <option value="{{ t.id }}">{{ t.name }}</option>
-                        {% endfor %}
-                    </select>
-                    <button class="btn btn-vcd-orange" onclick="reportCatch('läufer')" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Wir wurden gefangen</button>
-                
-                {% elif role == 'fänger' %}
-                    <!-- FÄNGER KONTROLLEN -->
-                    <div style="text-align: center; padding: 10px 0 30px 0;">
-                        <h1 style="font-size: 2.2em; margin: 0; color: #EB6502;">Die Jagd ist eröffnet</h1>
-                        <p style="color: #666; margin-top: 10px; font-size: 1.1em;">Sucht die Läufer-Teams auf den Straßen. Ab 5 Minuten vor Spielstart seht ihr deren Live-Standorte auf der Karte!</p>
-                        <div style="background: #fdf0e6; padding: 12px; border-left: 4px solid #EB6502; margin-top: 15px; text-align: left; font-size: 0.9em; color: #333; line-height: 1.4;">
-                            <b>Hinweis zur Hintergrundkarte:</b> Die Karte zeigt dir <i>alle möglichen</i> Haltestellen im Spielgebiet sowie euren eigenen Standort und die Live-Positionen aller Läufer.
+                <!-- ============================================== -->
+                <!-- 1. SPEZIFISCHE STEUERUNG FÜR MISTER X           -->
+                <!-- ============================================== -->
+                {% if role == 'mister_x' %}
+                    <!-- INTERVALL-EINGABEMASKE & COUNTDOWN -->
+                    <div class="dashboard-card" style="border-left: 4px solid #EB6502;">
+                        <h3 style="color: #EB6502; border-bottom-color: #EB6502; margin-top: 0;">
+                            🕵️‍♂️ Standort-Veröffentlichung
+                        </h3>
+                        <div id="mx-countdown-box" style="background: #fffaf6; border: 1px solid #fed7aa; border-radius: 4px; padding: 10px; margin-bottom: 12px; font-size: 0.9em;">
+                            <div id="mx-status-indicator" style="font-weight: bold; color: #c2410c;">Status wird ermittelt...</div>
+                            <div id="mx-countdown-text" style="font-size: 1.1em; font-weight: 900; color: #EB6502; margin-top: 4px;">--:--</div>
+                        </div>
+
+                        <div id="mx-form-container">
+                            <label style="font-size: 0.85em; font-weight: bold; color: #555;">Linie / Verkehrsmittel:</label>
+                            <input type="text" id="mx-line" placeholder="z. B. U4, S1, Tram 11, Bus 30 oder Zu Fuß">
+                            
+                            <label style="font-size: 0.85em; font-weight: bold; color: #555; margin-top: 8px; display: block;">Fahrtrichtung:</label>
+                            <input type="text" id="mx-direction" placeholder="z. B. Bockenheimer Warte">
+                            
+                            <label style="font-size: 0.85em; font-weight: bold; color: #555; margin-top: 8px; display: block;">Aktuelle / Letzte Haltestelle:</label>
+                            <input type="text" id="mx-station" placeholder="z. B. Willy-Brandt-Platz">
+
+                            <div style="background: #f1f5f9; border-radius: 4px; padding: 10px; margin-top: 12px; font-size: 0.85em;">
+                                <div id="mx-coord-status" style="font-weight: 500; color: #334155;">📍 Position: Automatisches Live-GPS</div>
+                                <input type="hidden" id="mx-lat" value="">
+                                <input type="hidden" id="mx-lon" value="">
+                                <div style="display: flex; gap: 8px; margin-top: 6px; align-items: center;">
+                                    <button type="button" id="btn-reset-pin" class="btn btn-neutral" style="padding: 6px 10px; font-size: 11px; width: auto; margin: 0; display: none;" onclick="resetCorrectionPin()">
+                                        Pin entfernen (Live-GPS nutzen)
+                                    </button>
+                                </div>
+                                <div style="color: #64748b; font-size: 0.82em; margin-top: 4px;">
+                                    <i>Tipp: Auf die Karte tippen, um deinen Standort bei ungenauem GPS manuell zu korrigieren.</i>
+                                </div>
+                            </div>
+
+                            <button type="button" class="btn btn-vcd-orange" id="btn-submit-interval" onclick="submitMisterXInterval()" style="margin-top: 12px;">
+                                💾 Standort vormerken / einreichen
+                            </button>
                         </div>
                     </div>
-                    <h3 style="border-bottom-color: #EB6502; color: #EB6502;">Team gefangen?</h3>
-                    <select id="caught-team-select" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>
-                        <option value="">-- Welches Läufer-Team habt ihr erwischt? --</option>
-                        {% for t in laeufer_teams %}
-                        <option value="{{ t.id }}">{{ t.name }}</option>
-                        {% endfor %}
-                    </select>
-                    <button class="btn btn-vcd-orange" onclick="reportCatch('fänger')" {% if phase != 'game' and phase != 'post_game' %}disabled{% endif %}>Fang melden</button>
-                
-                {% else %}
-                    <!-- KEINE ROLLE KONTROLLEN -->
-                    <div style="text-align: center; padding: 10px 0 30px 0;">
-                        <h1 style="font-size: 2.2em; margin: 0; color: #6c757d;">Noch keine Rolle zugewiesen</h1>
-                        <p style="color: #666; margin-top: 10px; font-size: 1.1em;">Eure Rolle wird exakt 30 Minuten vor Spielbeginn bekannt gegeben.</p>
+
+                    <!-- EINGEHENDE FANG-ANFRAGEN (MISTER X) -->
+                    <div id="opponent-pending-catches" style="margin-bottom: 20px;"></div>
+
+                    <!-- SELBSTMELDUNG GEFANGEN (MISTER X) -->
+                    <div class="dashboard-card" style="border-left: 4px solid #6c757d;">
+                        <h4 style="margin: 0 0 8px 0; color: #4b5563;">Wurdest du erwischt? (Selbstmeldung)</h4>
+                        <div style="font-size: 0.85em; color: #666; margin-bottom: 8px;">
+                            Falls dich ein Fänger-Team gefasst hat, kannst du den Fang hier direkt bestätigen:
+                        </div>
+                        <select id="caught-by-select">
+                            <option value="">-- Welches Fänger-Team hat dich gefangen? --</option>
+                            {% for t in faenger_teams %}
+                            <option value="{{ t.id }}">{{ t.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" class="btn btn-neutral" onclick="reportCatch('mister_x')" style="background: #4b5563;">
+                            Ich wurde gefangen
+                        </button>
                     </div>
+
+                <!-- ============================================== -->
+                <!-- 2. SPEZIFISCHE STEUERUNG FÜR FÄNGER             -->
+                <!-- ============================================== -->
+                {% elif role == 'fänger' %}
+                    <!-- FANG MELDEN (FÄNGER - NUR ÜBER KARTE) -->
+                    <div class="dashboard-card" style="border-left: 4px solid #049EAB;">
+                        <h3 style="color: #049EAB; border-bottom-color: #049EAB; margin-top: 0;">
+                            ⚔️ Mister X fangen
+                        </h3>
+                        <p style="font-size: 0.88em; color: #555; margin-top: 0; margin-bottom: 10px;">
+                            Ihr habt einen Mister X aufgespürt und gefasst? <b>Tippt direkt auf seinen Punkt auf der Karte</b> und wählt dort <b>„Fang melden“</b>!
+                        </p>
+
+                        <div style="background: #eef8f8; border: 1px solid #bce2e5; border-radius: 4px; padding: 10px; margin-top: 8px; font-size: 0.82em; color: #026770; line-height: 1.4;">
+                            🛡️ <b>Sperr-Regel:</b> Ihr könnt denselben Mister X nicht zweimal hintereinander fangen. Gesperrte Mister X werden auf der Karte grau dargestellt.
+                        </div>
+                    </div>
+
+                    <!-- EIGENE OFFENE ANFRAGEN (FÄNGER) -->
+                    <div id="my-pending-requests" style="margin-bottom: 20px;"></div>
                 {% endif %}
-                
-                <!-- GEMEINSAMES LEADERBOARD & LOG -->
-                <div id="shared-data-section" style="margin-top: 40px;">
-                    <h3>Rangliste</h3>
+
+                <!-- ============================================== -->
+                <!-- 3. GEMEINSAMES LEADERBOARD & LOG                -->
+                <!-- ============================================== -->
+                <div id="shared-data-section">
+                    <h3>🏆 Fänger-Rangliste</h3>
                     <table class="leaderboard-table">
                         <!-- Wird über JavaScript dynamisch aktualisiert -->
                     </table>
+                    
                     <div class="log">
                         <!-- Wird über JavaScript dynamisch aktualisiert -->
                     </div>
-                    <div id="opponent-pending-catches" style="display: none; margin-top: 20px;"></div>
-                    <div id="my-pending-requests" style="display: none; margin-top: 20px;"></div>
                 </div>
                 
-               <!-- TRACCAR CLIENT DOWNLOAD & CONFIG (FÜR ALLE TEAMS PFLICHT) -->
-<div style="text-align: center; margin: 40px 0 20px 0; display: flex; flex-direction: column; align-items: center; gap: 15px;">
+                <!-- TRACCAR GPS SETUP BOX -->
+                <div style="text-align: center; margin: 30px 0 15px 0;">
+                    <div style="background: #e6f7f8; border: 1px solid #049EAB; padding: 14px; border-radius: 6px; width: 100%; box-sizing: border-box;">
+                        <h4 style="margin-top: 0; color: #049EAB;">🛰️ Traccar GPS-Status</h4>
+                        
+                        <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px;">
+                            <a href="https://play.google.com/store/apps/details?id=org.traccar.client" target="_blank" style="background:#333; color:white; padding:6px 12px; border-radius:3px; text-decoration:none; font-size:0.8em; font-weight:bold;">📥 Android</a>
+                            <a href="https://apps.apple.com/app/traccar-client/id843156974" target="_blank" style="background:#333; color:white; padding:6px 12px; border-radius:3px; text-decoration:none; font-size:0.8em; font-weight:bold;">📥 iOS App</a>
+                        </div>
 
-    <div style="background: #e6f7f8; border: 1px solid #049EAB; padding: 15px; border-radius: 8px; width: 100%; box-sizing: border-box;">
-        <h4 style="margin-top: 0; color: #049EAB;">🛰️ Traccar GPS-Setup (Für Fänger & Läufer Pflicht)</h4>
+                        <a href="org.traccar.client://config?url=https://{{ host_ip }}:10000&id={{ slug }}&accuracy=high&distance=5&heartbeat=10&stopDetection=true" class="btn btn-vcd-green" style="display:inline-block; width:100%; text-decoration:none; padding:11px; border-radius:4px; box-sizing: border-box; font-size:14px;">
+                            ⚙️ Tracker automatisch einrichten
+                        </a>
 
-        <!-- Download Buttons (Android & iOS) -->
-        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 15px;">
-            <a href="https://play.google.com/store/apps/details?id=org.traccar.client" target="_blank" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#333; color:white; padding:8px 15px; border-radius:4px; font-size: 0.85em;">📥 Android App</a>
-            <a href="https://apps.apple.com/app/traccar-client/id843156974" target="_blank" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#333; color:white; padding:8px 15px; border-radius:4px; font-size: 0.85em;">📥 iOS App</a>
-        </div>
+                        <button type="button" onclick="togglePermissionHelp()" class="btn btn-vcd-orange" style="width:100%; padding:10px; border-radius:4px; box-sizing: border-box; margin-top: 8px; font-size: 13px;">
+                            📍 Standortberechtigung auf „Immer“ prüfen
+                        </button>
 
-        <!-- 1. Dynamischer Auto-Config Button (Deep Link) -->
-        <a href="org.traccar.client://config?url=https://{{ host_ip }}:10000&id={{ slug }}&accuracy=high&distance=5&heartbeat=10&stopDetection=true" class="btn btn-vcd-green" style="display:inline-block; width:100%; text-decoration:none; padding:12px; border-radius:4px; box-sizing: border-box;">1. ⚙ Tracker automatisch einrichten</a>
+                        <div id="permission-help-box" style="display: none; background: white; border: 2px solid #EB6502; border-radius: 6px; padding: 12px; margin-top: 10px; text-align: left; font-size: 0.83em; color: #333; line-height: 1.4;">
+                            <b style="color: #EB6502;">Wichtig für den Standby-Betrieb:</b><br>
+                            Damit euer Standort auch bei gesperrtem Bildschirm übertragen wird:<br>
+                            <b>🍏 iOS:</b> Einstellungen ➔ Apps ➔ Traccar Client ➔ Standort ➔ <b>Immer</b>.<br>
+                            <b>🤖 Android:</b> App-Icon gedrückt halten ➔ ⓘ ➔ Berechtigungen ➔ Standort ➔ <b>Immer zulassen</b>.
+                        </div>
+                    </div>
 
-        <!-- 2. NEU: Button für Standortberechtigung "Immer" -->
-        <button type="button" onclick="togglePermissionHelp()" class="btn btn-vcd-orange" style="width:100%; padding:12px; border-radius:4px; box-sizing: border-box; margin-top: 8px;">
-            2. 📍 Standort auf „Immer“ stellen (Wichtig!)
-        </button>
+                    <!-- Replay Button -->
+                    {% if phase == 'finished' %}
+                    <div style="text-align: center; margin-top: 15px; width: 100%;">
+                        <a href="/replay" class="btn" style="display:inline-block; width:100%; box-sizing:border-box; text-decoration:none; background:#049EAB; color:white; padding:12px; border-radius:4px; font-weight: 900;">🎬 Komplettes Replay ansehen</a>
+                    </div>
+                    {% else %}
+                    <div style="text-align: center; margin-top: 15px; width: 100%; border: 1px dashed #ccc; background: #fcfcfc; padding: 10px; border-radius: 4px; box-sizing: border-box;">
+                        <p style="color: #888; font-size: 0.85em; margin: 0;">Das Replay wird nach Spielende freigeschaltet.</p>
+                    </div>
+                    {% endif %}
 
-        <!-- Ausklappbare Hilfe für iOS & Android -->
-        <div id="permission-help-box" style="display: none; background: white; border: 2px solid #EB6502; border-radius: 6px; padding: 12px; margin-top: 10px; text-align: left; font-size: 0.85em; color: #333; line-height: 1.4;">
-            <b style="color: #EB6502; font-size: 1.05em;">Warum ist das nötig?</b><br>
-            Ohne die Einstellung <b>„Immer“</b> schaltet euer Handy das GPS ab, sobald das Display ausgeht!<br><br>
+                    <!-- Anleitung Button -->
+                    <div style="margin-top: 12px;">
+                        <a href="/rules.html" style="color: #6c757d; text-decoration: underline; font-size: 0.85em;">Hier geht's zur Spielanleitung</a>
+                    </div>
 
-            <b>🍏 iPhone / iPad (iOS):</b>
-            <ol style="margin: 5px 0 10px 0; padding-left: 20px;">
-                <li>Öffnet die <b>Einstellungen</b> (Zahnrad-App).</li>
-                <li>Scrollt ganz nach unten zu <b>Apps</b> ➔ <b>Traccar Client</b>.</li>
-                <li>Tippt auf <b>Standort</b> und wählt <b>„Immer“</b>.</li>
-            </ol>
-
-            <b>🤖 Android:</b>
-            <ol style="margin: 5px 0 5px 0; padding-left: 20px;">
-                <li>Haltet das <b>Traccar-App-Icon</b> auf eurem Startbildschirm gedrückt und tippt auf <b>ⓘ (App-Info)</b>.</li>
-                <li>Tippt auf <b>Berechtigungen</b> ➔ <b>Standort</b>.</li>
-                <li>Wählt <b>„Immer zulassen“</b>.</li>
-            </ol>
-        </div>
-
-        <p style="font-size: 0.8em; color: #555; margin: 12px 0 0 0; line-height: 1.4;">
-            <b>3.</b> Tracking-Schalter in der App durchgehend eingeschaltet lassen!
-        </p>
-        <p style="font-size: 0.75em; color: #888; margin: 8px 0 0 0; line-height: 1.3; border-top: 1px solid #ccc; padding-top: 8px;">
-            Falls die Automatik klemmt:<br>Server: <b>https://{{ host_ip }}:10000</b><br>Geräte-ID: <b>{{ slug }}</b><br>
-            Genauigkeit: <b>Hoch</b> | Distanz: <b>5m</b> | Intervall/Heartbeat: <b>10s</b><br>
-            (Erweitert) Stillstandserkennung: <b>an</b>
-        </p>
-    </div>
-
-    <!-- Anleitung-Button -->
-    <a href="/rules.html" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#6c757d; color:white; padding:10px 20px; border-radius:4px;">Hier geht's zur Anleitung</a>
-
-    <!-- Replay-Button -->
-    {% if phase in ['pre_game', 'game'] %}
-        {% set now_ms = (now_time | string | replace('Z', '+00:00')) %}
-        {% set mid_ms = (mid_time | string | replace('Z', '+00:00')) %}
-        {% if mid_time and mid_time != 'None' and now_ms >= mid_ms %}
-            <div style="text-align: center; margin-top: 15px; width: 100%;">
-                <a href="/replay" class="btn" style="display:inline-block; width:100%; box-sizing:border-box; text-decoration:none; background:#049EAB; color:white; padding:12px; border-radius:4px; font-weight: bold;">🎬 Replay der 1. Halbzeit</a>
-            </div>
-        {% else %}
-            <div style="text-align: center; margin-top: 15px; width: 100%; border: 1px dashed #ccc; background: #fcfcfc; padding: 10px; border-radius: 4px; box-sizing: border-box;">
-                <p style="color: #888; font-size: 0.85em; margin: 0;">Das Replay ist in der 1. Halbzeit gesperrt und wird zur Halbzeitpause freigeschaltet.</p>
-            </div>
-        {% endif %}
-    {% elif phase == 'post_game' or phase == 'finished' %}
-        <div style="text-align: center; margin-top: 15px; width: 100%;">
-            <a href="/replay" class="btn" style="display:inline-block; width:100%; box-sizing:border-box; text-decoration:none; background:#049EAB; color:white; padding:12px; border-radius:4px; font-weight: 900;">🎬 Komplettes Replay ansehen</a>
-        </div>
-    {% else %}
-        <div style="text-align: center; margin-top: 15px; width: 100%; border: 1px dashed #ccc; background: #fcfcfc; padding: 10px; border-radius: 4px; box-sizing: border-box;">
-            <p style="color: #888; font-size: 0.85em; margin: 0;">Das Replay wird ab der Halbzeitpause freigeschaltet.</p>
-        </div>
-    {% endif %}
-
-    <!-- Team-Einstellungen (Name & PIN ändern) -->
-    <div style="background: white; border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-top: 25px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); text-align: left; width: 100%; box-sizing: border-box;">
-        <h4 style="margin: 0 0 12px 0; color: #049EAB; font-size: 1.05em; border-bottom: 1px solid #eee; padding-bottom: 6px;">⚙️ Team-Einstellungen (Name & PIN ändern)</h4>
-        <label style="font-size: 0.85em; font-weight: bold; color: #555; display: block; margin-bottom: 4px;">Neuer Teamname:</label>
-        <input type="text" id="edit-team-name" value="{{ team_name }}" maxlength="40" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 15px; margin-bottom: 12px;">
-        
-        <label style="font-size: 0.85em; font-weight: bold; color: #555; display: block; margin-bottom: 4px;">Neue PIN / Passwort (optional, leer lassen zum Behalten):</label>
-        <input type="text" id="edit-team-pin" placeholder="Bisherige PIN beibehalten" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 15px; margin-bottom: 12px;">
-        
-        <button type="button" class="btn btn-vcd-green" onclick="saveTeamProfile()" style="margin-top: 0; padding: 12px; border-radius: 4px;">Speichern</button>
-        <p style="font-size: 0.78em; color: #777; margin: 8px 0 0 0; line-height: 1.3;">
-            <i>Hinweis: Bei Änderung der PIN ändert sich auch euer Team-Link und eure Traccar-Geräte-ID.</i>
-        </p>
-    </div>
-</div>
+                    <!-- Profil ändern -->
+                    <div style="background: white; border: 1px solid #ddd; border-radius: 6px; padding: 14px; margin-top: 20px; text-align: left; box-sizing: border-box;">
+                        <h4 style="margin: 0 0 10px 0; color: #049EAB; font-size: 0.95em;">⚙️ Team-Profil</h4>
+                        {% if role != 'mister_x' %}
+                        <label style="font-size: 0.82em; font-weight: bold; color: #555;">Name:</label>
+                        <input type="text" id="edit-team-name" value="{{ team_name }}" maxlength="40" style="margin-bottom: 8px;">
+                        {% else %}
+                        <label style="font-size: 0.82em; font-weight: bold; color: #555;">Name (für Mister X nicht änderbar):</label>
+                        <input type="text" id="edit-team-name" value="{{ team_name }}" disabled style="margin-bottom: 8px; background: #eee; color: #777;">
+                        {% endif %}
+                        
+                        <label style="font-size: 0.82em; font-weight: bold; color: #555;">PIN (leer lassen zum Behalten):</label>
+                        <input type="text" id="edit-team-pin" placeholder="PIN beibehalten" style="margin-bottom: 10px;">
+                        
+                        <button type="button" class="btn btn-vcd-green" onclick="saveTeamProfile()" style="padding: 10px; font-size: 13px;">Speichern</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -375,11 +448,27 @@
         const teamName = {{ team_name | tojson }};
         const currentPhase = {{ phase | tojson }};
         const currentRole = {{ role | tojson }};
-        const baseStopPoints = {{ points_stop_reached | default(2) }};
-
-        function formatStopPoints(factor) {
-            const pts = Number((factor * baseStopPoints).toFixed(2));
-            return `${pts} ${pts === 1 ? 'Punkt' : 'Punkte'}`;
+        let lastCaughtMxId = {{ last_caught_mx | tojson if last_caught_mx else 'null' }};
+        let initialMyBroadcast = {{ my_last_broadcast | tojson | safe if my_last_broadcast else 'null' }};
+        const initialGeofenceOuter = {{ geofence_outer | tojson | safe if geofence_outer else '[]' }};
+        let hasInitialMapFit = false;
+        let latestOuterGeofence = initialGeofenceOuter || [];
+        
+        const serverNowStr = "{{ now_time }}";
+        const startStr = "{{ start_time }}";
+        const endStr = "{{ end_time }}";
+        
+        let serverOffset = 0;
+        let startTs = 0, endTs = 0;
+        let lastKnownPhase = null;
+        let cachedVisibleLocations = [];
+        let reloadedTrigger = false;
+        
+        if (serverNowStr && startStr && endStr) {
+            const serverNow = new Date(serverNowStr).getTime();
+            serverOffset = serverNow - Date.now();
+            startTs = new Date(startStr).getTime();
+            endTs = new Date(endStr).getTime();
         }
 
         function escapeHtml(str) {
@@ -391,36 +480,13 @@
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
         }
-        
-        const serverNowStr = "{{ now_time }}";
-        const startStr = "{{ start_time }}";
-        const endStr = "{{ end_time }}";
-        const midStr = "{{ mid_time }}";
-        const enableSwap = {{ 'true' if enable_swap else 'false' }};
-        
-        let serverOffset = 0;
-        let startTs = 0, endTs = 0, midTs = 0, postEndTs = 0;
-        let lastKnownPhase = null;
-        let allStopsMap = null;
-        let cachedVisibleLocations = [];
-        
-        if (serverNowStr && startStr && endStr) {
-            const serverNow = new Date(serverNowStr).getTime();
-            serverOffset = serverNow - Date.now();
-            startTs = new Date(startStr).getTime();
-            endTs = new Date(endStr).getTime();
-            postEndTs = endTs + (5 * 60 * 1000);
-            if (midStr && midStr !== "None") midTs = new Date(midStr).getTime();
-        }
-        
-        let reloadedTrigger = false;
+
+        // --- TIMER & PHASEN ---
         function updateTimer() {
             const timerBar = document.getElementById('top-timer');
             if (!startTs || !endTs) { timerBar.innerHTML = "Kein Spiel geplant."; return; }
             
             const now = Date.now() + serverOffset;
-            const preStartTs = startTs - (5 * 60 * 1000);
-            
             const formatTime = (diff) => {
                 const s = Math.floor(diff / 1000); const m = Math.floor(s / 60); const h = Math.floor(m / 60);
                 return `${h.toString().padStart(2, '0')}:${(m % 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
@@ -429,43 +495,22 @@
             const startDateFormatted = new Date(startTs).toLocaleString('de-DE', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) + ' Uhr';
             let text = "";
 
-            if (now < preStartTs) {
-                text = "Spiel in Vorbereitung. Start am " + startDateFormatted;
-                if (currentRole === 'läufer') {
-                    text += " | Eure Zielhaltestellen seht ihr 5 Min. vor Beginn";
-                }
-            } else if (now >= preStartTs && now < startTs) {
-                text = "PRE-GAME! Spiel startet in " + formatTime(startTs - now);
-            } else if (now >= startTs && now <= endTs) {
-                let swapText = "";
-                if (enableSwap && midTs && now < midTs) swapText = " | Rollentausch in " + formatTime(midTs - now);
-                text = "SPIEL LÄUFT! Ende in " + formatTime(endTs - now) + swapText;
-                timerBar.classList.add('timer-alert');
-            } else if (now > endTs && now <= postEndTs) {
-                text = "POST-GAME! Spiel beendet. Auswertung läuft.";
+            if (now < startTs) {
+                text = "Spiel in Vorbereitung. Start am " + startDateFormatted + " (in " + formatTime(startTs - now) + ")";
                 timerBar.classList.remove('timer-alert');
+            } else if (now >= startTs && now <= endTs) {
+                text = "SPIEL LÄUFT! Ende in " + formatTime(endTs - now);
+                timerBar.classList.add('timer-alert');
             } else {
-                text = "Spielrunde ist vollständig abgeschlossen.";
+                text = "Spielrunde ist beendet. Das Replay ist freigeschaltet!";
                 timerBar.classList.remove('timer-alert');
             }
             
             timerBar.innerHTML = text;
 
-            // Sekundengenaue Aktualisierung der Popup-Timer für sichtbare Team-Standorte
-            if (cachedVisibleLocations.length > 0) {
-                renderTeamLocationsOnMap(cachedVisibleLocations);
-            }
-
-            // Sichere Phasen-Reload-Logik (inkl. Halbzeit-Rollentausch)
             let currentLogicalPhase = "inactive";
-            if (now >= (startTs - 30 * 60000) + 2000 && now < preStartTs + 2000) currentLogicalPhase = "roles_assigned";
-            if (now >= preStartTs + 2000 && now < startTs + 2000) currentLogicalPhase = "pre_game";
-            if (now >= startTs + 2000 && now <= endTs + 2000) {
-                currentLogicalPhase = "game_first_half";
-                if (enableSwap && midTs && now >= midTs + 2000) currentLogicalPhase = "game_second_half";
-            }
-            if (now > endTs + 2000 && now <= postEndTs + 2000) currentLogicalPhase = "post_game";
-            if (now > postEndTs + 2000) currentLogicalPhase = "finished";
+            if (now >= startTs && now <= endTs) currentLogicalPhase = "game";
+            if (now > endTs) currentLogicalPhase = "finished";
 
             if (lastKnownPhase !== null && lastKnownPhase !== currentLogicalPhase) {
                 if(!reloadedTrigger) { reloadedTrigger = true; window.location.reload(); }
@@ -473,175 +518,129 @@
             lastKnownPhase = currentLogicalPhase;
         }
 
-        setInterval(updateTimer, 1000); updateTimer();
+        setInterval(updateTimer, 1000);
+        updateTimer();
 
+        // --- BOTTOM SHEET TOGGLE ---
         function toggleSheet() {
             const sheet = document.getElementById('bottomSheet');
             const toggleText = document.getElementById('sheetToggleText');
             sheet.classList.toggle('open');
-            if(sheet.classList.contains('open')) { toggleText.innerHTML = "Menü & Rangliste zuklappen 🔽"; } 
-            else { toggleText.innerHTML = "Menü & Rangliste ausklappen 🔼"; }
-            
-            if (map) {
-                setTimeout(() => map.invalidateSize(), 350);
+            if (sheet.classList.contains('open')) {
+                toggleText.innerHTML = "Menü zuklappen 🔽";
+            } else {
+                toggleText.innerHTML = "Menü ausklappen 🔼";
             }
+            if (map) setTimeout(() => map.invalidateSize(), 350);
         }
-        
-        const map = L.map('map', {zoomControl: false}).setView([52.248874, 10.526770], 12);
+
+        function autoFitMap(outer, locations, broadcasts) {
+            if (outer && Array.isArray(outer) && outer.length >= 3) {
+                map.fitBounds(outer, { padding: [25, 25] });
+                return true;
+            }
+            const bounds = [];
+            (locations || []).forEach(loc => {
+                if (loc && loc.lat != null && loc.lon != null) bounds.push([loc.lat, loc.lon]);
+            });
+            if (broadcasts) {
+                if (Array.isArray(broadcasts)) {
+                    broadcasts.forEach(b => {
+                        if (b && b.lat != null && b.lon != null) bounds.push([b.lat, b.lon]);
+                    });
+                } else if (broadcasts.lat != null && broadcasts.lon != null) {
+                    bounds.push([broadcasts.lat, broadcasts.lon]);
+                }
+            }
+            if (bounds.length > 0) {
+                if (bounds.length === 1) map.setView(bounds[0], 15);
+                else map.fitBounds(bounds, { padding: [35, 35], maxZoom: 16 });
+                return true;
+            }
+            return false;
+        }
+
+        // --- LEAFLET KARTE ---
+        const map = L.map('map', { zoomControl: false }).setView([51.1657, 10.4515], 6);
         L.control.zoom({ position: 'topright' }).addTo(map);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        
-        let stopMarkers = {};
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        if (initialGeofenceOuter && initialGeofenceOuter.length >= 3) {
+            map.fitBounds(initialGeofenceOuter, { padding: [25, 25] });
+            hasInitialMapFit = true;
+        }
+
         let teamLocationsLayer = L.layerGroup().addTo(map);
         let geofenceLayerGroup = L.layerGroup().addTo(map);
         let teamMarkers = {};
         let teamAccuracyCircles = {};
-        let isFirstMapLoad = true;
+        let correctionMarker = null;
 
-        // Locate-Button (topright)
-        const locateControl = L.Control.extend({
+        // Locate & Fit Buttons
+        const mapControls = L.Control.extend({
             options: { position: 'topright' },
-            onAdd: function(map) {
+            onAdd: function() {
                 const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
-                const btn = L.DomUtil.create('a', '', container);
-                btn.href = '#';
-                btn.title = 'Meinen Standort zentrieren';
-                btn.innerHTML = '📍';
-                btn.style.fontSize = '18px';
-                btn.style.width = '30px';
-                btn.style.height = '30px';
-                btn.style.lineHeight = '30px';
-                btn.style.textAlign = 'center';
-                btn.style.display = 'block';
-                btn.style.textDecoration = 'none';
-                btn.style.background = 'white';
-                btn.style.color = '#333';
-                btn.style.cursor = 'pointer';
 
-                L.DomEvent.disableClickPropagation(btn);
-                L.DomEvent.disableScrollPropagation(btn);
-                L.DomEvent.disableClickPropagation(container);
-                L.DomEvent.disableScrollPropagation(container);
+                const btnLocate = L.DomUtil.create('a', '', container);
+                btnLocate.href = '#';
+                btnLocate.title = 'Meinen Standort zentrieren';
+                btnLocate.innerHTML = '📍';
+                btnLocate.style.fontSize = '18px';
+                btnLocate.style.width = '30px';
+                btnLocate.style.height = '30px';
+                btnLocate.style.lineHeight = '30px';
+                btnLocate.style.textAlign = 'center';
+                btnLocate.style.display = 'block';
+                btnLocate.style.background = 'white';
+                btnLocate.style.cursor = 'pointer';
 
-                L.DomEvent.on(btn, 'click', function(e) {
+                L.DomEvent.disableClickPropagation(btnLocate);
+                L.DomEvent.on(btnLocate, 'click', function(e) {
                     L.DomEvent.preventDefault(e);
                     const myLoc = cachedVisibleLocations.find(loc => loc.is_self || loc.id === teamId);
                     if (myLoc && myLoc.lat && myLoc.lon) {
                         map.flyTo([myLoc.lat, myLoc.lon], Math.max(map.getZoom(), 16));
                     } else {
-                        alert("Euer GPS-Standort ist noch nicht bekannt. Bitte prüft, ob Traccar aktiv ist.");
+                        alert("Euer GPS-Standort wird noch gesucht. Bitte prüfe die Traccar App.");
                     }
                 });
+
+                const btnFit = L.DomUtil.create('a', '', container);
+                btnFit.href = '#';
+                btnFit.title = 'Spielfeld / Alle Marker zentrieren';
+                btnFit.innerHTML = '⛶';
+                btnFit.style.fontSize = '18px';
+                btnFit.style.width = '30px';
+                btnFit.style.height = '30px';
+                btnFit.style.lineHeight = '30px';
+                btnFit.style.textAlign = 'center';
+                btnFit.style.display = 'block';
+                btnFit.style.background = 'white';
+                btnFit.style.cursor = 'pointer';
+                btnFit.style.borderTop = '1px solid #ccc';
+
+                L.DomEvent.disableClickPropagation(btnFit);
+                L.DomEvent.on(btnFit, 'click', function(e) {
+                    L.DomEvent.preventDefault(e);
+                    const lastB = currentRole === 'mister_x' ? (myBroadcastMarker ? myBroadcastMarker.getLatLng() : null) : null;
+                    autoFitMap(latestOuterGeofence, cachedVisibleLocations, lastB);
+                });
+
                 return container;
             }
         });
-        map.addControl(new locateControl());
+        map.addControl(new mapControls());
 
-        // Inaktive Haltestellen & Switch für Läufer
-        let inactiveStopsLayerGroup = L.layerGroup().addTo(map);
-        let inactiveStopMarkers = {};
-        let allStopsCache = null;
-        let showAllStops = false;
-        let lastActiveStopNames = new Set();
-
-        function renderInactiveStops() {
-            if (!showAllStops || (currentPhase !== 'pre_game' && currentPhase !== 'game' && currentPhase !== 'post_game') || currentRole !== 'läufer') {
-                inactiveStopsLayerGroup.clearLayers();
-                inactiveStopMarkers = {};
-                return;
-            }
-
-            if (!allStopsCache) {
-                fetch('/api/all_stops?slug=' + encodeURIComponent(teamSlug))
-                    .then(r => r.json())
-                    .then(data => {
-                        allStopsCache = data;
-                        renderInactiveStops();
-                    })
-                    .catch(e => console.error("Fehler beim Laden aller Haltestellen:", e));
-                return;
-            }
-
-            const visibleInactive = new Set();
-            allStopsCache.forEach(stop => {
-                if (!lastActiveStopNames.has(stop.name)) {
-                    visibleInactive.add(stop.name);
-                    let factorText = '';
-                    if (stop.factor > 1) {
-                        factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span>`;
-                    } else if (stop.factor < 1) {
-                        factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span>`;
-                    }
-
-                    const popupContent = `
-                        <div style="text-align:center; font-family: 'Roboto', sans-serif;">
-                            <b style="font-size: 1.1em; color: #049EAB;">${escapeHtml(stop.name)}</b><br>
-                            <i style="color: #666; font-size: 0.9em;">(Aktuell nicht aktiv)</i>
-                            ${factorText}
-                        </div>
-                    `;
-
-                    if (inactiveStopMarkers[stop.name]) {
-                        inactiveStopMarkers[stop.name].setPopupContent(popupContent);
-                    } else {
-                        const color = stop.factor > 1 ? '#EB6502' : (stop.factor < 1 ? '#333' : '#6c757d');
-                        const marker = L.circleMarker([stop.lat, stop.lon], {
-                            radius: 5,
-                            fillOpacity: 0.45,
-                            color: color,
-                            fillColor: color,
-                            weight: 1
-                        }).bindPopup(popupContent);
-                        marker.addTo(inactiveStopsLayerGroup);
-                        inactiveStopMarkers[stop.name] = marker;
-                    }
-                }
-            });
-
-            for (const name in inactiveStopMarkers) {
-                if (!visibleInactive.has(name)) {
-                    inactiveStopsLayerGroup.removeLayer(inactiveStopMarkers[name]);
-                    delete inactiveStopMarkers[name];
-                }
-            }
-        }
-
-        {% if role == 'läufer' and (phase == 'pre_game' or phase == 'game' or phase == 'post_game') %}
-        if (currentRole === 'läufer') {
-            const allStopsControl = L.Control.extend({
-                options: { position: 'topleft' },
-                onAdd: function(map) {
-                    const container = L.DomUtil.create('div', 'leaflet-bar');
-                    container.style.background = 'white';
-                    container.style.padding = '6px 10px';
-                    container.style.fontSize = '12px';
-                    container.style.boxShadow = '0 1px 5px rgba(0,0,0,0.3)';
-                    container.style.borderRadius = '4px';
-                    container.innerHTML = `
-                        <label style="margin: 0; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;">
-                            <input type="checkbox" id="show-all-stops-toggle" style="margin: 0; cursor: pointer;">
-                            <span style="font-weight: bold; color: #333;">Alle Haltestellen</span>
-                        </label>
-                    `;
-                    L.DomEvent.disableClickPropagation(container);
-                    L.DomEvent.disableScrollPropagation(container);
-                    const checkbox = container.querySelector('#show-all-stops-toggle');
-                    checkbox.addEventListener('change', function(e) {
-                        showAllStops = e.target.checked;
-                        renderInactiveStops();
-                    });
-                    return container;
-                }
-            });
-            map.addControl(new allStopsControl());
-        }
-        {% endif %}
-
+        // Geofences rendern
         function renderGeofences(outer, exclusion) {
             geofenceLayerGroup.clearLayers();
             if (outer && Array.isArray(outer) && outer.length >= 3) {
                 const outerPoly = L.polygon(outer, {
-                    color: '#EB6502', // VCD Orange
+                    color: '#049EAB',
                     weight: 3,
                     fill: false
                 }).addTo(geofenceLayerGroup);
@@ -654,220 +653,140 @@
                             color: '#e53e3e',
                             weight: 2,
                             fillColor: 'url(#red-hatch)',
-                            fillOpacity: 1
+                            fillOpacity: 0.8
                         }).addTo(geofenceLayerGroup);
                         exPoly.bindTooltip("Sperrzone", { sticky: true });
                     }
                 });
             }
         }
-        
-        function loadStopsMap() {
-            if (currentPhase === 'finished') {
-                for (const name in stopMarkers) {
-                    map.removeLayer(stopMarkers[name]);
-                }
-                stopMarkers = {};
-                inactiveStopsLayerGroup.clearLayers();
-                inactiveStopMarkers = {};
-                return;
-            }
 
-            if (currentRole === 'läufer') {
-                if (currentPhase === 'pre_game' || currentPhase === 'game' || currentPhase === 'post_game') {
-                    fetch('/api/stops?slug=' + encodeURIComponent(teamSlug)).then(r => {
-                        if (r.status === 403) {
-                            return null;
-                        }
-                        return r.json();
-                    }).then(data => {
-                        if (!data) return;
-                        const stops = Array.isArray(data) ? data : (data.stops || []);
-                        const bonusStops = new Set(data.bonus_stops || []);
-                        if (data.geofence_outer || data.geofence_exclusion) {
-                            renderGeofences(data.geofence_outer, data.geofence_exclusion);
-                        }
-                        const select = document.getElementById('stop-select');
-                        const currentVal = select ? select.value : "";
-                        
-                        let optsHTML = '<option value="">-- Haltestelle auswählen --</option>';
-                        let bounds = [];
-                        const activeStopNames = new Set();
-                        
-                        stops.forEach(stop => {
-                            activeStopNames.add(stop.name);
-                            const isBonus = bonusStops.has(stop.name);
-                            optsHTML += `<option value="${escapeHtml(stop.name)}">${escapeHtml(stop.name)}</option>`;
-                            let btnHTML = '';
-                            if (currentPhase === 'pre_game') {
-                                btnHTML = `<button class="btn btn-neutral" disabled style="padding: 10px; font-size: 12px; margin-top:0; background: #6c757d; color: white; cursor: not-allowed;">Erst ab Spielstart eintragbar</button>`;
-                            } else {
-                                btnHTML = `<button class="btn btn-vcd-green" style="padding: 10px; font-size: 12px; margin-top:0;" onclick="requestStopFromMap('${encodeURIComponent(stop.name)}')">Hier eintragen</button>`;
-                            }
-                        
-                        let factorText = '';
-                        if (stop.factor > 1) {
-                            factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span><br>`;
-                        } else if (stop.factor < 1) {
-                            factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span><br>`;
-                        }
+        // --- MISTER X KARTEN-KORREKTUR-PIN ---
+        if (currentRole === 'mister_x') {
+            map.on('click', function(e) {
+                setCorrectionPin(e.latlng.lat, e.latlng.lng);
+            });
+        }
 
-                        let bonusText = '';
-                        if (isBonus) {
-                            bonusText = `<br><span style="color: #e11d48; font-weight: bold;">🎁 Bonushaltestelle (+2 Extrapunkte!)</span>`;
-                        }
+        function setCorrectionPin(lat, lon) {
+            lat = parseFloat(lat.toFixed(6));
+            lon = parseFloat(lon.toFixed(6));
 
-                        const popupContent = `
-                            <div style="text-align:center; font-family: 'Roboto', sans-serif;">
-                                <b style="font-size: 1.1em; color: #049EAB;">${escapeHtml(stop.name)}</b><br>
-                                ${factorText}${bonusText}<br>
-                                ${btnHTML}
-                            </div>
-                        `;
-                        
-                        let markerOpts = {};
-                        if (isBonus) {
-                            markerOpts.icon = L.divIcon({
-                                className: 'custom-bonus-stop-icon',
-                                html: '<div style="background-color: #e11d48; width: 28px; height: 28px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px #e11d48, 0 0 5px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; font-size: 15px; animation: pulse-bonus 1.5s infinite;">🎁</div>',
-                                iconSize: [34, 34],
-                                iconAnchor: [17, 17]
-                            });
-                        } else if (stop.factor > 1) {
-                            markerOpts.icon = L.divIcon({
-                                className: 'custom-factor-icon',
-                                html: '<div style="background-color: #EB6502; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⭐</div>',
-                                iconSize: [30, 30],
-                                iconAnchor: [15, 15]
-                            });
-                        } else if (stop.factor < 1) {
-                            markerOpts.icon = L.divIcon({
-                                className: 'custom-factor-icon',
-                                html: '<div style="background-color: #6c757d; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⚠️</div>',
-                                iconSize: [30, 30],
-                                iconAnchor: [15, 15]
-                            });
-                        }
+            document.getElementById('mx-lat').value = lat;
+            document.getElementById('mx-lon').value = lon;
+            document.getElementById('btn-reset-pin').style.display = 'inline-block';
+            document.getElementById('mx-coord-status').innerHTML = `📍 Manuell korrigiert: <b>${lat}, ${lon}</b>`;
 
-                        if (stopMarkers[stop.name]) {
-                            const marker = stopMarkers[stop.name];
-                            marker.setLatLng([stop.lat, stop.lon]);
-                            if (markerOpts.icon) {
-                                marker.setIcon(markerOpts.icon);
-                            } else {
-                                marker.setIcon(new L.Icon.Default());
-                            }
-                            marker.setPopupContent(popupContent);
-                        } else {
-                            const marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
-                            marker.addTo(map);
-                            stopMarkers[stop.name] = marker;
-                        }
-                        bounds.push([stop.lat, stop.lon]);
-                    });
+            const pinIcon = L.divIcon({
+                className: 'custom-correction-pin',
+                html: `
+                    <div style="background-color: #EB6502; width: 30px; height: 30px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center;">
+                        <span style="transform: rotate(45deg); color: white; font-weight: 900; font-size: 14px;">🎯</span>
+                    </div>
+                `,
+                iconSize: [36, 36],
+                iconAnchor: [18, 36]
+            });
 
-                    for (const name in stopMarkers) {
-                        if (!activeStopNames.has(name)) {
-                            map.removeLayer(stopMarkers[name]);
-                            delete stopMarkers[name];
-                        }
-                    }
-                    lastActiveStopNames = activeStopNames;
-                    renderInactiveStops();
-                    
-                    if(select) { select.innerHTML = optsHTML; select.value = currentVal; }
-                    
-                    if (bounds.length > 0 && isFirstMapLoad) {
-                        map.fitBounds(bounds, { padding: [40, 40] });
-                        isFirstMapLoad = false;
-                    }
-                });
+            if (correctionMarker) {
+                correctionMarker.setLatLng([lat, lon]);
             } else {
-                // Vor Spielbeginn (oder nach Spielende) sehen Läufer keine Haltestellen
-                for (const name in stopMarkers) {
-                    map.removeLayer(stopMarkers[name]);
-                }
-                stopMarkers = {};
-                inactiveStopsLayerGroup.clearLayers();
-                inactiveStopMarkers = {};
-            }
-        } else {
-            // Fänger sehen immer alle Haltestellen
-            fetch('/api/all_stops?slug=' + encodeURIComponent(teamSlug)).then(r => r.json()).then(data => {
-                    let bounds = [];
-                    const activeStopNames = new Set();
-                    
-                    data.forEach(stop => {
-                        activeStopNames.add(stop.name);
-                        let factorText = '';
-                        if (stop.factor > 1) {
-                            factorText = `<br><span style="color: #EB6502; font-weight: bold; font-size: 0.9em;">⭐ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span>`;
-                        } else if (stop.factor < 1) {
-                            factorText = `<br><span style="color: #6c757d; font-weight: bold; font-size: 0.9em;">⚠️ Diese Haltestelle gibt ${formatStopPoints(stop.factor)}!</span>`;
-                        }
+                correctionMarker = L.marker([lat, lon], {
+                    icon: pinIcon,
+                    draggable: true,
+                    zIndexOffset: 3000
+                }).addTo(map);
 
-                        const popupContent = `
-                            <div style="text-align:center; font-family: 'Roboto', sans-serif;">
-                                <b style="font-size: 1.1em; color: #049EAB;">${escapeHtml(stop.name)}</b>
-                                ${factorText}
-                            </div>
-                        `;
-                        
-                        let markerOpts = {};
-                        if (stop.factor > 1) {
-                            markerOpts.icon = L.divIcon({
-                                className: 'custom-factor-icon',
-                                html: '<div style="background-color: #EB6502; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⭐</div>',
-                                iconSize: [30, 30],
-                                iconAnchor: [15, 15]
-                            });
-                        } else if (stop.factor < 1) {
-                            markerOpts.icon = L.divIcon({
-                                className: 'custom-factor-icon',
-                                html: '<div style="background-color: #6c757d; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">⚠️</div>',
-                                iconSize: [30, 30],
-                                iconAnchor: [15, 15]
-                            });
-                        }
-                        
-                        if (stopMarkers[stop.name]) {
-                            const marker = stopMarkers[stop.name];
-                            marker.setLatLng([stop.lat, stop.lon]);
-                            if (markerOpts.icon) marker.setIcon(markerOpts.icon);
-                            marker.setPopupContent(popupContent);
-                        } else {
-                            const marker = L.marker([stop.lat, stop.lon], markerOpts).bindPopup(popupContent);
-                            marker.addTo(map);
-                            stopMarkers[stop.name] = marker;
-                        }
-                        bounds.push([stop.lat, stop.lon]);
-                    });
+                correctionMarker.bindPopup(`
+                    <div style="font-family:'Roboto',sans-serif; text-align:center;">
+                        <b style="color: #EB6502;">Manueller Standort-Pin</b><br>
+                        Hierhin wird dein Standort veröffentlicht.<br>
+                        <i style="font-size:0.85em; color:#666;">(Ziehen oder auf Karte tippen zum Verschieben)</i>
+                    </div>
+                `);
 
-                    for (const name in stopMarkers) {
-                        if (!activeStopNames.has(name)) {
-                            map.removeLayer(stopMarkers[name]);
-                            delete stopMarkers[name];
-                        }
-                    }
-                    
-                    if (bounds.length > 0 && isFirstMapLoad) {
-                        map.fitBounds(bounds, { padding: [40, 40] });
-                        isFirstMapLoad = false;
-                    }
+                correctionMarker.on('dragend', function(e) {
+                    const pos = e.target.getLatLng();
+                    setCorrectionPin(pos.lat, pos.lng);
                 });
             }
         }
-        
-        loadStopsMap(); 
-        setInterval(loadStopsMap, 10000);
 
-        // --- LIVE TEAM STANDORTE & GPS-WARNUNG ---
+        function resetCorrectionPin() {
+            if (correctionMarker) {
+                map.removeLayer(correctionMarker);
+                correctionMarker = null;
+            }
+            document.getElementById('mx-lat').value = '';
+            document.getElementById('mx-lon').value = '';
+            document.getElementById('btn-reset-pin').style.display = 'none';
+            document.getElementById('mx-coord-status').innerHTML = '📍 Position: Automatisches Live-GPS (Standard)';
+        }
+
+        let myBroadcastMarker = null;
+
+        function renderMyBroadcastMarker(b) {
+            if (currentRole !== 'mister_x') return;
+            if (!b || b.lat === null || b.lat === undefined || b.lon === null || b.lon === undefined) {
+                if (myBroadcastMarker) {
+                    map.removeLayer(myBroadcastMarker);
+                    myBroadcastMarker = null;
+                }
+                return;
+            }
+
+            const bIcon = L.divIcon({
+                className: 'custom-broadcast-icon',
+                html: `
+                    <div style="background-color: #ffffff; border: 2px dashed #EB6502; width: 26px; height: 26px; border-radius: 50%; box-shadow: 0 0 8px rgba(235,101,2,0.7); display:flex; align-items:center; justify-content:center; color:#EB6502; font-size:12px; font-weight:900;">
+                        📢
+                    </div>
+                `,
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            });
+
+            let timeStr = b.interval_time_str ? (b.interval_time_str.endsWith('Uhr') ? b.interval_time_str : b.interval_time_str + ' Uhr') : '';
+            if (!timeStr && (b.interval_iso || b.published_at)) {
+                const d = new Date(b.interval_iso || b.published_at);
+                if (!isNaN(d.getTime())) {
+                    timeStr = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+                }
+            }
+
+            const popupHtml = `
+                <div style="font-family:'Roboto',sans-serif; text-align:center; min-width: 170px;">
+                    <b style="color:#EB6502;">📢 Euer letzter Broadcast</b><br>
+                    <div style="margin: 6px 0; font-size: 0.85em; color: #333; text-align: left; line-height: 1.4; border-top: 1px solid #eee; border-bottom: 1px solid #eee; padding: 6px 0;">
+                        ${timeStr ? `<div>⏰ Zeit: <b>${escapeHtml(timeStr)}</b></div>` : ''}
+                        <div>🚆 Linie: <b>${escapeHtml(b.line || '-')}</b></div>
+                        <div>🧭 Richtung: <b>${escapeHtml(b.direction || '-')}</b></div>
+                        <div>🚏 Haltestelle: <b>${escapeHtml(b.station || '-')}</b></div>
+                        ${b.is_manual_coords ? '<div style="font-size:0.85em; color:#EB6502; margin-top:2px;">📍 Manueller Standort</div>' : ''}
+                    </div>
+                    <span style="font-size:0.78em; color:#777;">(Diesen Standort sehen die Fänger)</span>
+                </div>
+            `;
+
+            if (myBroadcastMarker) {
+                myBroadcastMarker.setLatLng([b.lat, b.lon]);
+                myBroadcastMarker.setPopupContent(popupHtml);
+            } else {
+                myBroadcastMarker = L.marker([b.lat, b.lon], { icon: bIcon, zIndexOffset: 2500 })
+                    .bindPopup(popupHtml)
+                    .addTo(map);
+            }
+        }
+
+        // --- STANDORTE AUF KARTE RENDERN ---
         function renderTeamLocationsOnMap(locations) {
             if (currentPhase === 'finished' || !locations) {
-                if (currentPhase === 'finished') {
-                    teamLocationsLayer.clearLayers();
-                    teamMarkers = {};
-                    teamAccuracyCircles = {};
+                teamLocationsLayer.clearLayers();
+                teamMarkers = {};
+                teamAccuracyCircles = {};
+                if (myBroadcastMarker) {
+                    map.removeLayer(myBroadcastMarker);
+                    myBroadcastMarker = null;
                 }
                 return;
             }
@@ -879,10 +798,8 @@
                 const markerKey = String(loc.id || (loc.is_self ? teamId : loc.name));
                 currentKeys.add(markerKey);
 
-                const isSelf = loc.is_self || (loc.id === teamId);
-                let bgColor = '#6c757d';
-                if (loc.role === 'fänger') bgColor = '#EB6502';
-                else if (loc.role === 'läufer') bgColor = '#AEC905';
+                const isSelf = Boolean(loc.is_self);
+                const isBlocked = Boolean(loc.is_blocked);
 
                 let updatedMs = typeof loc.updated_at === 'number'
                     ? loc.updated_at * 1000
@@ -890,77 +807,101 @@
 
                 const diffSec = Math.max(0, Math.floor((now - updatedMs) / 1000));
                 let timeAgo = "";
-                if (diffSec < 60) {
-                    timeAgo = `vor ${diffSec} Sekunde${diffSec !== 1 ? 'n' : ''}`;
-                } else if (diffSec < 3600) {
-                    const mins = Math.floor(diffSec / 60);
-                    timeAgo = `vor ${mins} Minute${mins !== 1 ? 'n' : ''}`;
+                if (diffSec < 60) timeAgo = `vor ${diffSec}s`;
+                else if (diffSec < 3600) timeAgo = `vor ${Math.floor(diffSec / 60)} Min.`;
+                else timeAgo = `vor ${Math.floor(diffSec / 3600)} Std.`;
+
+                let icon, popupContent;
+
+                if (isSelf) {
+                    // Eigener Live-Standort
+                    const color = currentRole === 'mister_x' ? '#EB6502' : '#049EAB';
+                    icon = L.divIcon({
+                        className: 'custom-team-icon',
+                        html: `<div style="background-color: ${color}; width: 22px; height: 22px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.6);"></div>`,
+                        iconSize: [28, 28],
+                        iconAnchor: [14, 14]
+                    });
+
+                    popupContent = `
+                        <div style="text-align:center; font-family:'Roboto',sans-serif; min-width: 140px;">
+                            <b style="color: ${color};">📍 Euer Live-Standort</b><br>
+                            <span style="font-size: 0.85em; color: #666;">Aktualisiert: ${timeAgo}</span>
+                        </div>
+                    `;
                 } else {
-                    const hours = Math.floor(diffSec / 3600);
-                    const mins = Math.floor((diffSec % 3600) / 60);
-                    timeAgo = `vor ${hours} Std. ${mins} Min.`;
-                }
+                    // Mister X Standort für Fänger
+                    // Falls gesperrt durch Sperr-Regel: GRAU (#6c757d)
+                    const markerColor = isBlocked ? '#6c757d' : '#EB6502';
+                    const markerBorder = isBlocked ? '#adb5bd' : '#ffffff';
 
-                const borderStyle = isSelf ? '4px solid #049EAB' : '3px solid #333';
-                const size = isSelf ? 22 : 18;
+                    icon = L.divIcon({
+                        className: 'custom-mister-icon',
+                        html: `
+                            <div style="background-color: ${markerColor}; width: 28px; height: 28px; border-radius: 50%; border: 3px solid ${markerBorder}; box-shadow: 0 0 10px rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; color:white; font-weight:900; font-size:14px;">
+                                X
+                            </div>
+                        `,
+                        iconSize: [34, 34],
+                        iconAnchor: [17, 17]
+                    });
 
-                const icon = L.divIcon({
-                    className: 'custom-team-icon',
-                    html: `<div style="background-color: ${bgColor}; width: ${size}px; height: ${size}px; border-radius: 50%; border: ${borderStyle}; box-shadow: 0 0 8px rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; font-size:10px;"></div>`,
-                    iconSize: [size + 8, size + 8],
-                    iconAnchor: [(size + 8) / 2, (size + 8) / 2]
-                });
+                    let detailsHtml = '';
+                    if (loc.interval_time_str) {
+                        detailsHtml += `<div>⏰ Letzte Zeit: <b>${escapeHtml(loc.interval_time_str)} Uhr</b></div>`;
+                        if (loc.next_interval_ts) {
+                            const cdFormatted = formatNextLocationCountdown(loc.next_interval_ts);
+                            const isOverdue = (loc.next_interval_ts - (Date.now() / 1000)) < 0;
+                            const cdColor = isOverdue ? '#dc2626' : '#049EAB';
+                            detailsHtml += `<div>⏳ Nächstes Update:</div><div><b class="mx-next-countdown" data-next-ts="${loc.next_interval_ts}" style="color:${cdColor}; font-weight:bold;">${cdFormatted}</b></div>`;
+                        }
+                    }
+                    if (loc.line) {
+                        detailsHtml += `<div>🚆 Linie: <b>${escapeHtml(loc.line)}</b></div>`;
+                    }
+                    if (loc.direction) {
+                        detailsHtml += `<div>🧭 Richtung: <b>${escapeHtml(loc.direction)}</b></div>`;
+                    }
+                    if (loc.station) {
+                        detailsHtml += `<div>🚏 Haltestelle: <b>${escapeHtml(loc.station)}</b></div>`;
+                    }
 
-                let reportCatchBtn = '';
-                if (currentRole === 'fänger' && loc.role === 'läufer' && !isSelf && (currentPhase === 'game' || currentPhase === 'post_game')) {
-                    reportCatchBtn = `
-                        <button class="btn btn-vcd-green" style="padding: 8px 12px; font-size: 12px; margin-top: 8px; width: 100%; border-radius: 4px;" onclick="reportCatchFromMap('${encodeURIComponent(loc.id)}')">🎯 Fang melden</button>
+                    let actionBtn = '';
+                    if (isBlocked) {
+                        actionBtn = `
+                            <div style="margin-top: 8px;">
+                                <button class="btn" style="background:#6c757d; padding:7px; font-size:12px; margin:0; cursor:not-allowed;" disabled>
+                                    ⛔ Zuletzt gefangen! (Gesperrt)
+                                </button>
+                                <div style="font-size:0.78em; color:#666; margin-top:4px;">
+                                    Fangt erst einen anderen Mister X.
+                                </div>
+                            </div>
+                        `;
+                    } else if (currentPhase === 'game') {
+                        actionBtn = `
+                            <button class="btn btn-vcd-orange" style="padding:8px 12px; font-size:12px; margin-top:8px;" onclick="reportCatchTarget('${escapeHtml(loc.id)}')">
+                                ⚔️ Fang melden
+                            </button>
+                        `;
+                    }
+
+                    popupContent = `
+                        <div style="text-align:center; font-family:'Roboto',sans-serif; min-width: 170px;">
+                            <b style="font-size: 1.15em; color: ${markerColor};">Mister X</b>
+                            ${isBlocked ? '<span style="display:block; font-size:0.8em; color:#6c757d; font-weight:bold;">(Zuletzt gefangen)</span>' : ''}
+                            <div style="margin: 6px 0; font-size: 0.85em; color: #333; text-align: left; line-height: 1.4; border-top: 1px solid #eee; border-bottom: 1px solid #eee; padding: 6px 0;">
+                                ${detailsHtml || '<i style="color:#777;">Keine Linienangaben</i>'}
+                            </div>
+                            ${actionBtn}
+                        </div>
                     `;
                 }
 
-                const popupContent = `
-                    <div style="text-align:center; font-family: 'Roboto', sans-serif; min-width: 145px;">
-                        <b style="font-size: 1.15em; color: #333;">${isSelf ? '📍 Euer Standort (' + escapeHtml(loc.name) + ')' : escapeHtml(loc.name)}</b><br>
-                        <span style="font-size: 0.85em; font-weight: bold; color: ${bgColor}; text-transform: uppercase;">${escapeHtml(loc.role)}</span><br>
-                        <div style="margin-top: 6px; font-size: 0.82em; color: #666; border-top: 1px solid #ccc; padding-top: 4px;">
-                            Letztes GPS-Signal:<br><b style="color: ${diffSec > 120 ? '#dc2626' : '#22c55e'};">${timeAgo}</b>
-                        </div>
-                        ${reportCatchBtn}
-                    </div>
-                `;
-
-                // Accuracy Kreis rendern / aktualisieren
-                const hasAcc = loc.accuracy && Number(loc.accuracy) > 0;
-                const accRadius = hasAcc ? Number(loc.accuracy) : 0;
-                if (hasAcc) {
-                    if (teamAccuracyCircles[markerKey]) {
-                        teamAccuracyCircles[markerKey].setLatLng([loc.lat, loc.lon]);
-                        teamAccuracyCircles[markerKey].setRadius(accRadius);
-                        teamAccuracyCircles[markerKey].setStyle({ color: bgColor, fillColor: bgColor });
-                    } else {
-                        const circle = L.circle([loc.lat, loc.lon], {
-                            radius: accRadius,
-                            color: bgColor,
-                            fillColor: bgColor,
-                            fillOpacity: 0.15,
-                            weight: 1,
-                            interactive: false
-                        }).addTo(teamLocationsLayer);
-                        teamAccuracyCircles[markerKey] = circle;
-                    }
-                } else {
-                    if (teamAccuracyCircles[markerKey]) {
-                        teamLocationsLayer.removeLayer(teamAccuracyCircles[markerKey]);
-                        delete teamAccuracyCircles[markerKey];
-                    }
-                }
-
                 if (teamMarkers[markerKey]) {
-                    const marker = teamMarkers[markerKey];
-                    marker.setLatLng([loc.lat, loc.lon]);
-                    marker.setIcon(icon);
-                    marker.setPopupContent(popupContent);
-                    marker.setZIndexOffset(isSelf ? 2000 : 1500);
+                    teamMarkers[markerKey].setLatLng([loc.lat, loc.lon]);
+                    teamMarkers[markerKey].setIcon(icon);
+                    teamMarkers[markerKey].setPopupContent(popupContent);
                 } else {
                     const marker = L.marker([loc.lat, loc.lon], { icon: icon, zIndexOffset: isSelf ? 2000 : 1500 })
                         .bindPopup(popupContent)
@@ -975,250 +916,283 @@
                     delete teamMarkers[key];
                 }
             }
-            for (const key in teamAccuracyCircles) {
-                if (!currentKeys.has(key)) {
-                    teamLocationsLayer.removeLayer(teamAccuracyCircles[key]);
-                    delete teamAccuracyCircles[key];
-                }
-            }
+            updateNextLocationCountdowns();
         }
 
+        // --- COUNTDOWN FÜR NÄCHSTEN MISTER X STANDORT (FÄNGER KARTE) ---
+        function formatNextLocationCountdown(targetTs) {
+            if (!targetTs) return "--";
+            const nowSec = Date.now() / 1000;
+            const diffSec = Math.floor(targetTs - nowSec);
+            const sign = diffSec < 0 ? "-" : "";
+            const absDiff = Math.abs(diffSec);
+            const m = Math.floor(absDiff / 60);
+            const s = absDiff % 60;
+            return `${sign}${m}m ${s}s`;
+        }
+
+        function updateNextLocationCountdowns() {
+            document.querySelectorAll('.mx-next-countdown').forEach(el => {
+                const ts = parseFloat(el.getAttribute('data-next-ts'));
+                if (!isNaN(ts)) {
+                    el.textContent = formatNextLocationCountdown(ts);
+                    const isOverdue = (ts - (Date.now() / 1000)) < 0;
+                    el.style.color = isOverdue ? '#dc2626' : '#049EAB';
+                }
+            });
+        }
+
+        setInterval(updateNextLocationCountdowns, 1000);
+        map.on('popupopen', updateNextLocationCountdowns);
+
+        // --- POLLING / STANDORT-DATEN ABFRAGEN ---
         function fetchTeamLiveLocations() {
-            if (currentPhase === 'finished') {
-                teamLocationsLayer.clearLayers();
-                teamMarkers = {};
-                teamAccuracyCircles = {};
-                document.getElementById('gps-warning-banner').style.display = 'none';
-                const gfWarn = document.getElementById('geofence-warning-banner');
-                if (gfWarn) gfWarn.style.display = 'none';
-                return;
-            }
+            if (currentPhase === 'finished') return;
 
             fetch('/api/team_locations?slug=' + encodeURIComponent(teamSlug))
                 .then(r => r.json())
                 .then(data => {
                     if (!data || !data.success) return;
 
-                    // Prüfe Rollenkonsistenz (z.B. Halbzeit-Rollentausch oder Admin-Änderung)
-                    if (data.role && data.role !== currentRole) {
-                        window.location.reload();
-                        return;
-                    }
-
                     cachedVisibleLocations = data.locations || [];
                     renderTeamLocationsOnMap(cachedVisibleLocations);
 
-                    // Geofence-Warnbanner
+                    // Geofence Warnung
                     const gfWarnBanner = document.getElementById('geofence-warning-banner');
                     if (gfWarnBanner) {
-                        if (data.geofence_violation_active) {
-                            gfWarnBanner.style.display = 'block';
-                        } else {
-                            gfWarnBanner.style.display = 'none';
-                        }
+                        gfWarnBanner.style.display = data.geofence_violation_active ? 'block' : 'none';
                     }
 
+                    if (data.geofence_outer && data.geofence_outer.length >= 3) {
+                        latestOuterGeofence = data.geofence_outer;
+                    }
                     if (data.geofence_outer || data.geofence_exclusion) {
                         renderGeofences(data.geofence_outer, data.geofence_exclusion);
                     }
 
-                    // GPS-Warnung mit Unterscheidung nach Zeit (2-5 Minuten vs. ab 5 Minuten)
-                    const warnBanner = document.getElementById('gps-warning-banner');
-                    if (data.gps_warning) {
-                        const missing = data.missing_minutes || 2;
-                        let bannerHtml = `⚠️ <b>HINWEIS:</b> Seit über ${missing} Minuten wurde kein Standort gesendet.<br>`;
-                        
-                        if (missing >= 5) {
-                            warnBanner.style.background = '#dc2626';
-                            warnBanner.style.borderBottom = '2px solid #991b1b';
-                            bannerHtml = `⚠️ <b>ACHTUNG:</b> Seit über ${missing} Minuten wurde kein Standort aktualisiert!<br>`;
-                            bannerHtml += `<span style="font-weight: normal; font-size: 0.92em;">Das liegt entweder an einem Fehler in der Traccar App oder ihr habt euch einfach eine Weile nicht bewegt. Wenn ihr unterwegs seid, checkt bitte eure Konfiguration!</span>`;
-                            bannerHtml += `<br><br><span style="font-weight: bold; font-size: 0.95em;">Bitte schickt mindestens einmal einen manuellen Standort, um mögliche Strafen zu vermeiden. Wenn es weiterhin Probleme gibt, meldet euch bitte beim Admin!</span>`;
-                        } else {
-                            warnBanner.style.background = '#EB6502'; // softer orange for 2-4 min
-                            warnBanner.style.borderBottom = '2px solid #b84f02';
-                            bannerHtml += `<span style="font-weight: normal; font-size: 0.92em;">Das liegt entweder an einem Fehler in der Traccar App oder ihr habt euch einfach eine Weile nicht bewegt. Wenn ihr unterwegs seid, checkt bitte eure Konfiguration!</span>`;
+                    // Für Mister X: Intervall-Status & Countdown sowie eigener letzter Broadcast
+                    let currentLastB = null;
+                    if (currentRole === 'mister_x') {
+                        currentLastB = data.my_last_broadcast || (data.mister_x_interval ? data.mister_x_interval.last_broadcast : null);
+                        renderMyBroadcastMarker(currentLastB);
+                        if (data.mister_x_interval) {
+                            updateMisterXIntervalUI(data.mister_x_interval);
                         }
-                        
-                        warnBanner.innerHTML = bannerHtml;
-                        warnBanner.style.display = 'block';
-                    } else {
-                        warnBanner.style.display = 'none';
+                    }
+
+                    if (!hasInitialMapFit) {
+                        hasInitialMapFit = autoFitMap(latestOuterGeofence, cachedVisibleLocations, currentLastB);
                     }
                 })
                 .catch(e => console.log("Standort-Abruf fehlgeschlagen", e));
         }
 
+        if (initialMyBroadcast) {
+            renderMyBroadcastMarker(initialMyBroadcast);
+        }
+
         fetchTeamLiveLocations();
         setInterval(fetchTeamLiveLocations, 5000);
-        
-        function requestStopFromMap(encodedStopName) {
-            const stopName = decodeURIComponent(encodedStopName);
-            map.closePopup();
-            if(currentPhase !== 'game' && currentPhase !== 'post_game') { alert("Aktion im aktuellen Status nicht erlaubt."); return; }
-            sendStopRequest(stopName);
-        }
-          
-        function requestStop() {
-            if(currentPhase !== 'game' && currentPhase !== 'post_game') return alert("Aktion momentan nicht erlaubt.");
-            const stop = document.getElementById('stop-select').value;
-            if (!stop) return alert("Bitte wähle eine Haltestelle aus.");
-            sendStopRequest(stop);
-        }
 
-        function sendStopRequest(stopName) {
-            fetch('/api/request_stop', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ slug: teamSlug, stop: stopName })
-            }).then(r => r.json()).then(d => {
-                if(d.success) {
-                    alert(d.message || `Anfrage für "${stopName}" erfolgreich gesendet.`);
-                    const select = document.getElementById('stop-select');
-                    if (select) select.value = "";
-                    loadStopsMap();
-                    fetchTicker();
-                } else { alert(d.error || 'Fehler!'); }
-            }).catch(() => alert('Netzwerkfehler!'));
-        }
+        // --- MISTER X INTERVALL UI & SUBMIT ---
+        function updateMisterXIntervalUI(intervalInfo) {
+            const statusIndicator = document.getElementById('mx-status-indicator');
+            const countdownText = document.getElementById('mx-countdown-text');
+            const submitBtn = document.getElementById('btn-submit-interval');
+            const lineInput = document.getElementById('mx-line');
+            const dirInput = document.getElementById('mx-direction');
+            const stationInput = document.getElementById('mx-station');
+            if (!statusIndicator || !countdownText) return;
 
-        function reportCatchFromMap(encodedPreyId) {
-            const preyId = decodeURIComponent(encodedPreyId);
-            map.closePopup();
-            const select = document.getElementById('caught-team-select');
-            if (select) {
-                select.value = preyId;
+            const formatSec = (s) => {
+                if (s === undefined || s === null || s <= 0) return "00:00";
+                const m = Math.floor(s / 60);
+                const sec = Math.floor(s % 60);
+                return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+            };
+
+            const status = intervalInfo.status || intervalInfo.window_type;
+            const targetStr = intervalInfo.target_interval_str || intervalInfo.target_interval_time_str || "";
+            const nextStr = intervalInfo.next_interval_time_str || "";
+            const secs = intervalInfo.seconds_left || 0;
+            const canSubmit = !!intervalInfo.can_submit;
+
+            if (lineInput) lineInput.disabled = !canSubmit;
+            if (dirInput) dirInput.disabled = !canSubmit;
+            if (stationInput) stationInput.disabled = !canSubmit;
+
+            if (status === 'before_first_window') {
+                statusIndicator.innerHTML = `⏳ Nächstes Meldefenster für <b>${targetStr} Uhr</b> (ab 2 Min. vorher)`;
+                statusIndicator.style.color = '#c2410c';
+                countdownText.innerHTML = `Öffnet in ${formatSec(secs)}`;
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = "🔒 Noch geschlossen";
+                }
+            } else if (status === 'active_window') {
+                statusIndicator.innerHTML = `🟢 <b>Meldefenster offen (${targetStr} Uhr)!</b> Wird beim Senden <b>sofort</b> veröffentlicht`;
+                statusIndicator.style.color = '#15803d';
+                countdownText.innerHTML = `Automatisches Senden in ${formatSec(secs)}`;
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = "📢 Standort jetzt sofort veröffentlichen";
+                }
+            } else if (status === 'already_published') {
+                statusIndicator.innerHTML = `✅ <b>Standort (${targetStr} Uhr) gesendet!</b>`;
+                statusIndicator.style.color = '#049EAB';
+                countdownText.innerHTML = nextStr ? `Nächstes Fenster (${nextStr} Uhr) in ${formatSec(secs)}` : `Alle Intervalle abgeschlossen`;
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = "🔒 Für diese Uhrzeit bereits gesendet";
+                }
+            } else if (status === 'late_submission') {
+                statusIndicator.innerHTML = `ℹ️ <b>Nicht gesendet (${targetStr} Uhr):</b> Linien-Infos hier nachtragen`;
+                statusIndicator.style.color = '#0369a1';
+                countdownText.innerHTML = nextStr ? `Nächstes Fenster (${nextStr} Uhr) in ${formatSec(secs)}` : `Verbleibend: ${formatSec(secs)}`;
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = "💾 Linien-Infos nachtragen";
+                }
+            } else {
+                statusIndicator.innerHTML = `Keine offenen Intervalle`;
+                countdownText.innerHTML = `--:--`;
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = "Geschlossen";
+                }
             }
-            if (confirm("Möchtest du dieses Läufer-Team als gefangen melden?")) {
-                fetch('/api/report_catch', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        reporter_slug: teamSlug,
-                        hunter: teamId,
-                        prey: preyId
-                    })
-                })
-                .then(r => r.json())
-                .then(d => {
-                    if (d.success) {
-                        alert(d.message);
-                        if (select) select.value = "";
-                        fetchTicker();
-                    } else {
-                        alert(d.error || 'Fehler beim Senden.');
+        }
+
+        function submitMisterXInterval() {
+            const btn = document.getElementById('btn-submit-interval');
+            if (btn && btn.disabled) return;
+
+            const line = (document.getElementById('mx-line').value || '').trim();
+            const direction = (document.getElementById('mx-direction').value || '').trim();
+            const station = (document.getElementById('mx-station').value || '').trim();
+            const manualLat = document.getElementById('mx-lat').value;
+            const manualLon = document.getElementById('mx-lon').value;
+
+            const payload = {
+                slug: teamSlug,
+                line: line,
+                direction: direction,
+                station: station
+            };
+
+            if (manualLat && manualLon) {
+                payload.manual_lat = parseFloat(manualLat);
+                payload.manual_lon = parseFloat(manualLon);
+            }
+
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = "⏳ Veröffentliche...";
+            }
+
+            fetch('/api/mister_x_submit_interval', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message || "Standort wurde sofort veröffentlicht!");
+                    if (data.interval_info) {
+                        updateMisterXIntervalUI(data.interval_info);
+                        if (data.interval_info.last_broadcast) {
+                            renderMyBroadcastMarker(data.interval_info.last_broadcast);
+                        }
                     }
-                })
-                .catch(() => alert('Netzwerkfehler!'));
+                    fetchTeamLiveLocations();
+                    fetchTicker();
+                } else {
+                    alert(data.error || "Fehler beim Einreichen.");
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = "📢 Standort jetzt sofort veröffentlichen";
+                    }
+                }
+            })
+            .catch(() => {
+                alert("Netzwerkfehler beim Einreichen!");
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = "📢 Standort jetzt sofort veröffentlichen";
+                }
+            });
+        }
+
+        // --- FANG MELDEN (FÄNGER ÜBER KARTE & MISTER X SELBSTMELDUNG) ---
+        function reportCatchTarget(preyId) {
+            if (currentPhase !== 'game') {
+                return alert("Fänge können nur während des laufenden Spiels gemeldet werden.");
+            }
+            map.closePopup();
+            if (confirm("Möchtest du diesen Mister X als gefangen melden?")) {
+                sendCatchReport(teamId, preyId);
             }
         }
 
         function reportCatch(role) {
-            if(currentPhase !== 'game' && currentPhase !== 'post_game') return alert("Aktionen sind nur während des Spiels und kurz danach möglich.");
-            
-            let hunterId, preyId;
-            if (role === 'fänger') {
-                hunterId = teamId;
-                preyId = document.getElementById('caught-team-select').value;
-                if (!preyId) return alert("Bitte wähle das gefangene Team aus.");
-            } else {
-                preyId = teamId;
-                hunterId = document.getElementById('caught-by-select').value;
-                if (!hunterId) return alert("Bitte wähle das Fänger-Team aus.");
+            if (currentPhase !== 'game') {
+                return alert("Fänge können nur während des laufenden Spiels gemeldet werden.");
             }
+            if (role === 'mister_x') {
+                const hunterId = document.getElementById('caught-by-select').value;
+                if (!hunterId) return alert("Bitte wähle das Fänger-Team aus, das dich gefangen hat.");
+                sendCatchReport(hunterId, teamId);
+            }
+        }
 
+        function sendCatchReport(hunterId, preyId) {
             fetch('/api/report_catch', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ reporter_slug: teamSlug, hunter: hunterId, prey: preyId })
-            }).then(r => r.json()).then(d => {
-                if(d.success) {
-                    alert(d.message);
-                    if(role === 'fänger') document.getElementById('caught-team-select').value = "";
-                    else document.getElementById('caught-by-select').value = "";
-                    fetchTicker();
-                } else { alert(d.error || 'Fehler beim Senden.'); }
-            }).catch(() => alert('Netzwerkfehler!'));
-        }
-
-        // --- LIVE LEADERBOARD & LOG ---
-        function updateLeaderboard(leaderboardData) {
-            const table = document.querySelector('.leaderboard-table');
-            let html = `<tr><th>Team</th><th>Punkte</th></tr>`;
-
-            leaderboardData.forEach(entry => {
-                let highlight = '';
-                if (entry.id === teamId) {
-                    highlight = currentRole === 'läufer' ? 'highlight-runner' : currentRole === 'fänger' ? 'highlight-catcher' : '';
-                }
-                
-                html += `<tr class="${highlight}">
-                    <td>${escapeHtml(entry.display_name)} <span style="font-size: 0.7em; color: #888; text-transform: uppercase;">(${escapeHtml(entry.role)})</span></td>
-                    <td style="font-weight: bold; color: #049EAB;">${entry.score}</td>
-                </tr>`;
-            });
-            table.innerHTML = html;
-        }
-
-        function updateLog(logData) {
-            const teamLog = logData.filter(entry => entry.team === teamId || entry.hunter === teamId || entry.prey === teamId || (entry.type === 'system' && !entry.admin_only));
-            
-            const logContainer = document.querySelector('.log');
-            let html = `<h4>Letzte Aktionen eures Teams</h4>`;
-            
-            if (teamLog.length === 0) {
-                html += `<div class="log-entry">Noch keine Aktionen vorhanden.</div>`;
-            } else {
-                const sortedLog = [...teamLog].sort((a, b) => {
-                    const tA = new Date(a.actual_timestamp || a.timestamp).getTime();
-                    const tB = new Date(b.actual_timestamp || b.timestamp).getTime();
-                    return tB - tA;
-                });
-
-                sortedLog.forEach(entry => {
-                    let text = escapeHtml(entry.desc || '');
-                    const escapedTeamName = escapeHtml(teamName);
-
-                    if (entry.type === 'stop') {
-                        if (entry.team === teamId) text = text.replace(escapedTeamName + " hat", "<b>Ihr</b> habt");
-                    } else if (entry.type === 'catch') {
-                        if (entry.hunter === teamId) text = text.replace(escapedTeamName + " (Fänger) hat", "<b>Ihr</b> (Fänger) habt");
-                        if (entry.prey === teamId) text = text.replace(escapedTeamName + " (Läufer)", "<b>euch</b> (Läufer)");
-                    }
-                    
-                    const effDate = new Date(entry.actual_timestamp || entry.timestamp);
-                    let timeStr = '';
-                    if (!isNaN(effDate.getTime())) {
-                        timeStr = effDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' Uhr';
-                    }
-                    const timeColor = entry.actual_timestamp ? '#16a34a' : '#111';
-                    let timeBadge = timeStr ? `<span style="font-weight: bold; color: ${timeColor};">[${timeStr}]</span> ` : '';
-
-                    let lateWarn = entry.is_late ? ` <span class="late-warn">⚠️ (Nachtrag nach Spielende)</span>` : '';
-                    html += `<div class="log-entry">${timeBadge}${text}${lateWarn}</div>`;
-                });
-            }
-            logContainer.innerHTML = html;
-        }
-
-
-        // --- AUSSTEHENDE ANFRAGEN & RÜCKGÄNGIG ---
-        function undoMyRequest(requestId) {
-            requestId = decodeURIComponent(requestId);
-            if (!confirm("Möchtest du diese Anfrage wirklich zurückziehen?")) return;
-            fetch('/api/undo_request', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ slug: teamSlug, request_id: requestId })
+                body: JSON.stringify({
+                    reporter_slug: teamSlug,
+                    hunter: hunterId,
+                    prey: preyId
+                })
             })
             .then(r => r.json())
-            .then(d => {
-                if (d.success) {
+            .then(data => {
+                if (data.success) {
+                    alert(data.message || "Fang erfolgreich übermittelt!");
+                    const selectC = document.getElementById('caught-team-select');
+                    if (selectC) selectC.value = "";
+                    const selectB = document.getElementById('caught-by-select');
+                    if (selectB) selectB.value = "";
                     fetchTicker();
-                    loadStopsMap();
                 } else {
-                    alert(d.error || 'Fehler beim Zurückziehen der Anfrage.');
+                    alert(data.error || "Fehler beim Melden des Fangs.");
                 }
             })
-            .catch(() => alert('Netzwerkfehler beim Zurückziehen.'));
+            .catch(() => alert("Netzwerkfehler beim Melden!"));
+        }
+
+        // --- FANG-ANFRAGEN BESTÄTIGEN / ABLEHNEN (RÜCKSTANDSLOS) ---
+        function respondCatchRequest(requestId, action) {
+            fetch('/api/respond_catch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    slug: teamSlug,
+                    request_id: requestId,
+                    action: action
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    fetchTicker();
+                } else {
+                    alert(data.error || "Fehler bei der Bearbeitung.");
+                }
+            })
+            .catch(() => alert("Netzwerkfehler beim Bearbeiten der Anfrage!"));
         }
 
         function updateOpponentCatches(requests) {
@@ -1233,45 +1207,24 @@
             let html = `<h4 style="margin-top: 0; color: #b45309; border-bottom: 1px solid #fde68a; padding-bottom: 5px;">⚠️ Ausstehende Fang-Bestätigung</h4>`;
             requests.forEach(req => {
                 const hunterName = escapeHtml(req.hunter_name || 'Fänger');
-                const hunterId = req.hunter;
-                const preyId = req.prey || teamId;
+                const reqId = req.id;
                 html += `
                     <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 6px; padding: 12px; margin-bottom: 10px;">
-                        <div style="font-size: 0.95em; color: #92400e; margin-bottom: 8px; font-weight: 500;">
-                            Team <b>${hunterName}</b> hat gemeldet, euch gefangen zu haben. Stimmt das?
+                        <div style="font-size: 0.95em; color: #92400e; margin-bottom: 10px; font-weight: 500;">
+                            ⚔️ Team <b>${hunterName}</b> meldet, dich gefangen zu haben. Stimmt das?
                         </div>
-                        <div style="display: flex; gap: 8px;">
-                            <button type="button" class="btn btn-vcd-green" style="width: auto; padding: 8px 14px; margin: 0; font-size: 13px; font-weight: bold; border-radius: 4px; cursor: pointer;" onclick="confirmOpponentCatch('${encodeURIComponent(hunterId)}', '${encodeURIComponent(preyId)}')">Bestätigen</button>
-                            <button type="button" class="btn btn-neutral" style="width: auto; padding: 8px 14px; margin: 0; background: #6c757d; color: white; font-size: 13px; border-radius: 4px; cursor: pointer;" onclick="this.closest('div[style*=\'background: #fef3c7\']').remove()">Ablehnen (Ignorieren)</button>
+                        <div style="display: flex; gap: 10px;">
+                            <button type="button" class="btn btn-vcd-green" style="flex:1; padding: 9px; margin: 0; font-size: 13px;" onclick="respondCatchRequest('${encodeURIComponent(reqId)}', 'approve')">
+                                ✓ Bestätigen
+                            </button>
+                            <button type="button" class="btn btn-neutral" style="flex:1; padding: 9px; margin: 0; background: #dc2626; font-size: 13px;" onclick="respondCatchRequest('${encodeURIComponent(reqId)}', 'reject')">
+                                ✕ Ablehnen
+                            </button>
                         </div>
                     </div>
                 `;
             });
             container.innerHTML = html;
-        }
-
-        function confirmOpponentCatch(hunterId, preyId) {
-            hunterId = decodeURIComponent(hunterId);
-            preyId = decodeURIComponent(preyId);
-            fetch('/api/report_catch', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    reporter_slug: teamSlug,
-                    hunter: hunterId,
-                    prey: preyId
-                })
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message || "Fang erfolgreich bestätigt!");
-                    fetchTicker();
-                } else {
-                    alert(data.error || "Fehler beim Bestätigen.");
-                }
-            })
-            .catch(() => alert("Netzwerkfehler beim Bestätigen."));
         }
 
         function updateMyPendingRequests(requests) {
@@ -1283,53 +1236,132 @@
                 return;
             }
             container.style.display = 'block';
-            let html = `<h4 style="margin-top: 0; color: #049EAB; border-bottom: 1px solid #eee; padding-bottom: 5px;">Ausstehende Anfragen (${requests.length})</h4>`;
+            let html = `<h4 style="margin-top: 0; color: #049EAB; border-bottom: 1px solid #eee; padding-bottom: 5px;">Offene Fang-Meldungen (${requests.length})</h4>`;
             requests.forEach(req => {
-                let desc = '';
-                if (req.type === 'stop') {
-                    desc = `🚏 Haltestelle: <b>${escapeHtml(req.stop)}</b>`;
-                } else if (req.type === 'catch') {
-                    desc = `⚔️ Fang: <b>${escapeHtml(req.hunter_name || 'Fänger')}</b> hat <b>${escapeHtml(req.prey_name || 'Läufer')}</b> gefangen`;
-                } else {
-                    desc = `Anfrage: ${escapeHtml(req.type)}`;
-                }
-
                 let timeStr = '';
                 if (req.timestamp) {
                     const d = new Date(req.timestamp);
                     if (!isNaN(d.getTime())) {
-                        timeStr = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' Uhr';
+                        timeStr = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
                     }
                 }
-
                 html += `
                     <div style="background: #fff8e1; border: 1px solid #ffe082; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
                         <div style="font-size: 0.9em; color: #333; line-height: 1.4;">
-                            <div>${desc}</div>
-                            ${timeStr ? `<span style="font-size: 0.8em; color: #777;">Eingereicht um ${timeStr}</span>` : ''}
+                            <div>⚔️ Fang an <b>${escapeHtml(req.prey_name || 'Mister X')}</b> gemeldet</div>
+                            ${timeStr ? `<span style="font-size: 0.8em; color: #777;">Warte auf Bestätigung (${timeStr})</span>` : ''}
                         </div>
-                        <button type="button" class="btn" style="width: auto; padding: 7px 12px; margin: 0; background: #dc2626; color: white; font-size: 13px; border-radius: 4px; flex-shrink: 0; cursor: pointer;" onclick="undoMyRequest('${encodeURIComponent(req.id)}')">Rückgängig</button>
+                        <button type="button" class="btn" style="width: auto; padding: 6px 10px; margin: 0; background: #dc2626; color: white; font-size: 12px; border-radius: 4px; flex-shrink: 0;" onclick="undoMyRequest('${encodeURIComponent(req.id)}')">
+                            Zurückziehen
+                        </button>
                     </div>
                 `;
             });
             container.innerHTML = html;
         }
 
-        // --- TEAM-PROFIL ÄNDERN ---
+        function undoMyRequest(requestId) {
+            requestId = decodeURIComponent(requestId);
+            if (!confirm("Möchtest du diese Meldung wirklich zurückziehen?")) return;
+            fetch('/api/undo_request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slug: teamSlug, request_id: requestId })
+            })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) fetchTicker();
+                else alert(d.error || 'Fehler beim Zurückziehen.');
+            })
+            .catch(() => alert('Netzwerkfehler beim Zurückziehen.'));
+        }
+
+        // --- TICKER & LEADERBOARD POLLING ---
+        function updateLeaderboard(leaderboardData) {
+            const table = document.querySelector('.leaderboard-table');
+            if (!table) return;
+            let html = `<tr><th>Platz</th><th>Fänger-Team</th><th>Punkte</th></tr>`;
+
+            if (!leaderboardData || leaderboardData.length === 0) {
+                html += `<tr><td colspan="3" style="text-align: center; color: #777; padding: 10px;">Noch keine Punkte vergeben.</td></tr>`;
+            } else {
+                leaderboardData.forEach((entry, idx) => {
+                    const isSelf = (entry.id === teamId);
+                    html += `<tr class="${isSelf ? 'highlight-team' : ''}">
+                        <td><b>#${idx + 1}</b></td>
+                        <td>${escapeHtml(entry.display_name)} ${isSelf ? '<b>(Ihr)</b>' : ''}</td>
+                        <td style="font-weight: bold; color: #049EAB;">${entry.score}</td>
+                    </tr>`;
+                });
+            }
+            table.innerHTML = html;
+        }
+
+        function updateLog(logData) {
+            const logContainer = document.querySelector('.log');
+            if (!logContainer) return;
+
+            let html = `<h4>Spiel-Ticker</h4>`;
+            const teamLog = logData.filter(entry => !entry.admin_only && entry.type !== 'broadcast' && entry.type !== 'broadcast_update' && entry.type !== 'mister_broadcast');
+
+            if (teamLog.length === 0) {
+                html += `<div class="log-entry">Noch keine Aktionen vorhanden.</div>`;
+            } else {
+                const sortedLog = [...teamLog].sort((a, b) => {
+                    const tA = new Date(a.actual_timestamp || a.timestamp).getTime();
+                    const tB = new Date(b.actual_timestamp || b.timestamp).getTime();
+                    return tB - tA;
+                });
+
+                sortedLog.slice(0, 15).forEach(entry => {
+                    let text = escapeHtml(entry.desc || '');
+                    const effDate = new Date(entry.actual_timestamp || entry.timestamp);
+                    let timeStr = '';
+                    if (!isNaN(effDate.getTime())) {
+                        timeStr = effDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+                    }
+                    html += `<div class="log-entry"><span style="font-weight:bold; color:#049EAB;">[${timeStr}]</span> ${text}</div>`;
+                });
+            }
+            logContainer.innerHTML = html;
+        }
+
+        function fetchTicker() {
+            fetch('/api/ticker_data?slug=' + encodeURIComponent(teamSlug))
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        updateLeaderboard(data.leaderboard);
+                        updateLog(data.action_log);
+                        if (currentRole === 'mister_x') {
+                            updateOpponentCatches(data.open_opponent_catches);
+                        } else {
+                            updateMyPendingRequests(data.my_pending_requests);
+                        }
+                    }
+                })
+                .catch(e => console.log("Ticker-Update fehlgeschlagen", e));
+        }
+
+        fetchTicker();
+        setInterval(fetchTicker, 10000);
+
+        // --- TRACCAR HILFE & PROFIL ---
+        function togglePermissionHelp() {
+            const box = document.getElementById('permission-help-box');
+            if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+        }
+
         function saveTeamProfile() {
-            const newName = (document.getElementById('edit-team-name').value || '').trim();
+            const nameInput = document.getElementById('edit-team-name');
+            const newName = nameInput ? (nameInput.value || '').trim() : teamName;
             const newPin = (document.getElementById('edit-team-pin').value || '').trim();
 
-            if (!newName) {
-                alert("Bitte gib einen Teamnamen ein.");
-                return;
-            }
-            if (newName.length > 40) {
-                alert("Der Teamname darf maximal 40 Zeichen lang sein.");
-                return;
+            if (currentRole !== 'mister_x' && !newName) {
+                return alert("Bitte einen Teamnamen eingeben.");
             }
 
-            fetch('/api/update_team_profile', {
+            fetch('/api/edit_team_profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ slug: teamSlug, new_name: newName, new_pin: newPin })
@@ -1337,49 +1369,14 @@
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    alert("Team-Einstellungen erfolgreich gespeichert!");
+                    alert("Profil erfolgreich aktualisiert!");
                     window.location.href = '/team/' + data.new_slug;
                 } else {
-                    alert(data.error || "Fehler beim Speichern der Team-Einstellungen.");
+                    alert(data.error || "Fehler beim Speichern.");
                 }
             })
-            .catch(() => alert("Netzwerkfehler beim Speichern der Einstellungen."));
+            .catch(() => alert("Netzwerkfehler beim Profil-Speichern!"));
         }
-
-        function fetchTicker() {
-            fetch('/api/ticker_data?slug=' + encodeURIComponent(teamSlug))
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        updateLeaderboard(data.leaderboard);
-                        updateLog(data.action_log);
-                        updateMyPendingRequests(data.my_pending_requests || []);
-                        updateOpponentCatches(data.open_opponent_catches || []);
-                        
-                        // Erzwingt einen Neuladevorgang für die UI, wenn sich die Rolle des eigenen Teams ändert.
-                        const myTeam = data.leaderboard.find(t => t.id === teamId);
-                        if (myTeam && myTeam.role !== currentRole) {
-                            window.location.reload();
-                        }
-                    }
-                })
-                .catch(e => console.log("Ticker Update fehlgeschlagen", e));
-        }
-        function togglePermissionHelp() {
-            const box = document.getElementById('permission-help-box');
-            box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'block' : 'none';
-        }
-
-        let initialLeaderboard = {{ leaderboard | tojson | safe }};
-        let initialLog = {{ log | tojson | safe }};
-        let initialPendingRequests = {{ my_pending_requests | tojson | safe }};
-        let initialOpponentCatches = {{ open_opponent_catches | tojson | safe if open_opponent_catches is defined else '[]' }};
-        updateLeaderboard(initialLeaderboard);
-        updateLog(initialLog);
-        updateMyPendingRequests(initialPendingRequests);
-        updateOpponentCatches(initialOpponentCatches);
-        
-        setInterval(fetchTicker, 10000);
     </script>
 </body>
 </html>
