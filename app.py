@@ -1610,6 +1610,57 @@ def traccar_background_worker():
 
 
 # --- HILFSFUNKTIONEN FÜR STATUS UND AKTIONEN ---
+def parse_telegram_chats(raw_val):
+    """
+    Konvertiert sowohl das alte kommagetrennte String-Format als auch
+    JSON-Listen in eine einheitliche Liste aus Dicts: [{'uid': ..., 'name': ..., 'chat_id': ...}]
+    """
+    if not raw_val:
+        return []
+    if isinstance(raw_val, list):
+        result = []
+        for idx, item in enumerate(raw_val):
+            if isinstance(item, dict) and item.get("chat_id"):
+                cid = str(item["chat_id"]).strip()
+                if cid:
+                    result.append({
+                        "uid": str(item.get("uid") or uuid.uuid4().hex[:8]),
+                        "name": str(item.get("name") or f"Chat {idx + 1}").strip(),
+                        "chat_id": cid
+                    })
+        return result
+
+    raw_str = str(raw_val).strip()
+    if not raw_str:
+        return []
+
+    # Prüfen, ob es bereits ein JSON-String ist
+    if raw_str.startswith("["):
+        try:
+            parsed = json.loads(raw_str)
+            if isinstance(parsed, list):
+                return parse_telegram_chats(parsed)
+        except Exception:
+            pass
+
+    # Fallback: Klassischer kommagetrennter String (z.B. aus .env oder alter DB)
+    cids = [c.strip() for c in re.split(r'[,;\s]+', raw_str) if c.strip()]
+    return [
+        {"uid": uuid.uuid4().hex[:8], "name": f"Empfänger {i + 1}", "chat_id": cid}
+        for i, cid in enumerate(cids)
+    ]
+
+
+def mask_secret_string(val, visible_start=3, visible_end=3):
+    """Maskiert sensible Strings wie Tokens oder Chat-IDs für die Anzeige."""
+    s = str(val or "").strip()
+    if not s:
+        return ""
+    if len(s) <= (visible_start + visible_end):
+        return "•" * max(4, len(s))
+    return f"{s[:visible_start]}••••{s[-visible_end:]}"
+
+
 def _send_telegram_msg_async(text):
     try:
         with sqlite3.connect(DB_FILE, timeout=5) as conn:
@@ -1620,47 +1671,43 @@ def _send_telegram_msg_async(text):
 
         enabled = False
         token = ""
-        chat_ids_raw = ""
+        chat_entries = []
 
         if 'config' in rows and rows['config']:
             try:
                 cfg = json.loads(rows['config'])
                 enabled = bool(cfg.get("telegram_enabled", False))
                 token = str(cfg.get("telegram_bot_token", "")).strip()
-                chat_ids_raw = str(cfg.get("telegram_chat_ids", "")).strip()
+                chat_entries = parse_telegram_chats(cfg.get("telegram_chat_ids", []))
             except Exception:
                 pass
 
         if 'telegram_enabled' in rows and rows['telegram_enabled'] is not None:
             val = str(rows['telegram_enabled']).strip().lower()
             enabled = val in ('1', 'true', 'yes')
-        if 'telegram_bot_token' in rows and rows['telegram_bot_token']:
+        if 'telegram_bot_token' in rows and rows['telegram_bot_token'] is not None:
             token = str(rows['telegram_bot_token']).strip()
-        if 'telegram_chat_ids' in rows and rows['telegram_chat_ids']:
-            chat_ids_raw = str(rows['telegram_chat_ids']).strip()
+        if 'telegram_chat_ids' in rows and rows['telegram_chat_ids'] is not None:
+            chat_entries = parse_telegram_chats(rows['telegram_chat_ids'])
 
-        # Fallbacks auf Umgebungsvariablen falls in DB noch nicht gesetzt
-        if not token:
+        # Fallbacks auf Umgebungsvariablen nur, falls noch gar nichts konfiguriert wurde
+        if not token and 'telegram_bot_token' not in rows:
             token = os.getenv("TELEGRAM_TOKEN", "").strip()
-        if not chat_ids_raw:
-            chat_ids_raw = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+        if not chat_entries and 'telegram_chat_ids' not in rows:
+            chat_entries = parse_telegram_chats(os.getenv("TELEGRAM_CHAT_ID", "").strip())
 
-        if not enabled:
-            return
-
-        if not token or not chat_ids_raw:
-            return
-
-        chat_ids = [cid.strip() for cid in re.split(r'[,;\s]+', chat_ids_raw) if cid.strip()]
-        if not chat_ids:
+        if not enabled or not token or not chat_entries:
             return
 
         url = f"https://api.telegram.org/bot{token}/sendMessage"
-        for chat_id in chat_ids:
+        for entry in chat_entries:
+            chat_id = entry.get("chat_id")
+            if not chat_id:
+                continue
             try:
                 requests.post(url, data={'chat_id': chat_id, 'text': text}, timeout=5)
             except Exception as e:
-                print(f"Telegram error for chat_id {chat_id}: {e}")
+                print(f"Telegram error for chat_id {entry.get('name', chat_id)}: {e}")
     except Exception as e:
         print(f"Telegram send error: {e}")
 
@@ -1690,7 +1737,12 @@ def save_state(conn, state):
 
     c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('telegram_enabled', ?)", ('1' if state['config'].get('telegram_enabled') else '0',))
     c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('telegram_bot_token', ?)", (str(state['config'].get('telegram_bot_token', '')),))
-    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('telegram_chat_ids', ?)", (str(state['config'].get('telegram_chat_ids', '')),))
+    chat_ids_val = state['config'].get('telegram_chat_ids', [])
+    if isinstance(chat_ids_val, list):
+        chat_ids_serialized = json.dumps(chat_ids_val, ensure_ascii=False)
+    else:
+        chat_ids_serialized = json.dumps(parse_telegram_chats(chat_ids_val), ensure_ascii=False)
+    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('telegram_chat_ids', ?)", (chat_ids_serialized,))
 
     # teams: INSERT OR REPLACE INTO teams und DELETE nur für gelöschte Teams
     team_ids = list(state.get('teams_data', {}).keys())
@@ -2708,9 +2760,33 @@ def admin_settings(admin_slug):
             active_dataset = state.get("active_stops_dataset", "Catch_Haltestellen.json")
             if not available_datasets:
                 available_datasets = [active_dataset]
+
+            # Telegram-Daten für das Template maskieren (keine Klartext-Ausgabe!)
+            raw_token = str(config.get("telegram_bot_token", "")).strip()
+            has_telegram_token = bool(raw_token)
+            masked_telegram_token = mask_secret_string(raw_token, 4, 4) if has_telegram_token else ""
+
+            parsed_chats = parse_telegram_chats(config.get("telegram_chat_ids", []))
+            # Falls neue UIDs beim Parsen alter Daten vergeben wurden, kurz im State festhalten
+            if parsed_chats != config.get("telegram_chat_ids"):
+                config["telegram_chat_ids"] = parsed_chats
+                save_state(conn, state)
+
+            masked_telegram_chats = [
+                {
+                    "uid": item["uid"],
+                    "name": item["name"],
+                    "masked_id": mask_secret_string(item["chat_id"], 2, 3)
+                }
+                for item in parsed_chats
+            ]
+
             return render_template(
                 'settings.html',
                 config=config,
+                has_telegram_token=has_telegram_token,
+                masked_telegram_token=masked_telegram_token,
+                masked_telegram_chats=masked_telegram_chats,
                 mister_x_teams=mister_x_teams,
                 hunter_teams=hunter_teams,
                 sorted_teams=all_sorted,
@@ -2735,8 +2811,49 @@ def admin_settings(admin_slug):
 
         config["enable_geofences"] = bool(data.get("enable_geofences", config.get("enable_geofences", False)))
         config["telegram_enabled"] = bool(data.get("telegram_enabled", False))
-        config["telegram_bot_token"] = str(data.get("telegram_bot_token", "")).strip()
-        config["telegram_chat_ids"] = str(data.get("telegram_chat_ids", "")).strip()
+
+        # 1. Telegram Bot-Token: Löschen, neu setzen oder bestehenden behalten
+        if data.get("clear_telegram_token"):
+            config["telegram_bot_token"] = ""
+        else:
+            new_token = str(data.get("new_telegram_bot_token", "")).strip()
+            if new_token:
+                config["telegram_bot_token"] = new_token
+
+        # 2. Telegram Chat-IDs: Bestehende über UID filtern/umbenennen + neue hinzufügen
+        existing_chats = parse_telegram_chats(config.get("telegram_chat_ids", []))
+        existing_by_uid = {c["uid"]: c for c in existing_chats}
+
+        kept_chats_payload = data.get("kept_telegram_chats")
+        updated_chats = []
+        if isinstance(kept_chats_payload, list):
+            for item in kept_chats_payload:
+                if isinstance(item, dict):
+                    uid = str(item.get("uid", "")).strip()
+                    if uid in existing_by_uid:
+                        clean_name = str(item.get("name", "")).replace('<', '').replace('>', '').strip()
+                        updated_chats.append({
+                            "uid": uid,
+                            "name": clean_name or existing_by_uid[uid]["name"],
+                            "chat_id": existing_by_uid[uid]["chat_id"]
+                        })
+        else:
+            updated_chats = existing_chats
+
+        new_chats_payload = data.get("new_telegram_chats", [])
+        if isinstance(new_chats_payload, list):
+            for item in new_chats_payload:
+                if isinstance(item, dict):
+                    cid = str(item.get("chat_id", "")).replace('<', '').replace('>', '').strip()
+                    cname = str(item.get("name", "")).replace('<', '').replace('>', '').strip()
+                    if cid:
+                        updated_chats.append({
+                            "uid": uuid.uuid4().hex[:8],
+                            "name": cname or f"Empfänger {len(updated_chats) + 1}",
+                            "chat_id": cid
+                        })
+
+        config["telegram_chat_ids"] = updated_chats
 
         team_list = data.get("teams_list", [])
         old_teams_data = state.get("teams_data", {})
@@ -2820,17 +2937,27 @@ def reset_game(admin_slug):
     if not is_valid_admin_slug(admin_slug):
         return jsonify({'success': False, 'error': 'Verboten'}), 403
 
+    # 1. In-Memory-Caches & Statusvariablen zurücksetzen
     gps_inactivity_notified_stage.clear()
+    recent_traccar_webhooks.clear()
+    debug_test_events.clear()
 
     with sqlite3.connect(DB_FILE, timeout=10, isolation_level='IMMEDIATE') as conn:
         conn.row_factory = sqlite3.Row
         state = get_state(conn)
 
+        # 2. Konfigurierte Spiel- und Intervallzeiten zurücksetzen
+        # (Alle anderen Einstellungen wie Punkte, Intervall-Dauer, Geofences & Telegram bleiben erhalten)
+        state["config"]["start_time"] = ""
+        state["config"]["end_time"] = ""
+        state["config"]["first_broadcast_time"] = ""
+
+        # 3. Offene Anfragen und Aktions-Historie leeren
         state["pending_requests"] = []
         state["action_log"] = []
 
-        teams_ids = list(state["teams_data"].keys())
-        for t_id in teams_ids:
+        # 4. Team-Spielstände zurücksetzen (Teams, Namen, Rollen & PINs bleiben erhalten)
+        for t_id in state["teams_data"]:
             state["teams_data"][t_id]["stops"] = []
             state["teams_data"][t_id]["stop_timestamps"] = []
             state["teams_data"][t_id]["caught"] = []
@@ -2838,6 +2965,7 @@ def reset_game(admin_slug):
             state["teams_data"][t_id]["caught_by"] = []
             state["teams_data"][t_id]["manual_points"] = 0
 
+        # 5. Alle Datenbank-Tabellen mit Koordinaten, Historie und Spielereignissen restlos leeren
         c = conn.cursor()
         c.execute("DELETE FROM team_locations")
         c.execute("DELETE FROM location_history")
@@ -2846,9 +2974,27 @@ def reset_game(admin_slug):
         c.execute("DELETE FROM team_catches")
         c.execute("DELETE FROM mister_pending_inputs")
         c.execute("DELETE FROM mister_broadcasts")
+        c.execute("DELETE FROM pending_requests")
+        c.execute("DELETE FROM action_logs")
+
+        # Zeitpunkt des Resets merken, damit verspätete Alt-Pakete von Traccar verworfen werden können
+        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_reset_ts', ?)", (str(time.time()),))
 
         save_state(conn, state)
-        trigger_traccar_sync_async(state["teams_data"])
+
+    # 6. Traccar-Datenbank im Hintergrund ebenfalls frisch aufsetzen, damit keine alten 
+    # Koordinaten aus der H2-DB von Traccar nachgeladen werden
+    def _reset_and_resync_traccar():
+        if reset_traccar_process_and_db():
+            for _ in range(15):
+                time.sleep(1)
+                if ensure_traccar_credentials():
+                    sync_traccar_devices(state["teams_data"])
+                    break
+        else:
+            trigger_traccar_sync_async(state["teams_data"])
+
+    threading.Thread(target=_reset_and_resync_traccar, daemon=True).start()
 
     return jsonify({'success': True})
 
@@ -3993,6 +4139,19 @@ def traccar_webhook():
             isolation_level='IMMEDIATE'
         ) as conn:
             c = conn.cursor()
+
+            # NEU: Alte GPS-Pakete ignorieren, die zeitlich vor dem letzten Spiel-Reset liegen
+            c.execute("SELECT value FROM settings WHERE key = 'last_reset_ts'")
+            reset_row = c.fetchone()
+            if reset_row and reset_row[0]:
+                try:
+                    if packet_time < float(reset_row[0]):
+                        return jsonify({
+                            'success': True,
+                            'ignored': 'Paket stammt aus der Zeit vor dem letzten Spiel-Reset'
+                        }), 200
+                except (ValueError, TypeError):
+                    pass
 
             c.execute("""
                 SELECT id, display_name

@@ -291,21 +291,57 @@
         </div>
 
         <h3>Telegram-Benachrichtigungen</h3>
-        <p class="help-text" style="margin-bottom: 15px;">Konfiguriere hier die Benachrichtigungen per Telegram-Bot für Spielanfragen und Ereignisse.</p>
+        <p class="help-text" style="margin-bottom: 15px;">
+            Konfiguriere hier den Telegram-Bot und die Empfänger. Aus Sicherheitsgründen werden gespeicherte Tokens und Chat-IDs nach dem Speichern nur noch maskiert angezeigt.
+        </p>
         <div class="form-group" style="background: #eef8f8; padding: 18px; border-left: 4px solid #049EAB; margin-bottom: 20px;">
-            <label class="checkbox-label" style="margin-bottom: 15px;">
+            <label class="checkbox-label" style="margin-bottom: 18px;">
                 <input type="checkbox" id="telegram_enabled" {% if config.get('telegram_enabled', False) %}checked{% endif %}>
                 <b>Telegram-Benachrichtigungen global aktivieren</b>
             </label>
-            <div class="form-group" style="margin-bottom: 15px;">
-                <label for="telegram_bot_token" style="font-weight: 500;">Telegram Bot-ID / Token:</label>
-                <input type="text" id="telegram_bot_token" value="{{ config.get('telegram_bot_token', '') }}" placeholder="z. B. 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ">
-                <div class="help-text">Das API-Token deines Telegram-Bots (von @BotFather).</div>
+
+            <!-- Bot-Token Verwaltung -->
+            <div class="form-group" style="margin-bottom: 20px; background: white; padding: 14px; border: 1px solid #d0e8ea; border-radius: 4px;">
+                <label style="font-weight: 700; color: #026770; margin-bottom: 8px;">Telegram Bot-Token:</label>
+
+                <div id="saved-token-box" style="{% if not has_telegram_token %}display: none;{% endif %} align-items: center; justify-content: space-between; gap: 10px; background: #f4f7f6; padding: 10px 12px; border-radius: 3px; border: 1px solid #ccc; margin-bottom: 8px; display: {% if has_telegram_token %}flex{% else %}none{% endif %};">
+                    <div>
+                        <span style="font-size: 0.9em; color: #2e7d32; font-weight: 700;">🔒 Gespeichert:</span>
+                        <code style="margin-left: 6px; font-size: 0.95em; color: #333;">{{ masked_telegram_token }}</code>
+                    </div>
+                    <button type="button" class="btn btn-danger" style="width: auto; margin: 0; padding: 6px 12px; font-size: 12px;" onclick="removeSavedToken()">Token entfernen</button>
+                </div>
+
+                <input type="password" id="new_telegram_bot_token" value="" autocomplete="new-password" placeholder="{% if has_telegram_token %}Neues Token eingeben, um das bestehende zu überschreiben (optional){% else %}z. B. 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ{% endif %}">
+                <input type="hidden" id="clear_telegram_token" value="false">
+                <div class="help-text">Leer lassen, um ein bereits gespeichertes Token unverändert beizubehalten.</div>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-                <label for="telegram_chat_ids" style="font-weight: 500;">Telegram Chat-IDs (z. B. kommagetrennt):</label>
-                <input type="text" id="telegram_chat_ids" value="{{ config.get('telegram_chat_ids', '') }}" placeholder="z. B. 123456789, -987654321">
-                <div class="help-text">Eine oder mehrere Chat-IDs, getrennt durch Komma. Nachrichten werden an alle hinterlegten IDs versendet.</div>
+
+            <!-- Chat-IDs Verwaltung -->
+            <div class="form-group" style="margin-bottom: 0; background: white; padding: 14px; border: 1px solid #d0e8ea; border-radius: 4px;">
+                <label style="font-weight: 700; color: #026770; margin-bottom: 8px;">Hinterlegte Telegram-Empfänger (Chat-IDs):</label>
+
+                <div id="telegram-chats-list" style="margin-bottom: 12px;">
+                    {% for chat in masked_telegram_chats %}
+                    <div class="team-row tg-chat-existing" data-uid="{{ chat.uid }}" style="margin-bottom: 8px; padding: 8px 10px;">
+                        <input type="text" class="tg-chat-name" value="{{ chat.name }}" placeholder="Name (z. B. Spielleitung)" style="flex: 2; min-width: 150px;">
+                        <span style="flex: 1; font-family: monospace; background: #f4f7f6; padding: 8px 10px; border: 1px solid #ddd; border-radius: 3px; color: #555; text-align: center; min-width: 110px;">
+                            ID: {{ chat.masked_id }}
+                        </span>
+                        <button type="button" class="btn btn-danger" style="padding: 8px 12px; width: auto; margin: 0; font-size: 12px;" onclick="this.parentElement.remove();">Entfernen</button>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div style="border-top: 1px dashed #ccc; padding-top: 12px;">
+                    <label style="font-size: 0.9em; color: #444; margin-bottom: 6px;">Neuen Empfänger hinzufügen:</label>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <input type="text" id="add_tg_chat_name" placeholder="Name (z. B. Orga-Gruppe oder Tim)" style="flex: 1; min-width: 160px;">
+                        <input type="text" id="add_tg_chat_id" placeholder="Chat-ID (z. B. 123456789 oder -987654321)" style="flex: 1; min-width: 180px;">
+                        <button type="button" class="btn btn-neutral" style="background-color: #049EAB; padding: 10px 16px;" onclick="addTelegramChatRow()">+ Hinzufügen</button>
+                    </div>
+                    <div class="help-text">Du kannst mehrere Empfänger hinzufügen. Erst mit Klick auf „Einstellungen Speichern“ werden die Änderungen übernommen.</div>
+                </div>
             </div>
         </div>
 
@@ -316,7 +352,7 @@
 
         <div class="danger-zone">
             <h3>Gefahrenzone</h3>
-            <p style="font-size: 0.9em; color: #444; margin-bottom: 15px;">Löscht alle Teampunktestände, gefangene Standorte und den gesamten Spielverlauf unwiderruflich.</p>
+            <p style="font-size: 0.9em; color: #444; margin-bottom: 15px;">Löscht alle Teampunktestände, Koordinaten, GPS-Verläufe, konfigurierten Zeiten und den gesamten Spielverlauf unwiderruflich (Teams und Grundeinstellungen bleiben erhalten).</p>
             <button class="btn btn-danger" onclick="resetGame()">Spiel komplett zurücksetzen</button>
             
             <hr style="margin: 30px 0 20px 0; border: none; border-top: 1px solid #EB6502;">
@@ -395,6 +431,54 @@
             container.appendChild(row);
         }
 
+        function removeSavedToken() {
+            document.getElementById('clear_telegram_token').value = 'true';
+            document.getElementById('saved-token-box').style.display = 'none';
+            const tokenInput = document.getElementById('new_telegram_bot_token');
+            tokenInput.placeholder = 'Token wird beim Speichern gelöscht (oder hier neues Token eingeben)';
+        }
+
+        function addTelegramChatRow() {
+            const nameInput = document.getElementById('add_tg_chat_name');
+            const idInput = document.getElementById('add_tg_chat_id');
+            const nameVal = nameInput.value.trim();
+            const idVal = idInput.value.trim();
+
+            if (!idVal) {
+                alert('Bitte gib eine gültige Telegram Chat-ID ein.');
+                return;
+            }
+
+            const list = document.getElementById('telegram-chats-list');
+            const count = list.querySelectorAll('.team-row').length + 1;
+            const displayName = nameVal || ('Empfänger ' + count);
+
+            // Vorschau bereits maskiert darstellen
+            const maskedPreview = idVal.length > 5
+                ? idVal.slice(0, 2) + '••••' + idVal.slice(-3)
+                : '••••';
+
+            const row = document.createElement('div');
+            row.className = 'team-row tg-chat-new';
+            row.dataset.chatId = idVal;
+            row.style.marginBottom = '8px';
+            row.style.padding = '8px 10px';
+            row.style.borderColor = '#049EAB';
+
+            row.innerHTML = `
+                <input type="text" class="tg-chat-name" value="" placeholder="Name" style="flex: 2; min-width: 150px;">
+                <span style="flex: 1; font-family: monospace; background: #eef8f8; padding: 8px 10px; border: 1px solid #049EAB; border-radius: 3px; color: #026770; text-align: center; min-width: 110px;">
+                    Neu: ${maskedPreview}
+                </span>
+                <button type="button" class="btn btn-danger" style="padding: 8px 12px; width: auto; margin: 0; font-size: 12px;" onclick="this.parentElement.remove();">Entfernen</button>
+            `;
+            row.querySelector('.tg-chat-name').value = displayName;
+            list.appendChild(row);
+
+            nameInput.value = '';
+            idInput.value = '';
+        }
+
         function saveSettings() {
             const activeDataset = document.getElementById('active_stops_dataset').value;
             const initialDataset = "{{ active_stops_dataset }}";
@@ -412,10 +496,33 @@
             const enableGeofences = document.getElementById('enable_geofences').checked;
 
             const telegramEnabled = document.getElementById('telegram_enabled').checked;
-            const telegramBotToken = document.getElementById('telegram_bot_token').value.trim();
-            const telegramChatIds = document.getElementById('telegram_chat_ids').value.trim();
+            const newTelegramBotToken = document.getElementById('new_telegram_bot_token').value.trim();
+            const clearTelegramToken = document.getElementById('clear_telegram_token').value === 'true';
 
-            const teamRows = document.querySelectorAll('.team-row');
+            // Falls noch etwas in den "Neuen Empfänger hinzufügen"-Feldern steht, automatisch übernehmen
+            const pendingChatId = document.getElementById('add_tg_chat_id').value.trim();
+            if (pendingChatId) {
+                addTelegramChatRow();
+            }
+
+            const keptTelegramChats = [];
+            document.querySelectorAll('.tg-chat-existing').forEach(row => {
+                keptTelegramChats.push({
+                    uid: row.dataset.uid,
+                    name: row.querySelector('.tg-chat-name').value.trim()
+                });
+            });
+
+            const newTelegramChats = [];
+            document.querySelectorAll('.tg-chat-new').forEach(row => {
+                newTelegramChats.push({
+                    name: row.querySelector('.tg-chat-name').value.trim(),
+                    chat_id: row.dataset.chatId
+                });
+            });
+
+            // Wichtig: Nur Mister-X- und Detektiv-Zeilen als Teams auslesen
+            const teamRows = document.querySelectorAll('.mister-x-row, .hunter-row');
             const teamsList = [];
 
             teamRows.forEach(row => {
@@ -437,8 +544,10 @@
                 points_caught_team: pointsCaughtTeam,
                 enable_geofences: enableGeofences,
                 telegram_enabled: telegramEnabled,
-                telegram_bot_token: telegramBotToken,
-                telegram_chat_ids: telegramChatIds,
+                new_telegram_bot_token: newTelegramBotToken,
+                clear_telegram_token: clearTelegramToken,
+                kept_telegram_chats: keptTelegramChats,
+                new_telegram_chats: newTelegramChats,
                 teams_list: teamsList
             };
 
@@ -464,7 +573,7 @@
         }
 
         function resetGame() {
-            if (!confirm('Bist du dir GANZ SICHER?\n\nAlle Teampunktestände, gefangene Standorte und der Spielverlauf werden unwiderruflich gelöscht. Fortfahren?')) {
+            if (!confirm('Bist du dir GANZ SICHER?\n\nAlle Teampunktestände, Koordinaten, GPS-Verläufe, konfigurierten Zeiten und der Spielverlauf werden unwiderruflich gelöscht (Teams und Grundeinstellungen bleiben erhalten). Fortfahren?')) {
                 return;
             }
 
@@ -472,8 +581,8 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    alert('Das Spiel wurde erfolgreich zurückgesetzt.');
-                    window.location.href = '/adminconsole-{{ admin_url }}';
+                    alert('Das Spiel, alle Koordinaten und die Spielzeiten wurden erfolgreich zurückgesetzt.');
+                    window.location.reload(); // Lädt die Einstellungsseite neu, sodass die leeren Zeitfelder sofort sichtbar sind
                 } else alert(data.error || 'Fehler beim Zurücksetzen!');
             })
             .catch(err => alert('Netzwerkfehler beim Zurücksetzen!'));
