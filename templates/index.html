@@ -159,7 +159,7 @@
 
     <div class="container">
         <div class="logo-container">
-            <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo">
+            <img src="/static/Rhein-Main.png" alt="VCD Logo">
         </div>
         
         <h1>Mister X</h1>
@@ -184,9 +184,9 @@
             </div>
         {% endif %}
         
-        <!-- FÄNGER-ONLY LEADERBOARD -->
+        <!-- DETEKTIVE-ONLY LEADERBOARD -->
         <div class="box">
-            <h2>Aktuelles Leaderboard (Fänger)</h2>
+            <h2>Aktuelles Leaderboard (Detektive)</h2>
             <table id="leaderboard-table">
                 <tr>
                     <th>Platz</th>
@@ -200,7 +200,7 @@
                     <td class="score">{{ entry.score }}</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="3" style="text-align: center; color: #777; padding: 15px;">Noch keine Fänger-Teams im Spiel.</td></tr>
+                <tr><td colspan="3" style="text-align: center; color: #777; padding: 15px;">Noch keine Detektiv-Teams im Spiel.</td></tr>
                 {% endfor %}
             </table>
         </div>
@@ -214,7 +214,7 @@
                 <div class="role-toggle-group">
                     <label class="role-toggle-btn active hunter" id="btn-role-hunter">
                         <input type="radio" name="login_role" value="fänger" checked onchange="onRoleChange('fänger')">
-                        🚔 Fänger
+                        🚔 Detektive
                     </label>
                     <label class="role-toggle-btn" id="btn-role-mister">
                         <input type="radio" name="login_role" value="mister_x" onchange="onRoleChange('mister_x')">
@@ -357,7 +357,7 @@
             if (newRole === 'fänger') {
                 btnHunter.classList.add('active', 'hunter');
                 btnHunter.querySelector('input').checked = true;
-                label.textContent = "Dein Fänger-Team:";
+                label.textContent = "Dein Detektiv-Team:";
             } else {
                 btnMister.classList.add('active', 'mister');
                 btnMister.querySelector('input').checked = true;
@@ -387,7 +387,7 @@
             });
         }
 
-        // Standardmäßig Fänger initialisieren
+        // Standardmäßig Detektive initialisieren
         onRoleChange('fänger');
 
         function escapeHtml(str) {
@@ -449,7 +449,7 @@
             let html = `<tr><th>Platz</th><th>Team</th><th>Punkte</th></tr>`;
 
             if (!leaderboardData || leaderboardData.length === 0) {
-                html += `<tr><td colspan="3" style="text-align: center; color: #777; padding: 15px;">Noch keine Fänger-Teams im Spiel.</td></tr>`;
+                html += `<tr><td colspan="3" style="text-align: center; color: #777; padding: 15px;">Noch keine Detektiv-Teams im Spiel.</td></tr>`;
             } else {
                 leaderboardData.forEach((entry, index) => {
                     html += `<tr>

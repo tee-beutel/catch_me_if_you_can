@@ -108,7 +108,7 @@
             <h1>Admin Console</h1>
             <p style="margin: 5px 0 0 0; color: #666;">Mister X - Spielleitung & Monitoring (Frankfurt am Main)</p>
         </div>
-        <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo">
+        <img src="/static/Rhein-Main.png" alt="VCD Logo">
     </div>
     
     <div class="admin-timer" id="admin-timer">Timer wird geladen...</div>
@@ -142,7 +142,7 @@
                 {% if entry.deactivated %}<span style="color:red; font-size: 0.7em;">(DEAKTIVIERT)</span>{% endif %}  
                 — {% if entry.role == 'mister_x' %}<i>Mister X</i>{% else %}<b>{{ entry.score }} Punkte</b>{% endif %}
                 <span class="role-badge {{ 'badge-mister' if entry.role == 'mister_x' else 'badge-hunter' }}">
-                    {{ 'Mister X' if entry.role == 'mister_x' else 'Fänger' }}
+                    {{ 'Mister X' if entry.role == 'mister_x' else 'Detektive' }}
                 </span>
             </div>
             <div class="team-details">
@@ -194,7 +194,7 @@
     <div class="box">
         <h2>Live Karte (Echtzeit-Tracking aller Teams)</h2>
         <p style="font-size: 0.9em; color: #555; margin-bottom: 12px;">
-            Spielleiter-Ansicht mit Klarnamen: Fänger (Petrol), Mister X Live-Standorte (Orange) und veröffentlichte Intervall-Snapshots (X-Marker).
+            Spielleiter-Ansicht mit Klarnamen: Detektive (Petrol), Mister X Live-Standorte (Orange) und veröffentlichte Intervall-Snapshots (X-Marker).
         </p>
         <div id="admin-map" style="height: 480px; width: 100%; border: 1px solid #ddd; z-index: 1; border-radius: 4px;"></div>
     </div>
@@ -270,12 +270,12 @@
         <h4 style="margin-top: 20px; margin-bottom: 10px; padding-bottom: 5px; color: #333; border-bottom: 1px solid #eee;">Catch manuell eintragen</h4>
         <div class="manual-catch-wrapper">
             <div class="manual-catch-col">
-                <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Fänger-Team:</label>
+                <label style="font-size: 0.85em; font-weight: bold; margin-bottom: 5px;">Detektiv-Team:</label>
                 <select id="hunter-select">
                     {% for t in faenger_teams %}
                     <option value="{{ t.id }}">{{ t.name }}</option>
                     {% else %}
-                    <option value="">-- Keine Fänger-Teams --</option>
+                    <option value="">-- Keine Detektiv-Teams --</option>
                     {% endfor %}
                 </select>
             </div>
@@ -495,7 +495,7 @@
                 const popup = `
                     <div style="font-family:'Roboto',sans-serif; text-align:center;">
                         <b style="font-size:1.1em; color:${color};">${escapeHtml(loc.name)}</b><br>
-                        <span style="font-size:0.85em; text-transform:uppercase; font-weight:bold; color:#555;">${isMister ? 'Mister X' : 'Fänger'}</span><br>
+                        <span style="font-size:0.85em; text-transform:uppercase; font-weight:bold; color:#555;">${isMister ? 'Mister X' : 'Detektive'}</span><br>
                         <div style="margin-top:6px; font-size:0.82em; color:#666; border-top:1px solid #eee; padding-top:4px;">
                             Signal: ${timeAgo}<br>
                             ${loc.batteryLevel !== null && loc.batteryLevel !== undefined ? 'Akku: ' + Math.round(loc.batteryLevel) + '%<br>' : ''}
@@ -603,7 +603,7 @@
         function catchTeam() {
             const hunter = document.getElementById('hunter-select').value;
             const prey = document.getElementById('prey-select').value;
-            if (!hunter || !prey) return alert("Bitte wähle Fänger und Mister X aus.");
+            if (!hunter || !prey) return alert("Bitte wähle Detektive und Mister X aus.");
 
             fetch('/api/catch_team', {
                 method: 'POST',

@@ -3032,7 +3032,7 @@ def report_catch():
             return jsonify({'success': False, 'error': 'Eines der Teams ist deaktiviert.'}), 403
 
         if hunter_data.get("role") != "fänger" or prey_data.get("role") != "mister_x":
-            return jsonify({'success': False, 'error': 'Ungültige Rollen! Fänger fangen Mister X.'}), 400
+            return jsonify({'success': False, 'error': 'Ungültige Rollen! Detektive fangen Mister X.'}), 400
 
         # STRIKTE SPERR-REGEL: Prüfen, welcher Mister X von diesem Jäger als letztes gefangen wurde
         c = conn.cursor()

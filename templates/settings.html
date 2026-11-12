@@ -165,14 +165,14 @@
 </head>
 <body>
     <div class="header-section">
-        <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo" style="height: 50px;">
+        <img src="/static/Rhein-Main.png" alt="VCD Logo" style="height: 50px;">
     </div>
     <div class="card">
         <h2>Spiel-Einstellungen (Mister X)</h2>
         
         <h3>Zeitplan & Standort-Intervalle</h3>
         <p class="help-text" style="margin-bottom: 15px;">
-            Mister X bewegen sich unbemerkt durch die Stadt. Zu festen Intervallen wird ihr Standort auf der Karte für die Fänger veröffentlicht.
+            Mister X bewegen sich unbemerkt durch die Stadt. Zu festen Intervallen wird ihr Standort auf der Karte für die Detektive veröffentlicht.
         </p>
         <div class="row">
             <div class="form-group">
@@ -202,9 +202,9 @@
 
         <h3>Punkteverteilung</h3>
         <div class="form-group" style="max-width: 320px;">
-            <label for="points_caught_team">Punkte für erfolgreichen Fang (Fänger):</label>
+            <label for="points_caught_team">Punkte für erfolgreichen Fang (Detektive):</label>
             <input type="number" id="points_caught_team" value="{{ config.get('points_caught_team', 1) }}" min="0">
-            <div class="help-text">Punkte, die ein Fänger-Team für das Fangen eines Mister X erhält.</div>
+            <div class="help-text">Punkte, die ein Detektiv-Team für das Fangen eines Mister X erhält.</div>
         </div>
 
         <h3>Geofencing & Spielfeldbegrenzung</h3>
@@ -233,7 +233,7 @@
 
         <h3>Team-Verwaltung</h3>
         <p class="help-text" style="margin-bottom: 15px;">
-            Verwalte hier die flüchtigen Mister X sowie die Fänger-Teams. Jedes Team besitzt eine individuelle PIN für das persönliche Dashboard.
+            Verwalte hier die flüchtigen Mister X sowie die Detektiv-Teams. Jedes Team besitzt eine individuelle PIN für das persönliche Dashboard.
         </p>
 
         <!-- Sektion A: Mister X -->
@@ -241,7 +241,7 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <div>
                     <h4 style="color: #EB6502; margin: 0;">🕵️‍♂️ Mister X (Flüchtige)</h4>
-                    <div class="help-text">Feste Rollen (mister_x) und feste IDs (mister-1, mister-2, ...). Für Fänger anonymisiert.</div>
+                    <div class="help-text">Feste Rollen (mister_x) und feste IDs (mister-1, mister-2, ...). Für Detektive anonymisiert.</div>
                 </div>
             </div>
             <div id="mister-x-container">
@@ -263,11 +263,11 @@
             <button type="button" class="btn btn-neutral" style="margin-top: 10px; background-color: #EB6502;" onclick="addMisterXRow()">+ Weiteren Mister X hinzufügen</button>
         </div>
 
-        <!-- Sektion B: Fänger-Teams -->
+        <!-- Sektion B: Detektiv-Teams -->
         <div class="team-section-box" style="border-left: 4px solid #049EAB;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <div>
-                    <h4 style="color: #049EAB; margin: 0;">🚔 Fänger-Teams (Jäger)</h4>
+                    <h4 style="color: #049EAB; margin: 0;">🚔 Detektiv-Teams</h4>
                     <div class="help-text">Ermittlerteams auf der Jagd nach Mister X. Erhalten Punkte für jeden bestätigten Fang.</div>
                 </div>
             </div>
@@ -277,7 +277,7 @@
                     <span class="team-id-badge">{{ team_id }}</span>
                     <input type="hidden" class="t-id" value="{{ team_id }}">
                     <input type="text" class="t-new-name" value="{{ data.display_name }}" placeholder="Teamname">
-                    <span class="role-badge role-hunter">Fänger</span>
+                    <span class="role-badge role-hunter">Detektive</span>
                     <input type="hidden" class="t-role" value="fänger">
                     <input type="text" class="t-pin" value="{{ data.pin }}" placeholder="PIN">
                     <label class="t-active-label">
@@ -287,7 +287,7 @@
                 </div>
                 {% endfor %}
             </div>
-            <button type="button" class="btn btn-neutral" style="margin-top: 10px; background-color: #049EAB;" onclick="addHunterRow()">+ Weiteres Fänger-Team hinzufügen</button>
+            <button type="button" class="btn btn-neutral" style="margin-top: 10px; background-color: #049EAB;" onclick="addHunterRow()">+ Weiteres Detektiv-Team hinzufügen</button>
         </div>
 
         <h3>Telegram-Benachrichtigungen</h3>
@@ -384,7 +384,7 @@
                 <span class="team-id-badge">${teamId}</span>
                 <input type="hidden" class="t-id" value="${teamId}">
                 <input type="text" class="t-new-name" value="${teamId}" placeholder="Teamname">
-                <span class="role-badge role-hunter">Fänger</span>
+                <span class="role-badge role-hunter">Detektive</span>
                 <input type="hidden" class="t-role" value="fänger">
                 <input type="text" class="t-pin" value="${Math.floor(1000 + Math.random() * 9000)}" placeholder="PIN">
                 <label class="t-active-label">

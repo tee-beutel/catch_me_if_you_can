@@ -156,22 +156,22 @@
                     <div class="kv-bottom">Frankfurt am Main<div class="kv-triangle"></div></div>
                 </div>
             </div>
-            <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo">
+            <img src="/static/Rhein-Main.png" alt="VCD Logo">
         </div>
 
         <div class="box">
             <h2>Zusammenfassung & Spielidee</h2>
-            <p>Willkommen zu <b>Mister X in Frankfurt am Main</b>! Nach dem bekannten Vorbild von „Scotland Yard“ treten mehrere <b>Fänger-Teams</b> gegen getarnte <b>Mister X</b> an. Das gesamte Spielgeschehen findet im Frankfurter RMV-Gebiet statt. Mister X reist verdeckt und muss sich in festen Zeitintervallen der Jagdgesellschaft offenbaren, während die Fänger versuchen, die Standorte zu kombinieren und Mister X auf frischer Tat zu ertappen.</p>
+            <p>Willkommen zu <b>Mister X in Frankfurt am Main</b>! Nach dem bekannten Vorbild von „Scotland Yard“ treten mehrere <b>Detektiv-Teams</b> gegen getarnte <b>Mister X</b> an. Das gesamte Spielgeschehen findet im Frankfurter RMV-Gebiet statt. Mister X reist verdeckt und muss sich in festen Zeitintervallen der Jagdgesellschaft offenbaren, während die Detektive versuchen, die Standorte zu kombinieren und Mister X auf frischer Tat zu ertappen.</p>
             
             <div class="highlight">
                 📍 <b>Gemeinsamer Startpunkt:</b> Frankfurt am Main <b>Südbahnhof</b>.<br>
-                🍦 <b>Zielpunkt & Siegerehrung:</b> <b>Eis Christina</b>, Oeder Weg 44, 60318 Frankfurt am Main.
+                🍦 <b>Zielpunkt & Siegerehrung:</b> <b>Steht derzeit noch nicht fest</b>
             </div>
 
             <h2>1. Die Web-App & Rollen</h2>
             <p>Über die Web-App läuft die Spielkoordination in Echtzeit. Loggt euch auf der Startseite mit eurer Rolle und Team-PIN ein:</p>
             <ul>
-                <li><b>Fänger:</b> Ihr seht euren eigenen Live-Standort auf der Karte. Sobald ein Intervall-Snapshot veröffentlicht wird, erscheint der zuletzt bekannte Aufenthaltsort der Mister X als anonymisierter Marker <b>„Mister X“</b> mit Angaben zu Linie, Fahrtrichtung und Station.</li>
+                <li><b>Detektive:</b> Ihr seht euren eigenen Live-Standort auf der Karte. Sobald ein Intervall-Snapshot veröffentlicht wird, erscheint der zuletzt bekannte Aufenthaltsort der Mister X als anonymisierter Marker <b>„Mister X“</b> mit Angaben zu Linie, Fahrtrichtung und Station.</li>
                 <li><b>Mister X:</b> Ihr seid Einzel- oder Doppelagenten. Auf eurer Karte seht ihr ausschließlich eure eigene Position und eure bisherigen Veröffentlichungen – keine anderen Teams! Vor jedem Intervall öffnet sich eine 2-Minuten-Eingabemaske.</li>
                 <li><b>Kein Rollentausch:</b> Rollen bleiben das gesamte Spiel über fest vergeben.</li>
             </ul>
@@ -193,20 +193,20 @@
             <ol class="step-list">
                 <li><b>2-Minuten-Vorabfenster (T - 2 Min.):</b> Ein Countdown signalisiert das Öffnen der Eingabemaske. Mister X trägt hier die aktuelle <b>Linie</b> (z. B. U1, Tram 16, Bus 61), <b>Fahrtrichtung</b> und die <b>nächste Haltestelle</b> ein.</li>
                 <li><b>Positionskorrektur per Pin:</b> Befindet sich Mister X im Untergrund (U-Bahn-Station) mit schwachem GPS, kann der orange Korrektur-Pin auf der Karte auf die tatsächliche Position gezogen werden.</li>
-                <li><b>Veröffentlichungszeitpunkt (T):</b> Exakt zur vollen Intervallzeit wird der Standort für alle Fänger auf der Karte sichtbar geschaltet.</li>
-                <li><b>1-Minute Nachlauffenster & Fallback:</b> Liegt um T noch keine Eingabe vor, hat Mister X noch 1 Minute Gnadenfrist. Läuft auch diese ab, sendet das Backend um T + 1 Min. automatisch einen <b>Live-GPS-Snapshot</b> der aktuellen Koordinaten an die Fänger.</li>
+                <li><b>Veröffentlichungszeitpunkt (T):</b> Exakt zur vollen Intervallzeit wird der Standort für alle Detektive auf der Karte sichtbar geschaltet.</li>
+                <li><b>1-Minute Nachlauffenster & Fallback:</b> Liegt um T noch keine Eingabe vor, hat Mister X noch 1 Minute Gnadenfrist. Läuft auch diese ab, sendet das Backend um T + 1 Min. automatisch einen <b>Live-GPS-Snapshot</b> der aktuellen Koordinaten an die Detektive.</li>
             </ol>
 
             <h2>4. Fang-Mechanik & strikte Sperr-Regel</h2>
-            <p>Ein Fang gilt als vollzogen, wenn ein Fänger einen Mister X physisch berührt (z. B. am Bahnsteig, im Fahrzeug oder auf der Straße).</p>
+            <p>Ein Fang gilt als vollzogen, wenn ein Detektiv einen Mister X physisch berührt (z. B. am Bahnsteig, im Fahrzeug oder auf der Straße).</p>
             
             <div class="warning">
-                <b>Fang melden:</b> Das Fänger-Team klickt im Dashboard auf <b>„Mister X fangen“</b> (oder direkt auf den Karten-Marker) und sendet die Anfrage ab. Mister X erhält eine Benachrichtigung und bestätigt den Fang per Klick auf „Bestätigen“. Bei unberechtigter Anfrage kann Mister X ablehnen (die Anfrage wird rückstandslos gelöscht).
+                <b>Fang melden:</b> Das Detektiv-Team klickt im Dashboard auf <b>„Mister X fangen“</b> (oder direkt auf den Karten-Marker) und sendet die Anfrage ab. Mister X erhält eine Benachrichtigung und bestätigt den Fang per Klick auf „Bestätigen“. Bei unberechtigter Anfrage kann Mister X ablehnen (die Anfrage wird rückstandslos gelöscht).
             </div>
 
             <div class="highlight" style="border-left-color: #EB6502;">
                 🔒 <b>Die Sperr-Regel:</b><br>
-                Ein Fänger-Team darf denselben Mister X <b>nicht zweimal hintereinander fangen</b>! Nach einem bestätigten Fang wird dieser Mister X für euer Team gesperrt (Marker färbt sich grau <code>#6c757d</code>, Fang-Button ist deaktiviert). Erst wenn ihr einen <b>anderen</b> Mister X erfolgreich gefangen habt, ist der gesperrte Mister X wieder für euch freigegeben.
+                Ein Detektiv-Team darf denselben Mister X <b>nicht zweimal hintereinander fangen</b>! Nach einem bestätigten Fang wird dieser Mister X für euer Team gesperrt (Marker färbt sich grau <code>#6c757d</code>, Fang-Button ist deaktiviert). Erst wenn ihr einen <b>anderen</b> Mister X erfolgreich gefangen habt, ist der gesperrte Mister X wieder für euch freigegeben.
             </div>
 
             <h2>5. Fahrregeln & RMV-Nahverkehr</h2>
@@ -227,8 +227,8 @@
             <h2>6. Spielende, Siegerehrung & Replay</h2>
             <p>Sobald die Spieluhr abläuft, schaltet die Web-App automatisch auf <b>„Spiel Beendet“</b>. Ab diesem Zeitpunkt sind keine Fänge mehr möglich.</p>
             <ul>
-                <li>Alle Teams begeben sich direkt zum Zielort <b>Eis Christina</b> (Oeder Weg 44, Frankfurt am Main).</li>
-                <li><b>Wertung:</b> Jedes Fänger-Team erhält <b>+{{ config.points_caught_team | default(1) }} Punkt</b> pro bestätigten Fang. Das Fänger-Team mit den meisten Punkten gewinnt den Hauptpreis!</li>
+                <li>Alle Teams begeben sich direkt zum Zielort<b></b> (Wird noch festgelegt).</li>
+                <li><b>Wertung:</b> Jedes Detektiv-Team erhält <b>+{{ config.points_caught_team | default(1) }} Punkt</b> pro bestätigten Fang. Das Detektiv-Team mit den meisten Punkten gewinnt den Hauptpreis!</li>
                 <li><b>Replay:</b> Nach Spielende wird für alle Teilnehmer das interaktive <b>Karten-Replay</b> freigeschaltet, auf dem sämtliche Laufwege, Fluchtmanöver und Fänge Sekunde für Sekunde nachvollzogen werden können.</li>
             </ul>
         </div>

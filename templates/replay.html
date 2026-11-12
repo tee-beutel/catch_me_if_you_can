@@ -152,7 +152,7 @@
             position: relative;
         }
         .toast-card.toast-catch { border-left-color: #e53e3e; }
-        .toast-card.toast-broadcast { border-left-color: #EB6502; }
+        .toast-card.toast-broadcast, .toast-card.toast-mister_broadcast { border-left-color: #EB6502; }
         .toast-card.toast-system { border-left-color: #049EAB; }
         .toast-header {
             display: flex;
@@ -399,7 +399,7 @@
     <!-- Header -->
     <header class="replay-header">
         <div class="header-left">
-            <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo" class="header-logo">
+            <img src="/static/Rhein-Main.png" alt="VCD Logo" class="header-logo">
             <h1 class="header-title">
                 Mister X Replay
                 {% if phase == 'finished' %}
@@ -677,7 +677,7 @@
                 marker.bindPopup(`
                     <div style="text-align:center; font-family:'Roboto',sans-serif;">
                         <b style="font-size:1.15em; color:#333;">${escapeHtml(displayName)}</b><br>
-                        <span style="color:${roleColor}; font-weight:bold; text-transform:uppercase;">${role === 'mister_x' ? 'Mister X' : 'Fänger'}</span>
+                        <span style="color:${roleColor}; font-weight:bold; text-transform:uppercase;">${role === 'mister_x' ? 'Mister X' : 'Detektive'}</span>
                     </div>
                 `);
 
@@ -693,7 +693,7 @@
                 const chip = document.createElement('div');
                 chip.className = 'team-chip';
                 chip.id = `legend-chip-${tId}`;
-                const roleBadge = role === 'mister_x' ? 'Mister X' : 'Fänger';
+                const roleBadge = role === 'mister_x' ? 'Mister X' : 'Detektive';
                 const scoreBadgeHtml = isHunter ? `<span id="legend-score-${tId}" style="margin-left: 5px; font-weight: 900; color: #049EAB;">0 Pkt.</span>` : '';
                 chip.innerHTML = `
                     <div class="chip-color-dot" id="legend-dot-${tId}" style="background:${roleColor};"></div>
@@ -845,7 +845,7 @@
                     marker.setPopupContent(`
                         <div style="text-align:center; font-family:'Roboto',sans-serif;">
                             <b style="font-size:1.15em; color:#333;">${escapeHtml(displayName)}</b><br>
-                            <span style="color:${roleColor}; font-weight:bold; text-transform:uppercase;">${role === 'mister_x' ? 'Mister X' : 'Fänger'}</span><br>
+                            <span style="color:${roleColor}; font-weight:bold; text-transform:uppercase;">${role === 'mister_x' ? 'Mister X' : 'Detektive'}</span><br>
                             ${isHunter ? `<b style="color:#049EAB; font-size:1.1em;">${scoreStr}</b>` : ''}
                         </div>
                     `);
@@ -878,33 +878,46 @@
                 }
             }
 
-            // Broadcast-Marker auf der Karte ein-/ausblenden
+            // Broadcast-Marker auf der Karte ein-/ausblenden (nur der letzte Standort pro Mister X)
             if (broadcastLayerGroup && replayData && replayData.events) {
                 broadcastLayerGroup.clearLayers();
+
+                // Finde für jedes Mister X Team den aktuellsten Broadcast bis zum Zeitpunkt 'time'
+                const latestBroadcastPerTeam = {};
                 replayData.events.forEach(ev => {
                     if (ev.type === 'mister_broadcast' && ev.ts <= time && ev.lat && ev.lon) {
-                        const bPin = L.divIcon({
-                            className: 'custom-broadcast-pin',
-                            html: `
-                                <div style="background:#EB6502; color:white; border:2px solid white; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 5px rgba(0,0,0,0.4); font-size:12px;">
-                                    📢
-                                </div>
-                            `,
-                            iconSize: [24, 24],
-                            iconAnchor: [12, 12]
-                        });
-                        const bMarker = L.marker([ev.lat, ev.lon], { icon: bPin });
-                        bMarker.bindPopup(`
-                            <div style="text-align:center; font-family:'Roboto',sans-serif;">
-                                <b style="color:#EB6502; font-size:1.1em;">📢 Standort Mister X</b><br>
-                                <b>Linie:</b> ${escapeHtml(ev.line || '—')}<br>
-                                <b>Richtung:</b> ${escapeHtml(ev.direction || '—')}<br>
-                                <b>Haltestelle:</b> ${escapeHtml(ev.station || '—')}<br>
-                                <span style="font-size:0.8em; color:#777;">⏱ ${formatClock(ev.ts)}</span>
-                            </div>
-                        `);
-                        broadcastLayerGroup.addLayer(bMarker);
+                        const teamKey = ev.team || 'default_mister_x';
+                        if (!latestBroadcastPerTeam[teamKey] || ev.ts > latestBroadcastPerTeam[teamKey].ts) {
+                            latestBroadcastPerTeam[teamKey] = ev;
+                        }
                     }
+                });
+
+                Object.values(latestBroadcastPerTeam).forEach(ev => {
+                    const bPin = L.divIcon({
+                        className: 'custom-broadcast-pin',
+                        html: `
+                            <div style="background:#EB6502; color:white; border:2px solid white; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 5px rgba(0,0,0,0.4); font-size:12px;">
+                                📢
+                            </div>
+                        `,
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                    });
+                    const bMarker = L.marker([ev.lat, ev.lon], { icon: bPin });
+                    const displayName = (replayData.teams && ev.team && replayData.teams[ev.team] && replayData.teams[ev.team].display_name) || ev.team || '';
+                    const titleText = displayName ? (displayName.toLowerCase().includes('mister') ? `📢 Standort ${escapeHtml(displayName)}` : `📢 Standort Mister X (${escapeHtml(displayName)})`) : '📢 Standort Mister X';
+
+                    bMarker.bindPopup(`
+                        <div style="text-align:center; font-family:'Roboto',sans-serif;">
+                            <b style="color:#EB6502; font-size:1.1em;">${titleText}</b><br>
+                            <b>Linie:</b> ${escapeHtml(ev.line || '—')}<br>
+                            <b>Richtung:</b> ${escapeHtml(ev.direction || '—')}<br>
+                            <b>Haltestelle:</b> ${escapeHtml(ev.station || '—')}<br>
+                            <span style="font-size:0.8em; color:#777;">⏱ ${formatClock(ev.ts)}</span>
+                        </div>
+                    `);
+                    broadcastLayerGroup.addLayer(bMarker);
                 });
             }
 
@@ -923,7 +936,7 @@
                 if (ev.ts <= time) {
                     if (!triggeredEvents.has(eventKey)) {
                         triggeredEvents.add(eventKey);
-                        if (!isJump && (ev.type === 'catch' || ev.type === 'team_caught' || ev.type === 'mister_broadcast' || ev.type === 'system')) {
+                        if (!isJump && (ev.type === 'catch' || ev.type === 'team_caught' || ev.type === 'system')) {
                             fireEventVisuals(ev);
                         }
                     }
@@ -938,15 +951,15 @@
         }
 
         function fireEventVisuals(ev) {
+            // Keine Benachrichtigungen (Toast oder Karten-Popup) bei mister_broadcast
+            if (ev.type === 'mister_broadcast') return;
+
             showToast(ev);
 
             if (ev.lat && ev.lon) {
                 let iconSymbol = '⚔️';
                 let title = 'Fang gemeldet!';
-                if (ev.type === 'mister_broadcast') {
-                    iconSymbol = '📢';
-                    title = 'Mister X Standort veröffentlicht';
-                } else if (ev.type === 'system') {
+                if (ev.type === 'system') {
                     iconSymbol = '🔄';
                     title = 'Spiel-Ereignis';
                 }
@@ -980,6 +993,7 @@
         }
 
         function showToast(ev) {
+            if (ev.type === 'mister_broadcast') return;
             if (window.innerWidth <= 768) return;
             const container = document.getElementById('toast-container');
             if (!container) return;

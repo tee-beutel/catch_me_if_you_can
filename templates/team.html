@@ -215,10 +215,10 @@
             {% if role == 'mister_x' %}
             <span class="role-badge role-mister">Mister X</span>
             {% else %}
-            <span class="role-badge role-hunter">Fänger</span>
+            <span class="role-badge role-hunter">Detektive</span>
             {% endif %}
         </h2>
-        <img src="/static/VCD-Logo_UZ-unten_RGB_NI01.png" alt="VCD Logo" class="header-logo">
+        <img src="/static/Rhein-Main.png" alt="VCD Logo" class="header-logo">
     </div>
     
     <div class="timer-bar" id="top-timer">Zeit wird synchronisiert...</div>
@@ -240,7 +240,7 @@
         <div style="background: white; border-bottom: 2px solid #049EAB; padding: 18px; text-align: center; z-index: 1000; position: relative;">
             <h2 style="margin:0; color:#049EAB; font-size: 1.4em;">🏆 Spiel beendet! 🏆</h2>
             {% if winners|length > 0 %}
-            <p style="font-size: 1em; margin: 8px 0;">Sieger-Fänger mit <b>{{ top_score }} {% if top_score == 1 %}Punkt{% else %}Punkten{% endif %}</b>:</p>
+            <p style="font-size: 1em; margin: 8px 0;">Sieger-Detektive mit <b>{{ top_score }} {% if top_score == 1 %}Punkt{% else %}Punkten{% endif %}</b>:</p>
             <h1 style="color: #EB6502; margin: 0; font-size: 1.8em;">{{ winners | join(' & ') }}</h1>
             {% if team_name in winners %}
                 <p style="font-weight: bold; color: #049EAB; font-size: 1.2em; margin-top: 10px;">GLÜCKWUNSCH, IHR HABT GEWONNEN! 🥇</p>
@@ -294,7 +294,7 @@
 
                         <div id="mx-form-container">
                             <label style="font-size: 0.85em; font-weight: bold; color: #555;">Linie / Verkehrsmittel:</label>
-                            <input type="text" id="mx-line" placeholder="z. B. U4, S1, Tram 11, Bus 30 oder Zu Fuß">
+                            <input type="text" id="mx-line" placeholder="z. B. U4, S1, Tram 11, Bus M36">
                             
                             <label style="font-size: 0.85em; font-weight: bold; color: #555; margin-top: 8px; display: block;">Fahrtrichtung:</label>
                             <input type="text" id="mx-direction" placeholder="z. B. Bockenheimer Warte">
@@ -329,10 +329,10 @@
                     <div class="dashboard-card" style="border-left: 4px solid #6c757d;">
                         <h4 style="margin: 0 0 8px 0; color: #4b5563;">Wurdest du erwischt? (Selbstmeldung)</h4>
                         <div style="font-size: 0.85em; color: #666; margin-bottom: 8px;">
-                            Falls dich ein Fänger-Team gefasst hat, kannst du den Fang hier direkt bestätigen:
+                            Falls dich ein Detektiv-Team gefasst hat, kannst du den Fang hier direkt bestätigen:
                         </div>
                         <select id="caught-by-select">
-                            <option value="">-- Welches Fänger-Team hat dich gefangen? --</option>
+                            <option value="">-- Welches Detektiv-Team hat dich gefangen? --</option>
                             {% for t in faenger_teams %}
                             <option value="{{ t.id }}">{{ t.name }}</option>
                             {% endfor %}
@@ -343,10 +343,10 @@
                     </div>
 
                 <!-- ============================================== -->
-                <!-- 2. SPEZIFISCHE STEUERUNG FÜR FÄNGER             -->
+                <!-- 2. SPEZIFISCHE STEUERUNG FÜR DETEKTIVE          -->
                 <!-- ============================================== -->
                 {% elif role == 'fänger' %}
-                    <!-- FANG MELDEN (FÄNGER - NUR ÜBER KARTE) -->
+                    <!-- FANG MELDEN (DETEKTIVE - NUR ÜBER KARTE) -->
                     <div class="dashboard-card" style="border-left: 4px solid #049EAB;">
                         <h3 style="color: #049EAB; border-bottom-color: #049EAB; margin-top: 0;">
                             ⚔️ Mister X fangen
@@ -360,7 +360,7 @@
                         </div>
                     </div>
 
-                    <!-- EIGENE OFFENE ANFRAGEN (FÄNGER) -->
+                    <!-- EIGENE OFFENE ANFRAGEN (DETEKTIVE) -->
                     <div id="my-pending-requests" style="margin-bottom: 20px;"></div>
                 {% endif %}
 
@@ -368,7 +368,7 @@
                 <!-- 3. GEMEINSAMES LEADERBOARD & LOG                -->
                 <!-- ============================================== -->
                 <div id="shared-data-section">
-                    <h3>🏆 Fänger-Rangliste</h3>
+                    <h3>🏆 Detektiv-Rangliste</h3>
                     <table class="leaderboard-table">
                         <!-- Wird über JavaScript dynamisch aktualisiert -->
                     </table>
@@ -378,31 +378,55 @@
                     </div>
                 </div>
                 
-                <!-- TRACCAR GPS SETUP BOX -->
-                <div style="text-align: center; margin: 30px 0 15px 0;">
-                    <div style="background: #e6f7f8; border: 1px solid #049EAB; padding: 14px; border-radius: 6px; width: 100%; box-sizing: border-box;">
-                        <h4 style="margin-top: 0; color: #049EAB;">🛰️ Traccar GPS-Status</h4>
-                        
-                        <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px;">
-                            <a href="https://play.google.com/store/apps/details?id=org.traccar.client" target="_blank" style="background:#333; color:white; padding:6px 12px; border-radius:3px; text-decoration:none; font-size:0.8em; font-weight:bold;">📥 Android</a>
-                            <a href="https://apps.apple.com/app/traccar-client/id843156974" target="_blank" style="background:#333; color:white; padding:6px 12px; border-radius:3px; text-decoration:none; font-size:0.8em; font-weight:bold;">📥 iOS App</a>
-                        </div>
+                               <!-- TRACCAR CLIENT DOWNLOAD & CONFIG (FÜR ALLE TEAMS PFLICHT) -->
+<div style="text-align: center; margin: 40px 0 20px 0; display: flex; flex-direction: column; align-items: center; gap: 15px;">
 
-                        <a href="org.traccar.client://config?url=https://{{ host_ip }}:10000&id={{ slug }}&accuracy=high&distance=5&heartbeat=10&stopDetection=true" class="btn btn-vcd-green" style="display:inline-block; width:100%; text-decoration:none; padding:11px; border-radius:4px; box-sizing: border-box; font-size:14px;">
-                            ⚙️ Tracker automatisch einrichten
-                        </a>
+    <div style="background: #e6f7f8; border: 1px solid #049EAB; padding: 15px; border-radius: 8px; width: 100%; box-sizing: border-box;">
+        <h4 style="margin-top: 0; color: #049EAB;">🛰️ Traccar GPS-Setup (Für Detektive & Mister X Pflicht)</h4>
 
-                        <button type="button" onclick="togglePermissionHelp()" class="btn btn-vcd-orange" style="width:100%; padding:10px; border-radius:4px; box-sizing: border-box; margin-top: 8px; font-size: 13px;">
-                            📍 Standortberechtigung auf „Immer“ prüfen
-                        </button>
+        <!-- Download Buttons (Android & iOS) -->
+        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 15px;">
+            <a href="https://play.google.com/store/apps/details?id=org.traccar.client" target="_blank" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#333; color:white; padding:8px 15px; border-radius:4px; font-size: 0.85em;">📥 Android App</a>
+            <a href="https://apps.apple.com/app/traccar-client/id843156974" target="_blank" class="btn btn-neutral" style="display:inline-block; width:auto; text-decoration:none; background:#333; color:white; padding:8px 15px; border-radius:4px; font-size: 0.85em;">📥 iOS App</a>
+        </div>
 
-                        <div id="permission-help-box" style="display: none; background: white; border: 2px solid #EB6502; border-radius: 6px; padding: 12px; margin-top: 10px; text-align: left; font-size: 0.83em; color: #333; line-height: 1.4;">
-                            <b style="color: #EB6502;">Wichtig für den Standby-Betrieb:</b><br>
-                            Damit euer Standort auch bei gesperrtem Bildschirm übertragen wird:<br>
-                            <b>🍏 iOS:</b> Einstellungen ➔ Apps ➔ Traccar Client ➔ Standort ➔ <b>Immer</b>.<br>
-                            <b>🤖 Android:</b> App-Icon gedrückt halten ➔ ⓘ ➔ Berechtigungen ➔ Standort ➔ <b>Immer zulassen</b>.
-                        </div>
-                    </div>
+        <!-- 1. Dynamischer Auto-Config Button (Deep Link) -->
+        <a href="org.traccar.client://config?url=https://{{ host_ip }}:10000&id={{ slug }}&accuracy=high&distance=5&heartbeat=10&stopDetection=true" class="btn btn-vcd-green" style="display:inline-block; width:100%; text-decoration:none; padding:12px; border-radius:4px; box-sizing: border-box;">1. ⚙ Tracker automatisch einrichten</a>
+
+        <!-- 2. NEU: Button für Standortberechtigung "Immer" -->
+        <button type="button" onclick="togglePermissionHelp()" class="btn btn-vcd-orange" style="width:100%; padding:12px; border-radius:4px; box-sizing: border-box; margin-top: 8px;">
+            2. 📍 Standort auf „Immer“ stellen (Wichtig!)
+        </button>
+
+        <!-- Ausklappbare Hilfe für iOS & Android -->
+        <div id="permission-help-box" style="display: none; background: white; border: 2px solid #EB6502; border-radius: 6px; padding: 12px; margin-top: 10px; text-align: left; font-size: 0.85em; color: #333; line-height: 1.4;">
+            <b style="color: #EB6502; font-size: 1.05em;">Warum ist das nötig?</b><br>
+            Ohne die Einstellung <b>„Immer“</b> schaltet euer Handy das GPS ab, sobald das Display ausgeht!<br><br>
+
+            <b>🍏 iPhone / iPad (iOS):</b>
+            <ol style="margin: 5px 0 10px 0; padding-left: 20px;">
+                <li>Öffnet die <b>Einstellungen</b> (Zahnrad-App).</li>
+                <li>Scrollt ganz nach unten zu <b>Apps</b> ➔ <b>Traccar Client</b>.</li>
+                <li>Tippt auf <b>Standort</b> und wählt <b>„Immer“</b>.</li>
+            </ol>
+
+            <b>🤖 Android:</b>
+            <ol style="margin: 5px 0 5px 0; padding-left: 20px;">
+                <li>Haltet das <b>Traccar-App-Icon</b> auf eurem Startbildschirm gedrückt und tippt auf <b>ⓘ (App-Info)</b>.</li>
+                <li>Tippt auf <b>Berechtigungen</b> ➔ <b>Standort</b>.</li>
+                <li>Wählt <b>„Immer zulassen“</b>.</li>
+            </ol>
+        </div>
+
+        <p style="font-size: 0.8em; color: #555; margin: 12px 0 0 0; line-height: 1.4;">
+            <b>3.</b> Tracking-Schalter in der App durchgehend eingeschaltet lassen!
+        </p>
+        <p style="font-size: 0.75em; color: #888; margin: 8px 0 0 0; line-height: 1.3; border-top: 1px solid #ccc; padding-top: 8px;">
+            Falls die Automatik klemmt:<br>Server: <b>https://{{ host_ip }}:10000</b><br>Geräte-ID: <b>{{ slug }}</b><br>
+            Genauigkeit: <b>Hoch</b> | Distanz: <b>5m</b> | Intervall/Heartbeat: <b>10s</b><br>
+            (Erweitert) Stillstandserkennung: <b>an</b>
+        </p>
+    </div>
 
                     <!-- Replay Button -->
                     {% if phase == 'finished' %}
@@ -764,7 +788,7 @@
                         <div>🚏 Haltestelle: <b>${escapeHtml(b.station || '-')}</b></div>
                         ${b.is_manual_coords ? '<div style="font-size:0.85em; color:#EB6502; margin-top:2px;">📍 Manueller Standort</div>' : ''}
                     </div>
-                    <span style="font-size:0.78em; color:#777;">(Diesen Standort sehen die Fänger)</span>
+                    <span style="font-size:0.78em; color:#777;">(Diesen Standort sehen die Detektive)</span>
                 </div>
             `;
 
@@ -830,7 +854,7 @@
                         </div>
                     `;
                 } else {
-                    // Mister X Standort für Fänger
+                    // Mister X Standort für Detektive
                     // Falls gesperrt durch Sperr-Regel: GRAU (#6c757d)
                     const markerColor = isBlocked ? '#6c757d' : '#EB6502';
                     const markerBorder = isBlocked ? '#adb5bd' : '#ffffff';
@@ -919,7 +943,7 @@
             updateNextLocationCountdowns();
         }
 
-        // --- COUNTDOWN FÜR NÄCHSTEN MISTER X STANDORT (FÄNGER KARTE) ---
+        // --- COUNTDOWN FÜR NÄCHSTEN MISTER X STANDORT (DETEKTIV KARTE) ---
         function formatNextLocationCountdown(targetTs) {
             if (!targetTs) return "--";
             const nowSec = Date.now() / 1000;
@@ -1124,7 +1148,7 @@
             });
         }
 
-        // --- FANG MELDEN (FÄNGER ÜBER KARTE & MISTER X SELBSTMELDUNG) ---
+        // --- FANG MELDEN (DETEKTIVE ÜBER KARTE & MISTER X SELBSTMELDUNG) ---
         function reportCatchTarget(preyId) {
             if (currentPhase !== 'game') {
                 return alert("Fänge können nur während des laufenden Spiels gemeldet werden.");
@@ -1141,7 +1165,7 @@
             }
             if (role === 'mister_x') {
                 const hunterId = document.getElementById('caught-by-select').value;
-                if (!hunterId) return alert("Bitte wähle das Fänger-Team aus, das dich gefangen hat.");
+                if (!hunterId) return alert("Bitte wähle das Detektiv-Team aus, das dich gefangen hat.");
                 sendCatchReport(hunterId, teamId);
             }
         }
@@ -1206,7 +1230,7 @@
             container.style.display = 'block';
             let html = `<h4 style="margin-top: 0; color: #b45309; border-bottom: 1px solid #fde68a; padding-bottom: 5px;">⚠️ Ausstehende Fang-Bestätigung</h4>`;
             requests.forEach(req => {
-                const hunterName = escapeHtml(req.hunter_name || 'Fänger');
+                const hunterName = escapeHtml(req.hunter_name || 'Detektive');
                 const reqId = req.id;
                 html += `
                     <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 6px; padding: 12px; margin-bottom: 10px;">
@@ -1280,7 +1304,7 @@
         function updateLeaderboard(leaderboardData) {
             const table = document.querySelector('.leaderboard-table');
             if (!table) return;
-            let html = `<tr><th>Platz</th><th>Fänger-Team</th><th>Punkte</th></tr>`;
+            let html = `<tr><th>Platz</th><th>Detektiv-Team</th><th>Punkte</th></tr>`;
 
             if (!leaderboardData || leaderboardData.length === 0) {
                 html += `<tr><td colspan="3" style="text-align: center; color: #777; padding: 10px;">Noch keine Punkte vergeben.</td></tr>`;
